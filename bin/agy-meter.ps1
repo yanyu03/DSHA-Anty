@@ -1,4 +1,4 @@
-# DSHA-Meter 控制脚本 (带动态环境解析 · 隐私安全 · 幂等控制)
+﻿# DSHA-Meter 控制脚本 (带动态环境解析 · 隐私安全 · 幂等控制)
 param(
     [switch]$Start,
     [switch]$Stop,
