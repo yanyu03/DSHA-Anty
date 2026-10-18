@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "dsha-rea": {
+      "command": "cmd.exe",
+      "args": [
+        "/c",
+        "c:\\Users\\admin\\Desktop\\GOOGLE\\DSHA\\bin\\rea.cmd",
+        "mcp"
+      ],
+      "env": {
+        "DSHA_REA_TIMEOUT": "180"
+      }
+    }
+  }
+}

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## v2.2.0 — 2026-10-19
+**DSHA-SharBoy 品牌确立与全平台生态分发（支持 Antigravity & ChatGPT 双平台）**
+- **品牌全面更名为 DSHA-SharBoy**：GitHub 开源仓库同步更新为 [https://github.com/yanyu03/DSHA-SharBoy](https://github.com/yanyu03/DSHA-SharBoy)。
+- **分享至 ChatGPT 桌面客户端**：新增 `chatgpt/SHARBOY_PROMPT.md` 与桌面直接可用的 `DSHA-SharBoy_ChatGPT提示词.txt`，一键注入 Custom Instructions。
+- **MCP (Model Context Protocol) 工具支持**：新增 `chatgpt/mcp_config.json`，支持外部客户端挂载本地 REA 静态逆向引擎。
+- **杨老师 13 章 10,211 行笔记全量入库**：收录 `docs/teacher_yang_corpus/1_Python笔记_全集.md`，蒸馏报告升级至 v2.2（264,700+ 字符语料）。
+
 ## v2.0.0 — 2026-10-18
 **DSHA-Anty 家族全功能矩阵成型（四位一体：Gate + EngLock + Meter + TeacherYang Mindset）**
 

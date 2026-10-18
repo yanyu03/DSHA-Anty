@@ -1,15 +1,15 @@
-# DSHA-Anty — DeepSeek Harness for Antigravity (全能增强套件)
+# DSHA-SharBoy — Systems Engineering & Governance Suite (for Antigravity & ChatGPT)
 
-> 把 **DeepSeek Harness** 权限体系、工程质量锁、实时额度雷达与**杨老师系统级编程思维**全面融合移植到 **Antigravity** 上的高阶开源套件。  
-> **v2.0.0** ｜ Windows ｜ 依赖 Python 3.10+ ｜ 无外部外部网络依赖 ｜ 纯本地运行
+> 把 **DeepSeek Harness** 权限体系、工程质量锁、实时额度雷达与**杨老师系统级编程思维**全面融合，打造适用于 **Antigravity** 与 **ChatGPT** 双平台的通用高阶系统工程治理套件。  
+> **v2.2.0** ｜ Windows ｜ 依赖 Python 3.10+ ｜ 无外部网络依赖 ｜ 纯本地运行
 
 ---
 
-## 一、 体系全貌 (The Four Pillars)
+## 一、 体系全貌 (The Five Pillars)
 
 ```mermaid
 graph TD
-    Root["DSHA-Anty 核心矩阵"] --> Gate["1. 权限档位 (DSHA-Gate)<br>【能不能做】四级预设 · 本地策略引擎"]
+    Root["DSHA-SharBoy 核心矩阵"] --> Gate["1. 权限档位 (DSHA-Gate)<br>【能不能做】四级预设 · 本地策略引擎"]
     Root --> Lock["2. 工程质量锁 (DSHA-EngLock)<br>【做得对不对】L1-L9 诚实规范 · 防胡言乱语"]
     Root --> Meter["3. 额度雷达 (DSHA-Meter)<br>【还剩多少做】5H/7D 水位 · 动态回血倒计时 · 4K 高分屏常驻"]
     Root --> TY["4. 编程思维 (TeacherYang Mindset)<br>【怎么做得漂亮】系统底层穿透 · 防御性契约 · 启发式导师"]
@@ -65,6 +65,15 @@ dsha-pwsh -Command "..."            # 加固 PowerShell 7 启动器（自动 Byp
 dsha-sh -c "..."                    # 防咬人 GNU Bash 5.3 启动器
 rea <command>                       # 就地调用 REA 逆向工程套件
 ```
+
+### 5. 分享给本机的 ChatGPT 客户端 (SharBoy 专属导师)
+DSHA-SharBoy 提供了直接适用于本机 **ChatGPT Windows 客户端** 的完整扩展：
+1. **自定义指令注入 (Custom Instructions)**：
+   - 打开 ChatGPT 客户端，进入 **Settings -> Custom Instructions**；
+   - 复制 `chatgpt/SHARBOY_PROMPT.md`（或桌面上的 `DSHA-SharBoy_ChatGPT提示词.txt`）中的指令粘贴保存；
+   - ChatGPT 客户端即刻化身 **SharBoy**，获得杨老师 13 章底层穿透思维与 L1-L9 工程锁守护。
+2. **MCP (Model Context Protocol) 工具接入**：
+   - 使用 `chatgpt/mcp_config.json` 将 `rea mcp` 挂载为本地逆向与代码分析工具服务器。
 
 ---
 
