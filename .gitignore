@@ -13,6 +13,14 @@ venv/
 .venv/
 ENV/
 
+# Node.js Dependencies and Package Caches
+node_modules/
+**/node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
 # Antigravity Runtime & Session Rollbacks
 .gemini/
 _rollback/

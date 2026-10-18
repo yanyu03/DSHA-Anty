@@ -128,12 +128,16 @@ if (Test-Path (Join-Path $root 'plugins\dsha-meter')) {
 }
 
 # ---------------------------------------------------------------- 3. 技能
-Step "3/6 安装技能"
+Step "3/6 安装技能（DSHA 核心 + REA 逆向套件）"
 robocopy (Join-Path $root 'skills\DSHA') "$cfg\skills\DSHA" /E /NFL /NDL /NJH /NJS /NP | Out-Null
 Say "技能已就位：$cfg\skills\DSHA"
+if (Test-Path (Join-Path $root 'skills\reverse-engineer-anything')) {
+  robocopy (Join-Path $root 'skills\reverse-engineer-anything') "$cfg\skills\reverse-engineer-anything" /E /XD node_modules /NFL /NDL /NJH /NJS /NP | Out-Null
+  Say "技能已就位：$cfg\skills\reverse-engineer-anything"
+}
 
 # ---------------------------------------------------------------- 4. 档位切换器与工具链
-Step "4/6 安装档位切换器与工具链"
+Step "4/6 安装档位切换器与工具链（含防咬人 Shell 与 REA 启动器）"
 Copy-Item (Join-Path $root 'bin\agy-tier.ps1')   "$cfg\agy-tier.ps1"   -Force
 Copy-Item (Join-Path $root 'bin\agy-verify.ps1') "$cfg\agy-verify.ps1" -Force
 Copy-Item (Join-Path $root 'bin\agy-audit.ps1')  "$cfg\agy-audit.ps1"  -Force
@@ -141,7 +145,17 @@ if (Test-Path (Join-Path $root 'bin\agy-meter.ps1')) {
   Copy-Item (Join-Path $root 'bin\agy-meter.ps1') "$cfg\agy-meter.ps1" -Force
   Say "agy-meter.ps1 → $cfg"
 }
+foreach ($cmd in @('bash.cmd','sh.cmd','dsha-sh.cmd','rea.cmd')) {
+  $f = Join-Path $root "bin\$cmd"
+  if (Test-Path $f) { Copy-Item $f "$cfg\$cmd" -Force; Say "$cmd → $cfg" }
+}
 Say "agy-tier.ps1 / agy-verify.ps1 / agy-audit.ps1 → $cfg"
+
+# 合规 Shell 环境保障（防咬人 Shell 与执行策略）
+try {
+  Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force -ErrorAction SilentlyContinue
+  Say "执行策略：CurrentUser = RemoteSigned"
+} catch {}
 
 # ---------------------------------------------------------------- 5. 可移植化：重写 .cmd
 Step "5/6 生成钩子包装器（消除硬编码 Python 路径）"

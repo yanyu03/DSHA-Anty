@@ -18,8 +18,20 @@
 
 **3. 开源与隐私安全加固**
 - **个人路径彻底脱敏**：消除所有硬编码 `Users/admin` 路径，采用 `$env:USERPROFILE` 动态解析与自适应 Python/Pythonw 探测。
-- **严密 `.gitignore` 规则**：隔离本地门禁日志、运行时状态、历史备份与字节码，确保开源仓库零隐私泄露。
+- **严密 `.gitignore` 规则**：隔离本地门禁日志、运行时状态、历史备份、node_modules 与字节码，确保开源仓库零隐私泄露。
 - **Git 开源结构对齐**：全面适配上游 `DSHA-Anty` 开源仓库标准。
+
+**4. REA 逆向工程与证据抽取工具集就地调用 (Reverse Engineer Anything)**
+- **代码库就地引入**：引入 `morluto/rea` 核心静态分析与 MCP 引擎，作为 Skill 专属工具集常驻 `skills/reverse-engineer-anything/tools/rea/`。
+- **150+ 逆向分析指令**：涵盖 JavaScript / Electron ASAR 解包与语义追踪、PE / ELF / Mach-O 节表与哈希证据图、Android APK 资源清单及 SQLite 分析。
+- **杨老师风味 Python 驱动器 (`dsha_rea_driver.py`)**：底层自适应探测 Node.js；目标存在性前置断言；缺少 Ghidra/Hopper 时自动安全降级至纯静态提取；180s 超时隔离，永不假死。
+- **全局与就地双通道调用**：支持 `rea.cmd <command>`、`rea --self-test` 与 MCP stdio 服务就地唤起。
+
+**5. 合规防咬人 Shell 环境 (No Parenthesis Biting)**
+- **根治语法咬人陷阱**：彻底解决 Windows PowerShell 5.1 对圆括号 `()`、嵌套括号及单双引号的解析器报错 (`ParserError`, `Missing closing ')'`)。
+- **解除脚本权限拦截**：CurrentUser 作用域合规置为 `RemoteSigned`，解决 `npm.ps1` 等脚本的 `UnauthorizedAccess`。
+- **GNU Bash 5.3 接入全局环境**：将 Git Bash 核心加入全局 User PATH，并提供 `bash.cmd`、`sh.cmd`、`dsha-sh.cmd` 统一启动器。
+- **零圆括号批处理架构**：所有 cmd 脚本重构为标签跳转，规避 `if (...)` 块被未闭合括号撕裂的 Windows 经典缺陷。
 
 ## v1.0.0 — 2026-10-05
 首个可分发版本。

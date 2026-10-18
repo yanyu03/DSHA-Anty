@@ -221,3 +221,54 @@ DSHA 家族第四位成员：蒸馏自 U 盘《杨老师代码课程全集（Pyt
 - 架构思维规范：`docs/TEACHER_YANG_MINDSET.md`
 - 技能实践速查：`skills/DSHA/teacher-yang.md`
 
+---
+
+## REA 逆向工程与证据抽取工具集 (Reverse Engineer Anything)
+
+DSHA 家族第五位成员：引入自开源 `morluto/rea` 并在本地就地执行的逆向工程工具集。具备零依赖静态提取能力与 150+ 项指令，以杨老师风味 Python 驱动器保障底层稳定与防御性降级。
+
+### 核心功能与就地调用
+- **运行时环境自检**：
+  ```bash
+  rea --self-test
+  ```
+- **分析 JavaScript / Electron ASAR 应用**：
+  ```bash
+  rea analyze-javascript-application <path-to-app-or-asar> --json
+  ```
+- **检查 PE / ELF / Mach-O 二进制结构与哈希**：
+  ```bash
+  rea inspect-artifact <path-to-binary> --json
+  ```
+- **Android APK 资源清单与类结构分析**：
+  ```bash
+  rea search-android-classes <path-to-apk>
+  ```
+- **MCP 服务端启动**：
+  ```bash
+  rea mcp
+  ```
+
+> **杨老师避坑指引**：即使系统未安装 Ghidra、Hopper 或 IDA，驱动器也会自动安全降级至纯静态提取模式（支持 ASAR 解包、JS 依赖提取、PE 节表与 APK 资源分析），杜绝抛出致命崩溃。
+
+---
+
+## 合规安全 Shell 环境 (防咬人环境 · No Parenthesis Biting)
+
+为解决 Windows PowerShell 5.1 下执行命令时频发的**“括号咬人”**（圆括号被误认为子表达式导致 `ParserError`）、ExecutionPolicy 限制 (`UnauthorizedAccess`) 以及 UTF-8 编码错位问题，DSHA 提供了合规防咬人 Shell 套件：
+
+### 核心 Shell 工具
+1. **`dsha-sh` (通用安全 Shell 执行器)**：
+   自动切换 UTF-8 (Code Page 65001)，绕过 PowerShell 语法陷阱，直接将命令安全传递至 GNU Bash 执行：
+   ```bash
+   dsha-sh "echo '(nested parentheses) and [brackets] are safe!'"
+   ```
+2. **`bash` & `sh` (原生 GNU Bash)**：
+   已将 Git Bash 核心（`C:\Program Files\Git\bin` 与 `usr\bin`）整合进全局 PATH，任何模型均可直接调用标准 POSIX 工具：
+   ```bash
+   bash -c "npm -v; node -v"
+   ```
+3. **ExecutionPolicy 已合规放行**：
+   当前用户作用域已置为 `RemoteSigned`，全面消除 `.ps1` 脚本的权限拦截。
+
+

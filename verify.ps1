@@ -97,7 +97,23 @@ if (Test-Path $conf) {
   Note "englock mode = $m" $(if ($m -eq 'strict') { '（L5/L6/L9.1 会直接拒绝）' } else { '（只提醒不拦截）' })
 }
 
+Write-Host "`n=== 8. REA 工具与防咬人 Shell ===" -ForegroundColor Cyan
+$safeSh = Join-Path $cfg 'dsha-sh.cmd'
+if (-not (Test-Path $safeSh)) { $safeSh = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\dsha-sh.cmd" }
+Check "dsha-sh.cmd 防咬人 Shell 就位" (Test-Path $safeSh)
+
+$reaCmd = Join-Path $cfg 'rea.cmd'
+if (-not (Test-Path $reaCmd)) { $reaCmd = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\rea.cmd" }
+if (Test-Path $reaCmd) {
+  $reaSelf = & $reaCmd --self-test
+  $reaPass = ($LASTEXITCODE -eq 0 -and ($reaSelf | Out-String) -match 'v\d+\.\d+')
+  Check "rea.cmd 运行时与自检通过" $reaPass
+} else {
+  Check "找到 rea.cmd" $false
+}
+
 Write-Host "`n--------------------------------------------------"
 Write-Host ("PASS {0} / FAIL {1} / WARN {2}" -f $ok, $fail, $warn) -ForegroundColor $(if ($fail -eq 0) { 'Green' } else { 'Red' })
 if ($fail -eq 0) { Write-Host "DSHA 体检通过。" -ForegroundColor Green } else { Write-Host "存在失败项，请按上方 [FAIL] 逐条处理。" -ForegroundColor Red }
 exit $(if ($fail -eq 0) { 0 } else { 1 })
+

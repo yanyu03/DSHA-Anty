@@ -1,0 +1,41 @@
+import { DOMParser, normalizeLineEndings, onErrorStopParsing, } from "@xmldom/xmldom";
+import { SaxesParser } from "saxes";
+import { err, ok } from "./result.js";
+export class XmlDocumentParseError extends Error {
+    reason;
+    _tag = "XmlDocumentParseError";
+    constructor(reason, cause) {
+        super(reason === "doctype"
+            ? "XML document types are unsupported"
+            : `XML is not well-formed${cause instanceof Error ? `: ${cause.message}` : ""}`, { cause });
+        this.reason = reason;
+    }
+}
+/** One boundary owns strict XML syntax and the source-located DOM projection. */
+export const parseXmlDocument = (source, policy) => {
+    try {
+        const syntax = new SaxesParser({
+            defaultXMLVersion: "1.0",
+            forceXMLVersion: true,
+        });
+        syntax.on("doctype", () => {
+            if (policy.doctype === "reject")
+                throw new XmlDocumentParseError("doctype");
+        });
+        syntax.write(source).close();
+        // Saxes owns well-formedness outside DTDs. The DOM parser additionally
+        // checks DTD syntax and builds source-located nodes; its advisory warnings
+        // (including literal U+FFFD) are not byte-decoding or syntax failures.
+        return ok(new DOMParser({
+            normalizeLineEndings: policy.lineEndings === "preserve"
+                ? (text) => text
+                : normalizeLineEndings,
+            onError: onErrorStopParsing,
+        }).parseFromString(source, "application/xml"));
+    }
+    catch (cause) {
+        return err(cause instanceof XmlDocumentParseError
+            ? cause
+            : new XmlDocumentParseError("malformed", cause));
+    }
+};

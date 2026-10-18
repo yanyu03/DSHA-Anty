@@ -13,6 +13,7 @@ graph TD
     Root --> Lock["2. 工程质量锁 (DSHA-EngLock)<br>【做得对不对】L1-L9 诚实规范 · 防胡言乱语"]
     Root --> Meter["3. 额度雷达 (DSHA-Meter)<br>【还剩多少做】5H/7D 水位 · 动态回血倒计时 · 4K 高分屏常驻"]
     Root --> TY["4. 编程思维 (TeacherYang Mindset)<br>【怎么做得漂亮】系统底层穿透 · 防御性契约 · 启发式导师"]
+    Root --> REA["5. 逆向工具与防咬人 Shell (REA & Safe Shell)<br>【代码就地剖析】150+ 逆向指令 · POSIX Bash · 语法零咬人"]
 ```
 
 | 模块 | 核心职责 | 机制与技术实现 |
@@ -21,6 +22,7 @@ graph TD
 | **DSHA-EngLock** | **做得对不对** | L1 出处 / L2 样本 / L3 撤回 / L4 三件套 / L5 报告头 / L6 措辞 / L7 断拍 / L8 外部审查 + **L9 语言规范锁**（基于词表 `lexicon.json` 杜绝模型胡言乱语与虚假承诺）。 |
 | **DSHA-Meter** | **还剩多少做** | 解析 Antigravity 本地 JSONL 事务日志，实时统计 5H 滚动窗口与 7D 周配额水位；提供首笔回血与完全回满倒计时预测；DWM 物理级 DPI 缩放渲染。 |
 | **TeacherYang Mindset** | **怎么做得漂亮** | 蒸馏自 14 门系统级课件的五大支柱（系统底层穿透律、防御契约、并发选型与锁纪律、高内聚 AOP 切面、量化实证）；配套五步启发教学范式。 |
+| **REA & Safe Shell** | **代码就地剖析与防咬人** | 引入 `morluto/rea` 150+ 逆向指令就地解析 JS/ASAR/PE/APK；配置 GNU Bash 全局环境与零圆括号批处理，杜绝 Windows PowerShell 语法咬人。 |
 
 ---
 

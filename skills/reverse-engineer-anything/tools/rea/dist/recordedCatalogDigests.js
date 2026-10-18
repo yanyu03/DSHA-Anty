@@ -1,0 +1,2 @@
+/** Recorded from the compiled default catalog by scripts/record-catalog-digests.mjs; do not edit. */
+export const RECORDED_CATALOG_DIGESTS = Object.freeze({"tools_sha256":"af39310c9591bb981893ec0d2188b1bcf6e9cc8ba3ac513d5bbefc8ddcb85639","prompts_sha256":"7152916ab48bd2a9677a5ad9cdbde0a51dc53c113934952ad096e93f5f18aa7e","combined_sha256":"96d8f6e6ea1b1ba13557216624a3461c738729d53c79b4b0100d1f3a3a32441c"});
