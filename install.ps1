@@ -76,8 +76,13 @@ if ($Uninstall) {
 # ---------------------------------------------------------------- 0. 环境检查
 Step "0/6 环境检查"
 $pyExe = $null
-foreach ($cand in @('C:\python312\python.exe', (Get-Command python.exe -ErrorAction SilentlyContinue).Source,
-                    (Get-Command py.exe -ErrorAction SilentlyContinue).Source)) {
+$cands = @(
+  (Get-ChildItem "$env:LOCALAPPDATA\Programs\Python\Python*\python.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName),
+  'C:\python312\python.exe',
+  (Get-Command python.exe -ErrorAction SilentlyContinue).Source,
+  (Get-Command py.exe -ErrorAction SilentlyContinue).Source
+)
+foreach ($cand in $cands) {
   if ($cand -and (Test-Path $cand)) {
     try { $v = & $cand -c "import sys;print(sys.version.split()[0])" 2>$null; if ($v) { $pyExe = $cand; $pyVer = $v; break } } catch {}
   }
@@ -145,11 +150,40 @@ if (Test-Path (Join-Path $root 'bin\agy-meter.ps1')) {
   Copy-Item (Join-Path $root 'bin\agy-meter.ps1') "$cfg\agy-meter.ps1" -Force
   Say "agy-meter.ps1 → $cfg"
 }
-foreach ($cmd in @('bash.cmd','sh.cmd','dsha-sh.cmd','rea.cmd')) {
+foreach ($cmd in @('bash.cmd','sh.cmd','dsha-sh.cmd','rea.cmd','pwsh.cmd','dsha-pwsh.cmd')) {
   $f = Join-Path $root "bin\$cmd"
   if (Test-Path $f) { Copy-Item $f "$cfg\$cmd" -Force; Say "$cmd → $cfg" }
 }
 Say "agy-tier.ps1 / agy-verify.ps1 / agy-audit.ps1 → $cfg"
+
+# 引入 DSHA 专用 Pwsh 运行时（彻底摆脱 Win 原厂 PowerShell 5.1）
+$localPwsh = Join-Path $root 'bin\pwsh'
+$cfgPwsh = Join-Path $cfg 'pwsh'
+if (-not (Test-Path "$localPwsh\pwsh.exe")) {
+  Say "未检测到本地专用 Pwsh，尝试从镜像拉取..."
+  try { & (Join-Path $root 'scripts\fetch-pwsh.ps1') -TargetDir $localPwsh } catch {}
+}
+if (Test-Path "$localPwsh\pwsh.exe") {
+  New-Item -ItemType Directory -Force -Path $cfgPwsh | Out-Null
+  robocopy $localPwsh $cfgPwsh /E /R:1 /W:1 /NFL /NDL /NJH /NJS | Out-Null
+  Say "DSHA 专用 Pwsh 7 运行时已就位：$cfgPwsh\pwsh.exe"
+}
+
+# 注册 PATH 环境变量（优先 DSHA 专用工具与 Pwsh）
+try {
+  $uPath = [Environment]::GetEnvironmentVariable("Path", "User")
+  $addList = @($cfgPwsh, $cfg, (Join-Path $root 'bin'))
+  $curList = $uPath -split ';' | Where-Object { $_ -ne '' }
+  foreach ($ad in $addList) {
+    if ($curList -notcontains $ad) {
+      $curList = @($ad) + $curList
+    }
+  }
+  $nPath = $curList -join ';'
+  [Environment]::SetEnvironmentVariable("Path", $nPath, "User")
+  $env:Path = "$nPath;$env:Path"
+  Say "User PATH 已注册：优先指向 DSHA 专用 Pwsh 与安全 Shell"
+} catch {}
 
 # 合规 Shell 环境保障（防咬人 Shell 与执行策略）
 try {

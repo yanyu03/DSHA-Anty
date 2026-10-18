@@ -53,10 +53,18 @@ powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.gemini\config\agy-me
 powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.gemini\config\agy-meter.ps1" -Stop    # 停止悬浮窗
 ```
 
-### 4. 杨老师工程导师模式
+### 4. 杨老师工程导师模式与合规安全 Shell (Pwsh 7 & REA)
 在会话中参考 `skills/DSHA/teacher-yang.md` 或直接要求 Anty：
 > *“请用 TeacherYang 风格为这段代码做系统级底层审查与防御性重构。”*  
 Anty 将遵循“痛点启发 -> 本质穿透 -> 步骤拆解 -> 避坑防线 -> 运行实证”五步闭环交付。
+
+针对任何模型与终端执行，DSHA 提供了免受括号撕裂的专用 Shell：
+```cmd
+pwsh -NoProfile -Command "..."      # 专用 PowerShell 7 独立运行时（无原生 PS 5.1 别名与括号缺陷）
+dsha-pwsh -Command "..."            # 加固 PowerShell 7 启动器（自动 Bypass 且 -NoProfile）
+dsha-sh -c "..."                    # 防咬人 GNU Bash 5.3 启动器
+rea <command>                       # 就地调用 REA 逆向工程套件
+```
 
 ---
 
@@ -65,6 +73,11 @@ Anty 将遵循“痛点启发 -> 本质穿透 -> 步骤拆解 -> 避坑防线 ->
 ```
 DSHA/
 ├── bin/
+│   ├── pwsh.cmd                # DSHA 专用 PowerShell 7 零括号启动器
+│   ├── dsha-pwsh.cmd           # DSHA 加固 PowerShell 7 启动器
+│   ├── dsha-sh.cmd             # 防咬人 GNU Bash 启动器（规避 Win 括号咬人）
+│   ├── bash.cmd / sh.cmd       # GNU Bash 便携代理
+│   ├── rea.cmd                 # REA 逆向工具集全局调用器
 │   ├── agy-tier.ps1            # 权限档位切换器（唯一事实源）
 │   ├── agy-meter.ps1           # 额度悬浮窗控制器（启动/停止/状态）
 │   ├── agy-audit.ps1           # 门禁决策审计与统计
@@ -79,14 +92,17 @@ DSHA/
 │   ├── dsh-permissions/        # 权限门禁本体（gate.py, lexicon.json, AGENTS.md）
 │   ├── dsha-englock/           # 独立工程锁插件（与切档解耦，hooks 独立）
 │   └── dsha-meter/             # 实时额度监视器本体（meter.py, 高分屏渲染）
+├── scripts/
+│   └── fetch-pwsh.ps1          # 专用 Pwsh 运行时极速自举拉取器
 ├── skills/
-│   └── DSHA/
-│       ├── SKILL.md            # Anty 技能定义入口
-│       ├── widget.html         # 内联 UI 权限卡片面板
-│       ├── teacher-yang.md     # 杨老师工程辅助快速指南
-│       └── reference.md        # 四档警告与运维陷阱参考
+│   ├── DSHA/                   # DSHA 核心技能套件
+│   │   ├── SKILL.md            # Anty 技能定义入口
+│   │   ├── widget.html         # 内联 UI 权限卡片面板
+│   │   ├── teacher-yang.md     # 杨老师工程辅助快速指南
+│   │   └── reference.md        # 四档警告与运维陷阱参考
+│   └── reverse-engineer-anything/ # REA 逆向套件与本地驱动器
 ├── install.ps1                 # 幂等安装器（带时间戳备份与一键卸载）
-├── verify.ps1                  # 29 项自动化体检套件
+├── verify.ps1                  # 39 项自动化体检套件（全绿）
 ├── CHANGELOG.md                # 版本演进历程
 ├── README.md                   # 项目说明
 └── VERSION                     # 当前版本号 (2.0.0)

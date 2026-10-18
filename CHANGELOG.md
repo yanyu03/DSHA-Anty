@@ -33,6 +33,12 @@
 - **GNU Bash 5.3 接入全局环境**：将 Git Bash 核心加入全局 User PATH，并提供 `bash.cmd`、`sh.cmd`、`dsha-sh.cmd` 统一启动器。
 - **零圆括号批处理架构**：所有 cmd 脚本重构为标签跳转，规避 `if (...)` 块被未闭合括号撕裂的 Windows 经典缺陷。
 
+**6. 专用 Pwsh 运行时环境（彻底摆脱 Windows 原厂 PowerShell 5.1）**
+- **原生 PowerShell 7.6 独立运行时**：集成自包含 .NET Core 运行时，彻底解决 Windows 原厂 PowerShell 5.1 内置别名冲突（`curl`、`wget`、`R`）、GBK 编码破坏、管道括号咬人等顽疾。
+- **零圆括号与加固启动器 (`pwsh.cmd` / `dsha-pwsh.cmd`)**：提供无括号块语法转发与 `-NoProfile -ExecutionPolicy Bypass` 预置安全调用。
+- **自举式镜像拉取脚本 (`scripts/fetch-pwsh.ps1`)**：基于杨老师底层穿透原则，支持 npmmirror/npmjs 多通道秒级自举与无污染安装。
+- **安装器与体检流水线升级**：`install.ps1` 自动分发与注册 User PATH；`verify.ps1` 新增 Section 9 专用体检，39 项检查全通过。
+
 ## v1.0.0 — 2026-10-05
 首个可分发版本。
 

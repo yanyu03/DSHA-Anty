@@ -1,4 +1,4 @@
-﻿# DSHA 安装后体检（只读，不改任何文件）
+# DSHA 安装后体检（只读，不改任何文件）
 #   pwsh -File verify.ps1
 
 $ErrorActionPreference = 'Continue'
@@ -35,7 +35,7 @@ foreach ($f in $files) { Check $f (Test-Path (Join-Path $cfg $f)) }
 Write-Host "`n=== 2. Python 与钩子包装器 ===" -ForegroundColor Cyan
 $rg = Join-Path $cfg 'plugins\dsh-permissions\scripts\run-gate.cmd'
 if (Test-Path $rg) {
-  $line = (Get-Content $rg | Where-Object { $_ -match 'python' } | Select-Object -First 1)
+  $line = (Get-Content $rg | Where-Object { $_ -match '\.exe' } | Select-Object -First 1)
   $py = if ($line -match '^"([^"]+)"') { $matches[1] } else { $null }
   Check "run-gate.cmd 指向的解释器存在" ($py -and (Test-Path $py)) $py
   Check "run-gate.cmd 保持纯 ASCII" (((Get-Content $rg -Raw) -notmatch '[^\x00-\x7F]'))
@@ -111,6 +111,34 @@ if (Test-Path $reaCmd) {
 } else {
   Check "找到 rea.cmd" $false
 }
+
+Write-Host "`n=== 9. DSHA Dedicated Pwsh (PowerShell 7) Runtime ===" -ForegroundColor Cyan
+$pwshExe = Join-Path $cfg 'pwsh\pwsh.exe'
+if (-not (Test-Path $pwshExe)) { $pwshExe = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\pwsh\pwsh.exe" }
+Check "pwsh.exe runtime present" (Test-Path $pwshExe) $pwshExe
+
+$pwshCmd = Join-Path $cfg 'pwsh.cmd'
+if (-not (Test-Path $pwshCmd)) { $pwshCmd = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\pwsh.cmd" }
+Check "pwsh.cmd launcher present" (Test-Path $pwshCmd)
+if (Test-Path $pwshCmd) { Check "pwsh.cmd is pure ASCII" (((Get-Content $pwshCmd -Raw) -notmatch '[^\x00-\x7F]')) }
+
+$dshaPwshCmd = Join-Path $cfg 'dsha-pwsh.cmd'
+if (-not (Test-Path $dshaPwshCmd)) { $dshaPwshCmd = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\dsha-pwsh.cmd" }
+Check "dsha-pwsh.cmd hardened launcher present" (Test-Path $dshaPwshCmd)
+if (Test-Path $dshaPwshCmd) { Check "dsha-pwsh.cmd is pure ASCII" (((Get-Content $dshaPwshCmd -Raw) -notmatch '[^\x00-\x7F]')) }
+
+if (Test-Path $pwshExe) {
+  $verOut = & $pwshExe -NoProfile -Command '$PSVersionTable.PSVersion.ToString()' 2>$null
+  Check "pwsh.exe major version is 7 (PowerShell 7.x)" ($verOut -and $verOut.StartsWith('7.')) "($verOut)"
+}
+
+if (Test-Path $dshaPwshCmd) {
+  $pipeOut = & $dshaPwshCmd -Command '@(1..3) | Measure-Object | Select-Object -ExpandProperty Count' 2>$null
+  Check "dsha-pwsh pipeline and parentheses command executes successfully" ($pipeOut -and $pipeOut.Trim() -eq '3') "Count=$pipeOut"
+}
+
+$uPath = [Environment]::GetEnvironmentVariable("Path", "User")
+Check "User PATH prioritizes DSHA dedicated tools and pwsh" ($uPath -match 'dsh|\.gemini\\config|DSHA\\bin')
 
 Write-Host "`n--------------------------------------------------"
 Write-Host ("PASS {0} / FAIL {1} / WARN {2}" -f $ok, $fail, $warn) -ForegroundColor $(if ($fail -eq 0) { 'Green' } else { 'Red' })
