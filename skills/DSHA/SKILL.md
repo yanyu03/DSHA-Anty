@@ -271,4 +271,19 @@ DSHA 家族第五位成员：引入自开源 `morluto/rea` 并在本地就地执
 3. **ExecutionPolicy 已合规放行**：
    当前用户作用域已置为 `RemoteSigned`，全面消除 `.ps1` 脚本的权限拦截。
 
+---
+
+## DSHA 书记官智能体 (The Scribe)
+
+DSHA 家族第六位成员：专职情报官与日志档案员。只负责收录日志、整理执行轨迹、提取报错堆栈，为其他 Agent 提供高密度的问题研究材料 (Research Dossier)。
+
+### 核心能力与指令
+- **查看收录状态**：`bin\scribe.cmd status`
+- **生成问题研究简报**：`bin\scribe.cmd dossier [--issue <议题>]`
+- **刷新日志缓存**：`bin\scribe.cmd harvest`
+- **内置用例自检**：`bin\scribe.cmd selftest`
+- **子智能体调度**：支持通过 `invoke_subagent(TypeName="scribe")` 异步唤起。
+
+详见：[skills/DSHA/scribe.md](file:///c:/Users/admin/Desktop/GOOGLE/DSHA/skills/DSHA/scribe.md)
+
 

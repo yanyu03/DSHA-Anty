@@ -140,6 +140,22 @@ if (Test-Path $dshaPwshCmd) {
 $uPath = [Environment]::GetEnvironmentVariable("Path", "User")
 Check "User PATH prioritizes DSHA dedicated tools and pwsh" ($uPath -match 'dsh|\.gemini\\config|DSHA\\bin')
 
+Write-Host "`n=== 10. DSHA 书记官 (The Scribe) 智能体与工具 ===" -ForegroundColor Cyan
+$scribeCmd = Join-Path $cfg 'scribe.cmd'
+if (-not (Test-Path $scribeCmd)) { $scribeCmd = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\scribe.cmd" }
+Check "scribe.cmd launcher present" (Test-Path $scribeCmd)
+if (Test-Path $scribeCmd) { Check "scribe.cmd is pure ASCII" (((Get-Content $scribeCmd -Raw) -notmatch '[^\x00-\x7F]')) }
+
+$scribePy = Join-Path $cfg 'plugins\dsh-permissions\scripts\scribe.py'
+if (-not (Test-Path $scribePy)) { $scribePy = "c:\Users\admin\Desktop\GOOGLE\DSHA\scripts\scribe.py" }
+Check "scribe.py script present" (Test-Path $scribePy)
+if (Test-Path $scribePy) {
+  $sSelf = & $pyExe $scribePy selftest | Select-String -Pattern 'selftest:' | Select-Object -Last 1
+  $sPass = $false
+  if ($sSelf -and $sSelf.Line -match 'selftest:\s*(\d+)\s*/\s*(\d+)') { $sPass = ($matches[1] -eq $matches[2]) }
+  Check "scribe.py selftest 全通过" $sPass $sSelf.Line
+}
+
 Write-Host "`n--------------------------------------------------"
 Write-Host ("PASS {0} / FAIL {1} / WARN {2}" -f $ok, $fail, $warn) -ForegroundColor $(if ($fail -eq 0) { 'Green' } else { 'Red' })
 if ($fail -eq 0) { Write-Host "DSHA 体检通过。" -ForegroundColor Green } else { Write-Host "存在失败项，请按上方 [FAIL] 逐条处理。" -ForegroundColor Red }

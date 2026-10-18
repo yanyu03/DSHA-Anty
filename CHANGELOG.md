@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v2.3.0 — 2026-10-19
+**DSHA 书记官智能体 (The Scribe) · 日志收录、情报整理与快速研判简报**
+- **DSHA 书记官智能体注册**：新增专职档案与情报整理 Subagent `scribe`，只读无破坏性，专为多 Agent 与 ChatGPT 供给高密度研判材料。
+- **纯 Python 标准库情报引擎 (`scripts/scribe.py`)**：自动化收录 Gate 门禁拦截、Antigravity 后台任务退出码、Git 变更足迹与宿主环境指纹。
+- **高密度研究简报 (`bin\scribe.cmd dossier`)**：标准化输出 6 段式研判简报，将上万 Token 原始日志提纯为核心态势、报错索引与突破切入点。
+- **纯 ASCII 启动器与验证扩充**：新增 `bin/scribe.cmd`，自动化测试套件扩充至 43 项 (`verify.ps1` 43/43 PASS)。
+- **ChatGPT 客户端专属书记官提示词**：新增 `chatgpt/SCRIBE_PROMPT.md`。
+
 ## v2.2.0 — 2026-10-19
 **DSHA-SharBoy 品牌确立与全平台生态分发（支持 Antigravity & ChatGPT 双平台）**
 - **品牌全面更名为 DSHA-SharBoy**：GitHub 开源仓库同步更新为 [https://github.com/yanyu03/DSHA-SharBoy](https://github.com/yanyu03/DSHA-SharBoy)。
