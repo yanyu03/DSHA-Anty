@@ -1,0 +1,9 @@
+{
+  "mode": "advisory",
+  "log": true,
+  "report_path_hints": [
+    "documents_md",
+    "报告",
+    "report"
+  ]
+}

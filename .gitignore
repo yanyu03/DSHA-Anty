@@ -1,0 +1,42 @@
+# ==============================================================================
+# DSHA-Anty Privacy & Build Artifacts Exclusion (.gitignore)
+# ==============================================================================
+
+# Python Caches and Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# Antigravity Runtime & Session Rollbacks
+.gemini/
+_rollback/
+*.bak
+*._bak
+*.tmp
+
+# Logging & Audit Traces (Protect user privacy)
+logs/*.log
+logs/*.log.*
+*.log
+*.log.*
+!plugins/dsh-permissions/logs/.gitkeep
+
+# IDE and Editor Files
+.vscode/
+.idea/
+*.swp
+*~
+*.suo
+*.user
+
+# Operating System Metadata
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store

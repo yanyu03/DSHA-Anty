@@ -1,0 +1,103 @@
+﻿# DSHA 安装后体检（只读，不改任何文件）
+#   pwsh -File verify.ps1
+
+$ErrorActionPreference = 'Continue'
+$cfg = Join-Path $env:USERPROFILE '.gemini\config'
+$ok = 0; $fail = 0; $warn = 0
+
+function Check($name, $cond, $detail = '') {
+  if ($cond) { Write-Host ("  [PASS] {0} {1}" -f $name, $detail) -ForegroundColor Green; $script:ok++ }
+  else       { Write-Host ("  [FAIL] {0} {1}" -f $name, $detail) -ForegroundColor Red;   $script:fail++ }
+}
+function Note($name, $detail = '') { Write-Host ("  [WARN] {0} {1}" -f $name, $detail) -ForegroundColor Yellow; $script:warn++ }
+
+Write-Host "`n=== 1. 文件完整性 ===" -ForegroundColor Cyan
+$files = @(
+  'plugins\dsh-permissions\plugin.json',
+  'plugins\dsh-permissions\tier.json',
+  'plugins\dsh-permissions\hooks.json',
+  'plugins\dsh-permissions\lexicon.json',
+  'plugins\dsh-permissions\englock.json',
+  'plugins\dsh-permissions\scripts\gate.py',
+  'plugins\dsh-permissions\scripts\englock.py',
+  'plugins\dsh-permissions\scripts\run-gate.cmd',
+  'plugins\dsh-permissions\scripts\englock.cmd',
+  'plugins\dsh-permissions\rules\AGENTS.md',
+  'skills\DSHA\SKILL.md',
+  'skills\DSHA\reference.md',
+  'skills\DSHA\widget.html',
+  'skills\DSHA\engineering-lock.md',
+  'skills\DSHA\language-norm.md',
+  'agy-tier.ps1'
+)
+foreach ($f in $files) { Check $f (Test-Path (Join-Path $cfg $f)) }
+
+Write-Host "`n=== 2. Python 与钩子包装器 ===" -ForegroundColor Cyan
+$rg = Join-Path $cfg 'plugins\dsh-permissions\scripts\run-gate.cmd'
+if (Test-Path $rg) {
+  $line = (Get-Content $rg | Where-Object { $_ -match 'python' } | Select-Object -First 1)
+  $py = if ($line -match '^"([^"]+)"') { $matches[1] } else { $null }
+  Check "run-gate.cmd 指向的解释器存在" ($py -and (Test-Path $py)) $py
+  Check "run-gate.cmd 保持纯 ASCII" (((Get-Content $rg -Raw) -notmatch '[^\x00-\x7F]'))
+}
+$eg = Join-Path $cfg 'plugins\dsh-permissions\scripts\englock.cmd'
+if (Test-Path $eg) { Check "englock.cmd 保持纯 ASCII" (((Get-Content $eg -Raw) -notmatch '[^\x00-\x7F]')) }
+
+Write-Host "`n=== 3. 提示词注入文件必须纯 ASCII ===" -ForegroundColor Cyan
+$agents = Join-Path $cfg 'plugins\dsh-permissions\rules\AGENTS.md'
+if (Test-Path $agents) {
+  $b = [System.IO.File]::ReadAllBytes($agents)
+  $bad = ($b | Where-Object { $_ -gt 127 }).Count
+  Check "AGENTS.md 非 ASCII 字节数 = 0" ($bad -eq 0) "（$($b.Length) 字节 / 非 ASCII $bad）"
+  $t = Get-Content $agents -Raw
+  Check "含 L1-L8 工程锁章节" ($t -match 'Engineering Lock \(L1-L8\)')
+  Check "含 L9 语言规范锁章节" ($t -match 'Language Norm Lock \(L9\)')
+}
+
+Write-Host "`n=== 4. JSON 配置可解析 ===" -ForegroundColor Cyan
+foreach ($j in @('plugins\dsh-permissions\plugin.json','plugins\dsh-permissions\tier.json',
+                 'plugins\dsh-permissions\hooks.json','plugins\dsh-permissions\lexicon.json',
+                 'plugins\dsh-permissions\englock.json')) {
+  $p = Join-Path $cfg $j
+  if (Test-Path $p) {
+    try { $null = Get-Content $p -Raw -Encoding utf8 | ConvertFrom-Json; Check $j $true }
+    catch { Check $j $false $_.Exception.Message }
+  }
+}
+
+Write-Host "`n=== 5. 两个校验器自检 ===" -ForegroundColor Cyan
+$pyExe = if ($py -and (Test-Path $py)) { $py } else { 'python' }
+$gateSelf = Join-Path $cfg 'plugins\dsh-permissions\scripts\selftest.py'
+$eng  = Join-Path $cfg 'plugins\dsh-permissions\scripts\englock.py'
+if (Test-Path $gateSelf) {
+  $g = & $pyExe $gateSelf 2>$null | Select-String -Pattern 'pass=' | Select-Object -Last 1
+  Check "权限档位 selftest 无失败" ($g -and $g.Line -match 'fail=0') $g.Line
+} else { Check "找到 selftest.py" $false }
+if (Test-Path $eng) {
+  $e = & $pyExe $eng selftest | Select-String -Pattern 'selftest:' | Select-Object -Last 1
+  # 通用判定：解析 "selftest: N/M"，要求 N == M（用例数会随版本增长，不写死）
+  $allPass = $false
+  if ($e -and $e.Line -match 'selftest:\s*(\d+)\s*/\s*(\d+)') { $allPass = ($matches[1] -eq $matches[2]) }
+  Check "englock.py selftest 全通过" $allPass $e.Line
+}
+
+Write-Host "`n=== 6. 钩子状态 ===" -ForegroundColor Cyan
+$hooks = Join-Path $cfg 'plugins\dsh-permissions\hooks.json'
+if (Test-Path $hooks) {
+  $h = Get-Content $hooks -Raw -Encoding utf8 | ConvertFrom-Json
+  $enabled = $h.'dsh-permissions'.enabled
+  $n = $h.'dsh-permissions'.PreToolUse.Count
+  if ($enabled) { Note "钩子已启用" "（PreToolUse 行数 $n）" } else { Note "钩子处于关闭状态" "（符合默认策略；需要机械校验时加 -EnableHook）" }
+}
+
+Write-Host "`n=== 7. 工程锁模式 ===" -ForegroundColor Cyan
+$conf = Join-Path $cfg 'plugins\dsh-permissions\englock.json'
+if (Test-Path $conf) {
+  $m = (Get-Content $conf -Raw -Encoding utf8 | ConvertFrom-Json).mode
+  Note "englock mode = $m" $(if ($m -eq 'strict') { '（L5/L6/L9.1 会直接拒绝）' } else { '（只提醒不拦截）' })
+}
+
+Write-Host "`n--------------------------------------------------"
+Write-Host ("PASS {0} / FAIL {1} / WARN {2}" -f $ok, $fail, $warn) -ForegroundColor $(if ($fail -eq 0) { 'Green' } else { 'Red' })
+if ($fail -eq 0) { Write-Host "DSHA 体检通过。" -ForegroundColor Green } else { Write-Host "存在失败项，请按上方 [FAIL] 逐条处理。" -ForegroundColor Red }
+exit $(if ($fail -eq 0) { 0 } else { 1 })

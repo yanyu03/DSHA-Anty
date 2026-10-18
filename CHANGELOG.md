@@ -1,0 +1,71 @@
+# CHANGELOG
+
+## v2.0.0 — 2026-10-18
+**DSHA-Anty 家族全功能矩阵成型（四位一体：Gate + EngLock + Meter + TeacherYang Mindset）**
+
+**1. DSHA-Meter（额度与 Token 监视器）**
+- **5H / 7D 双重配额与单轮上下文追踪**：解析 Antigravity 本地 JSONL 事务日志，计算 5H（200次/100万 tok）与 7D（1500次/1000万 tok）滚动水位。
+- **动态回血倒计时预测**：基于滑动窗口首次请求时间戳，精准预测 5H 首笔释放与完全回满倒计时、7D 周额度刷新倒计时。
+- **高分屏硬件级物理渲染**：调用 Windows User32 `SetProcessDpiAwareness(2)` 与高精字体平滑，彻底消除 4K / 高 DPI 下窗口与文本模糊发虚。
+- **高内聚多进程并发架构**：GUI 独占主线程，后台守护线程 2s 轮询，跨线程共享缓存严格使用 `threading.Lock()` 互斥保护。
+- **控制器脚本 `agy-meter.ps1`**：提供 `-Start` / `-Stop` / `-Restart` / `-Status` 标准幂等运维界面，脱壳常驻桌面。
+
+**2. TeacherYang 系统级编程思维与工程导师模式 (TeacherYang Mindset)**
+- **U 盘课件深度语料蒸馏**：提取自 14 门 PPTX、980+ 幻灯片、17,600+ 文本词条（Linux、数据容器、闭包装饰器、文件 I/O、异常、面向对象、进程、线程、Socket、标准库、正则）。
+- **五步启发认知脚手架**：痛点启发 (Socratic Inquiry) -> 本质穿透 -> 步骤拆解 -> 避坑防线 (110+ 处陷阱预警) -> 运行实证。
+- **系统级五大支柱确立**：系统底层穿透律、防御性契约与生命周期、并发选型与锁纪律、高内聚与无侵入切面、精炼范式与量化实证。
+- **完整工程产物与导师提示词**：新增 `docs/TEACHER_YANG_DISTILLATION.md`、`docs/TEACHER_YANG_MINDSET.md` 与 Agent 指南 `skills/DSHA/teacher-yang.md`。
+
+**3. 开源与隐私安全加固**
+- **个人路径彻底脱敏**：消除所有硬编码 `Users/admin` 路径，采用 `$env:USERPROFILE` 动态解析与自适应 Python/Pythonw 探测。
+- **严密 `.gitignore` 规则**：隔离本地门禁日志、运行时状态、历史备份与字节码，确保开源仓库零隐私泄露。
+- **Git 开源结构对齐**：全面适配上游 `DSHA-Anty` 开源仓库标准。
+
+## v1.0.0 — 2026-10-05
+首个可分发版本。
+
+**权限档位（移植自 DSH）**
+- 四级预设：read-only / workspace-write / danger-full-access / auto
+- `scripts/gate.py`：PreToolUse 钩子，62 项自检全通过
+- `agy-tier.ps1`：唯一事实源，未加 `-Yes` 不修改任何文件；切换端到端约 7 秒
+- `skills/DSHA/`：档位说明 + 四档警告全文 + 内联选择器 widget
+
+**工程锁（L1–L9）**
+- L1 出处锁 / L2 样本锁 / L3 撤回锁 / L4 三件套锁 / L5 报告头锁 / L6 措辞锁 / L7 断拍锁 / L8 外部审查锁
+- **L9 语言规范锁**：L9.1 禁用词（硬锁）、L9.2 无据权威、L9.3 伪精确、L9.4 假完成、L9.5 术语漂移、L9.6 引用不可解析、L9.7 未来态无标记
+- `scripts/englock.py` v2：19 项自检；与 `gate.py` 同协议、**fail-open**
+- `lexicon.json`：L9 词表（9 组约 120 条），改词表即改行为
+
+**工程化**
+- `install.ps1`：幂等安装、时间戳备份、按本机 Python 重写钩子包装器、`-WhatIfOnly` 预演、`-Uninstall` 回滚
+- `verify.ps1`：七项只读体检
+- 已知坑写进文档：`cmd /c` 剥引号、提权启动 `requestSingleInstanceLock` 静默退出、`AGENTS.md` 必须纯 ASCII、`englock.json` 的 BOM 问题
+
+### 打包前修复（自测发现）
+- **verify.ps1 函数名与 PowerShell 内置别名冲突**：`R` 是 `Invoke-History` 的别名，优先级高于函数，导致 29 项检查全部被劫持 → 改名 `Check` / `Note`，现 PASS 29 / FAIL 0。
+- **安装器调用了不存在的入口**：`gate.py --selftest` 并非有效入口（自检在独立 `selftest.py`）→ 改为调用 `selftest.py`，现正确输出 `pass=62 fail=0`。
+
+## v1.1.0 — 2026-10-06
+- **出厂默认档位改为 `danger-full-access`（全权）**，并新增 `默认全权警告.md`（安装器每次打印警告横幅）；支持 `-Tier <name>` / `-KeepTier` 覆盖
+- **UI 权限调节面板**：`skills/DSHA/widget.html` 升级为可交互面板 —— 四档卡片（含风险/是否需重启/当前标记）、每档「复制切换命令」「复制请求 agent 切换」、工程锁模式切换命令、状态重读命令、全权风险横幅
+- **工程锁加固（被真实语料逼出来的两处修复）**
+  - 新增 `mask_quoted()`：代码围栏 / 引用块 / `【原文】` 段**不计分**，避免"引用别人"被当成"自己这么说"
+  - **L9.3 收窄**：只对"精度主张"（`xx.xx%` 或"提升/占比+两位小数"）触发，不再把 `3.67W`、`639.02MB` 这类仪器读数当伪精度
+- 新增 `防胡言乱语效果评估.md`：三组语料实测（Anty 侧 82% 文档被点名，硬锁 L9.1 命中率 100%；误报约 17%）
+
+## v1.2.0 — 2026-10-06
+**词库 → 表述策略（有条件许可）**
+- 策略模型从"禁用词表"升级为"触发 → 补偿 → 判定"：允许说，但必须在邻近窗口给出补偿信息
+- 新增 6 条窗口规则：**L9.8 绝对量词 / L9.9 因果声明 / L9.10 程度无量化 / L9.11 断言强度 / L9.12 时间绝对 / L9.13 自指权威**
+- **L2 升级为"样本邻近锁"**：证据必须在断言 ±120 字内，而非"全文出现过即可"
+- **严重度模型**：`hard` / `strict_hard` / `warn`，strict 模式下 8 类直接拒绝（L5 L6 L9.1 L9.11 L2 L9.8 L9.9 L9.12）
+- 自检用例 19 → **30 条**（含每条窗口规则的"触发/放过"成对用例）
+- 设计依据：当日聊天记录词频审计（验证类 12.5/万、绝对量词 9.0/万、因果连词 7.2/万）→ 证明"一刀切禁用会误杀正常表述"
+- 修复：自检用例中「逸」误写为 `\u900d`（应为 `\u9038`）导致 L9.12 用例永不触发
+
+## v1.2.1 — 2026-10-09
+**部署时发现的三个真问题（均已修复）**
+1. **工程锁会被档位切换顺手关掉**：`agy-tier.ps1` 每次切档都会重写 `plugins\dsh-permissions\hooks.json`，切到 `danger-full-access` 时把钩子置为 `enabled:false` → 寄生在那里的工程锁随之失效。
+   **修法**：工程锁拆成**独立插件** `plugins\dsha-englock`（name=DSHA-EngLock），自带 `hooks.json`/启动器，并注册进 `config.json` 的 `plugins.<目录名>.enabled` 与 `plugins.json` 的 `entries`。实测：切到全权档后 `dsha-englock` 仍 `enabled=true`。
+2. **钩子命令被双重转义**：`hooks.json` 里路径写成 `C:\\\\Users\\\\...`（JSON 解码后是双反斜杠）。**修法**：去掉生成时多余的 `.Replace('\','\\')`，并重写 `docs/hooks.full.json` / `hooks.permissions-only.json` / 插件内 `hooks.englock.example.json`，现为单层转义且解码后路径全部存在。
+3. **安装器曾被正则修补截断**：分节只剩到「6. 自检」，独立插件与注销逻辑缺失。**修法**：按实际内容精确补回，并把"权限钩子是否开启"改为**随档位**（`read-only`/`auto` 开、`workspace-write`/`danger-full-access` 关），不再与 `agy-tier.ps1` 抢所有权。

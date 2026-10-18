@@ -1,0 +1,17 @@
+{
+  "dsha-englock": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": "write_to_file|replace_file_content|create_file|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:\\Users\\Administrator\\.gemini\\config\\plugins\\dsha-englock\\run-englock.cmd",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

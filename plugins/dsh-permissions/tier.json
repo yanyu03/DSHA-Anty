@@ -1,0 +1,6 @@
+{
+  "tier": "danger-full-access",
+  "auto_reviewer": "local",
+  "audit_logging": true,
+  "log_allow": false
+}

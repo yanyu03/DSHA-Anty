@@ -1,0 +1,149 @@
+{
+  "_schema": "2",
+  "_readme": "L9 语言规范锁 · 词库/策略 v2。改本文件即改行为，无需改代码、无需重装。",
+  "version": "2.0",
+  "updated": "2026-10-06",
+  "design": {
+    "principle": "不是禁用词，而是『有条件许可』——允许你说，但必须在邻近窗口内给出补偿信息（证据/限定/量化/对照）。",
+    "why": "2026-10-06 对当日聊天记录做的审计显示：最高频的越界表述是 验证类(12.5/万)、绝对量词(9.0/万)、程度无量化(3.3/万)。一刀切禁用会把这些正常表述也杀掉，所以改为『要补偿』。",
+    "levels": {
+      "hard": "strict 模式直接拒绝（无法通过补充信息挽回）",
+      "warn": "始终只提醒",
+      "strict_hard": "advisory 下提醒；strict 下升级为拒绝"
+    },
+    "audit_note": "仅对 agent 自己撰写的内容计分；引用/代码/【原文】段由 mask_quoted() 剔除，不计分。"
+  },
+
+  "ban_absolute": [
+    "史诗级", "完美", "彻底", "万能", "无敌", "史上最强", "秒杀", "绝对", "百分百", "零缺陷",
+    "前所未有", "定义级", "天花板", "封神", "遥遥领先", "吊打", "暴打", "碾压", "降维打击",
+    "epic", "flawless", "ultimate", "revolutionary", "perfect solution"
+  ],
+  "ban_marketing": [
+    "震撼", "惊艳", "炸裂", "逆天", "起飞", "爽翻", "神器", "黑科技", "绝了", "牛到",
+    "一键", "轻松搞定", "小白也能", "手把手秒会", "必看", "干货满满", "建议收藏",
+    "震惊", "惊呆", "离谱", "杀疯了", "直接封神"
+  ],
+  "ban_promise": [
+    "保证", "必定", "一定能", "永久", "一劳永逸", "永不", "绝对不会", "百分之百", "万无一失",
+    "永久解决", "根治", "包治"
+  ],
+  "ban_selfpraise": [
+    "我彻底攻克", "我已完全", "我完全掌控", "我成功解决了一切", "本人独家", "业界首创",
+    "我独家发明", "前无古人"
+  ],
+  "vague_authority": [
+    "官方", "业内", "权威", "众所周知", "大家都知道", "业内公认", "公开资料显示",
+    "有消息称", "据说", "普遍认为", "业界共识", "主流观点认为"
+  ],
+  "completion_words": [
+    "已修复", "已解决", "已完成", "搞定了", "已经稳定", "现已生效", "已上线", "已落地",
+    "收工", "全部完成", "完美收官"
+  ],
+  "validation_markers": [
+    "验证", "复测", "待验证", "未复跑", "单次观测", "n=", "N=", "样本", "对照", "回归",
+    "未验证", "待确认", "待复核", "[EXTRAPOLATED]", "推算"
+  ],
+  "precision_needs_evidence": [
+    "误差", "±", "n=", "N=", "样本", "复测", "有效位", "精度", "保留", "[EXTRAPOLATED]"
+  ],
+  "term_groups": [
+    ["待验证", "待核实", "未验证", "尚未确认"],
+    ["单次观测", "一次观测", "唯一一次测量", "只测了一次"],
+    ["复现命令", "复现步骤", "重现命令"],
+    ["回滚方式", "回退方案", "还原方法"],
+    ["推算", "估算", "外推", "模型推算"],
+    ["硬边界", "物理边界", "不可逾越边界"],
+    ["证伪", "反驳", "推翻", "撤回"]
+  ],
+  "required_uncertainty_when_forward": ["将", "计划", "预计", "拟", "准备", "下一步打算"],
+
+  "claim_proximity": {
+    "id": "L2",
+    "name": "样本邻近锁",
+    "level": "warn",
+    "strict_level": "strict_hard",
+    "window": 120,
+    "claims": ["验证", "证明", "确认", "成立", "已解决"],
+    "requires": ["n=", "N=", "样本", "次测量", "次实测", "重复", "复测", "对照组", "单次观测", "至少", "×", "轮"],
+    "note": "比 v1 更严：不再满足于『全文任何位置出现过样本量』，而要求证据出现在同一断言 ±120 字符内。"
+  },
+
+  "window_rules": [
+    {
+      "id": "L9.8",
+      "name": "绝对量词锁",
+      "level": "warn",
+      "strict_level": "strict_hard",
+      "window": 40,
+      "trigger": ["全部", "所有", "任何", "唯一", "首个", "一律", "无一例外", "没有之一"],
+      "requires": ["本次", "该样本", "n=", "N=", "限于", "范围内", "在这", "这批", "仅", "这几", "本批", "此外"],
+      "note": "允许说『全部』，但必须在 ±40 字内给出范围限定。审计依据：本人 9.0/万字、Anty 3.1/万字，属高频。"
+    },
+    {
+      "id": "L9.9",
+      "name": "因果声明锁",
+      "level": "warn",
+      "strict_level": "strict_hard",
+      "window": 60,
+      "trigger": ["因为", "导致", "使得", "造成", "从而", "所以必然"],
+      "requires": ["对照", "机制", "n=", "复测", "A/B", "交替", "实测", "实验", "排除", "控制变量", "同温"],
+      "note": "因果是这份工程翻车最多的地方（override-status 的『注入后立降』）。要求邻近给出对照或机制。"
+    },
+    {
+      "id": "L9.10",
+      "name": "程度无量化锁",
+      "level": "warn",
+      "strict_level": "warn",
+      "window": 30,
+      "trigger": ["大幅", "严重", "剧烈", "极其", "极为", "暴涨", "暴跌", "飙升", "断崖", "海量"],
+      "requires": ["%", "倍", "mAh", "mA", "mV", "MHz", "GHz", "W", "℃", "ms", "点", "次", "分", "秒"],
+      "note": "程度词必须配单位或量化，否则读者无法判断『大幅』是 3% 还是 300%。"
+    },
+    {
+      "id": "L9.11",
+      "name": "断言强度锁",
+      "level": "hard",
+      "strict_level": "hard",
+      "window": 0,
+      "trigger": ["毫无疑问", "毋庸置疑", "铁证", "确凿", "板上钉钉", "必然如此", "显然可以断定"],
+      "requires": [],
+      "note": "强度词本身即越界，无补偿可能 → 硬锁。"
+    },
+    {
+      "id": "L9.12",
+      "name": "时间绝对锁",
+      "level": "warn",
+      "strict_level": "strict_hard",
+      "window": 24,
+      "trigger": ["永久解决", "永久有效", "永不复发", "一劳永逸", "从此不会", "再也不会"],
+      "requires": ["若", "前提", "条件下", "除非", "假设"],
+      "note": "技术结论极少无条件长期成立；要给前提。"
+    },
+    {
+      "id": "L9.13",
+      "name": "自指权威锁",
+      "level": "warn",
+      "strict_level": "warn",
+      "window": 30,
+      "trigger": ["我认为", "我判断", "我的结论", "可以肯定"],
+      "requires": ["据", "因为", "数据", "实测", "n=", "见", "依据"],
+      "note": "自指不能当证据；必须紧跟依据。"
+    }
+  ],
+
+  "notes": {
+    "L1": "numbers need a source marker anywhere in the doc; extrapolated values must carry [EXTRAPOLATED]",
+    "L2": "claim_proximity: the evidence must be near the claim, not merely present in the file",
+    "L5": "report header: date / device / tool / sample / measured / conclusion strength",
+    "L6": "absolute wording (subset of ban_absolute, kept as a separate hard lock for stability)",
+    "L9.1": "ban_absolute + ban_marketing + ban_promise + ban_selfpraise",
+    "L9.2": "vague authority without any source marker",
+    "L9.3": "fake precision: only precision CLAIMS (xx.xx% or 提升/占比 + 2 decimals)",
+    "L9.4": "completion claimed without any validation marker",
+    "L9.5": "terminology drift inside one term group",
+    "L9.6": "file:/// citation that does not exist on disk",
+    "L9.7": "forward-looking text without an uncertainty marker",
+    "L9.8-L9.13": "window rules: allowed only when the required compensation appears within the window"
+  }
+}

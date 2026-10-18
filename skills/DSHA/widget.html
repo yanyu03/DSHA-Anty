@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+</head>
+<!-- DSHA 权限调节面板 v2
+     agent 需要替换的三个属性（其余不用动）：
+       data-current  = 从 agy-tier.ps1 -Status 实测到的档位
+       data-lock     = englock.json 的 mode（advisory / strict）
+       data-checked  = 本次实测时间，例如 2026-10-06 11:20
+     交互方式：点击按钮 = 复制对应命令/请求文本到剪贴板，再粘贴到对话或终端执行。
+     面板本身不写任何文件、不改任何开关（避免 UI 绕过警告流程）。 -->
+<body data-current="danger-full-access" data-lock="advisory" data-checked=""
+      class="bg-transparent text-[var(--foreground)] antialiased p-5">
+
+  <div id="risk" class="hidden bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 mb-3">
+    <div class="flex items-start gap-2">
+      <span class="text-xs px-2 py-0.5 rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] whitespace-nowrap">默认全权</span>
+      <div class="text-xs text-[var(--muted-foreground)] leading-relaxed min-w-0">
+        当前处于 <span class="text-[var(--foreground)] font-medium">danger-full-access</span>：终端命令不再有任何拦截，工作区外与联网全部 ALLOW。
+        <span class="text-[var(--foreground)]">这不是沙箱</span>——请只在你信任当前任务的来源时保持此档位；随时可点下方按钮切回只读。
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded-xl p-5 shadow-sm">
+    <div class="flex items-baseline justify-between gap-4 mb-1">
+      <h2 class="text-[var(--foreground)] font-semibold text-base">DSHA · 权限与工程锁</h2>
+      <span id="current-chip" class="text-xs px-2 py-0.5 rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] whitespace-nowrap"></span>
+    </div>
+    <p class="text-[var(--muted-foreground)] text-xs mb-4">
+      两道正交的闸：<span class="text-[var(--foreground)]">权限档位</span>决定"能不能做"（四档，移植自 DeepSeek Harness），
+      <span class="text-[var(--foreground)]">工程锁 L1–L9</span>决定"做得对不对"。
+      本面板只做展示与命令复制，<span class="text-[var(--foreground)]">不会自己改任何开关</span>。
+    </p>
+
+    <div id="rows" class="space-y-2"></div>
+
+    <div class="mt-4 pt-3 border-t border-[var(--border)]">
+      <div class="text-xs text-[var(--muted-foreground)] mb-2">
+        工程锁模式：<span id="lock-chip" class="text-[var(--foreground)] font-medium"></span>
+        <span class="ml-2">（advisory 只提醒；strict 会把 L5 报告头缺失与 L9.1 禁用词直接拒绝）</span>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button id="btn-lock" class="text-xs px-3 py-1.5 rounded-lg border border-[var(--border)] text-[var(--foreground)]">复制：切换工程锁模式</button>
+        <button id="btn-status" class="text-xs px-3 py-1.5 rounded-lg border border-[var(--border)] text-[var(--foreground)]">复制：重新读取真实档位</button>
+        <button id="btn-check" class="text-xs px-3 py-1.5 rounded-lg border border-[var(--border)] text-[var(--foreground)]">复制：工程锁自查命令</button>
+      </div>
+      <div id="toast" class="text-xs text-[var(--muted-foreground)] mt-2 h-4"></div>
+    </div>
+
+    <div class="mt-3 pt-3 border-t border-[var(--border)] text-xs text-[var(--muted-foreground)] leading-relaxed">
+      <div>测于 <span id="checked"></span>。切换权限需先由 agent 复述该档警告并得到你确认；<span class="text-[var(--foreground)]">没有 -Yes 时脚本一个文件都不碰</span>。</div>
+      <div class="mt-1">切换 read-only / auto 立即生效；切换 workspace-write / danger-full-access 会<strong class="text-[var(--foreground)]">停止并重启 Antigravity</strong>（实测约 7 秒），会话会被中断。</div>
+      <div class="mt-1">两处真实差距：<span class="text-[var(--foreground)]">read-only</span> 是"写入需确认"而非"写入不可能"；<span class="text-[var(--foreground)]">auto</span> 是本地确定性策略，不是 DSH 的逐调用模型审查。</div>
+    </div>
+  </div>
+
+  <script>
+    var SCRIPT = String.fromCharCode(37) + 'USERPROFILE%' + String.fromCharCode(92) + '.gemini' + String.fromCharCode(92) + 'config' + String.fromCharCode(92) + 'agy-tier.ps1';
+    var TIERS = [
+      { id: 'read-only',           tag: '第一级',             risk: '最严格',   restart: false,
+        desc: '观察类命令放行；写类工具与灾难性命令被拒，普通写入需显式确认。工作区外与联网 DENY。' },
+      { id: 'workspace-write',     tag: '第二级',             risk: '中等',     restart: true,
+        desc: '只自动放行开发命令白名单，其余仍需批准；终端沙箱开启。由原生开关承担，钩子关闭（零额外开销）。' },
+      { id: 'danger-full-access',  tag: '第三级 · 默认',      risk: '最宽松',   restart: true,
+        desc: '终端命令不再有任何拦截；工作区外与联网 ALLOW；白名单收敛为 command(*) 等四条。' },
+      { id: 'auto',                tag: '第四级 · Auto review', risk: '本地策略', restart: false,
+        desc: '无沙箱，逐调用由本地正则策略判定。会误判，且比 DSH 的模型审查更爱打断你。' }
+    ];
+
+    var current = document.body.getAttribute('data-current') || '';
+    var lockMode = document.body.getAttribute('data-lock') || 'advisory';
+    var checked = document.body.getAttribute('data-checked') || '';
+
+    var chip = document.getElementById('current-chip');
+    var known = TIERS.some(function (t) { return t.id === current; });
+    chip.textContent = known ? '当前：' + current : '当前档位未知';
+    chip.className = known
+      ? 'text-xs px-2 py-0.5 rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] whitespace-nowrap'
+      : 'text-xs px-2 py-0.5 rounded-full bg-[var(--secondary)] text-[var(--secondary-foreground)] whitespace-nowrap';
+
+    if (current === 'danger-full-access') { document.getElementById('risk').className = document.getElementById('risk').className.replace('hidden ', ''); }
+    document.getElementById('lock-chip').textContent = lockMode;
+    document.getElementById('checked').textContent = checked || '未知时间';
+
+    function copy(text, msg) {
+      var done = function () { document.getElementById('toast').textContent = msg + '（已复制，粘贴到对话或终端执行）'; };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { document.getElementById('toast').textContent = '复制失败，请手动选择文本'; });
+      } else {
+        var ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); done(); } catch (e) { document.getElementById('toast').textContent = '复制失败，请手动选择文本'; }
+        document.body.removeChild(ta);
+      }
+    }
+
+    var host = document.getElementById('rows');
+    TIERS.forEach(function (tier) {
+      var on = tier.id === current;
+      var row = document.createElement('div');
+      row.className = on
+        ? 'flex items-start gap-3 rounded-lg p-3 border border-[var(--primary)] bg-[var(--secondary)]'
+        : 'flex items-start gap-3 rounded-lg p-3 border border-[var(--border)]';
+
+      var dot = document.createElement('span');
+      dot.className = on ? 'mt-1.5 w-2 h-2 rounded-full bg-[var(--primary)] shrink-0'
+                         : 'mt-1.5 w-2 h-2 rounded-full bg-[var(--muted-foreground)] opacity-40 shrink-0';
+
+      var body = document.createElement('div');
+      body.className = 'min-w-0 flex-1';
+
+      var head = document.createElement('div');
+      head.className = 'flex items-center gap-2 flex-wrap';
+      [['text-[var(--foreground)] font-medium text-sm', tier.id],
+       ['text-[10px] px-1.5 py-0.5 rounded border border-[var(--border)] text-[var(--muted-foreground)] whitespace-nowrap', tier.tag],
+       ['text-[10px] px-1.5 py-0.5 rounded border border-[var(--border)] text-[var(--muted-foreground)] whitespace-nowrap', tier.risk],
+       ['text-[10px] px-1.5 py-0.5 rounded border border-[var(--border)] text-[var(--muted-foreground)] whitespace-nowrap', tier.restart ? '需重启' : '即时生效']
+      ].forEach(function (pair) {
+        var s = document.createElement('span'); s.className = pair[0]; s.textContent = pair[1]; head.appendChild(s);
+      });
+      if (on) {
+        var here = document.createElement('span');
+        here.className = 'text-[10px] px-1.5 py-0.5 rounded bg-[var(--primary)] text-[var(--primary-foreground)] whitespace-nowrap';
+        here.textContent = '使用中'; head.appendChild(here);
+      }
+
+      var desc = document.createElement('div');
+      desc.className = 'text-[var(--muted-foreground)] text-xs mt-1 leading-relaxed';
+      desc.textContent = tier.desc;
+
+      var actions = document.createElement('div');
+      actions.className = 'flex flex-wrap gap-2 mt-2';
+      var b1 = document.createElement('button');
+      b1.className = 'text-xs px-3 py-1.5 rounded-lg border border-[var(--border)] text-[var(--foreground)]';
+      b1.textContent = on ? '复制：校验命令' : '复制：切换命令';
+      b1.onclick = function () {
+        copy('pwsh -NoProfile -NonInteractive -File "' + SCRIPT + '" ' + tier.id + ' -Yes',
+             on ? '已复制校验命令' : ('已复制切换到 ' + tier.id + ' 的命令'));
+      };
+      var b2 = document.createElement('button');
+      b2.className = 'text-xs px-3 py-1.5 rounded-lg border border-[var(--border)] text-[var(--foreground)]';
+      b2.textContent = '复制：请求 agent 切换';
+      b2.onclick = function () {
+        copy('请把 DSHA 权限切到 ' + tier.id + '：先复述该档完整警告，我确认后再执行。',
+             '已复制请求文本，粘贴发送即可');
+      };
+      actions.appendChild(b1); actions.appendChild(b2);
+
+      body.appendChild(head); body.appendChild(desc); body.appendChild(actions);
+      row.appendChild(dot); row.appendChild(body);
+      host.appendChild(row);
+    });
+
+    document.getElementById('btn-lock').onclick = function () {
+      copy("$p=\"$env:USERPROFILE\\.gemini\\config\\plugins\\dsh-permissions\\englock.json\"; " +
+           "$m=((Get-Content $p -Raw) | ConvertFrom-Json).mode; " +
+           "$n= if($m -eq 'strict'){'advisory'}else{'strict'}; " +
+           "(Get-Content $p -Raw) -replace ('\"mode\"\\s*:\\s*\"'+$m+'\"'), ('\"mode\": \"'+$n+'\"') | Set-Content -Encoding utf8 $p; " +
+           "\"englock mode -> $n\"", '已复制工程锁模式切换命令');
+    };
+    document.getElementById('btn-status').onclick = function () {
+      copy('pwsh -NoProfile -NonInteractive -File "' + SCRIPT + '" -Status', '已复制状态读取命令');
+    };
+    document.getElementById('btn-check').onclick = function () {
+      copy('python "$env:USERPROFILE\\.gemini\\config\\plugins\\dsh-permissions\\scripts\\englock.py" check <报告.md>',
+           '已复制工程锁自查命令');
+    };
+  </script>
+</body>
+</html>

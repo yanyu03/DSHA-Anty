@@ -1,0 +1,15 @@
+{
+  "limits": {
+    "5h_request_limit": 200,
+    "5h_token_limit": 1000000,
+    "7d_request_limit": 1500,
+    "7d_token_limit": 10000000,
+    "context_window_limit": 1000000
+  },
+  "ui": {
+    "always_on_top": true,
+    "alpha": 0.94,
+    "refresh_seconds": 2,
+    "mini_mode": false
+  }
+}

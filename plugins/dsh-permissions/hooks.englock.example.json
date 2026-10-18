@@ -1,0 +1,27 @@
+{
+  "dsh-permissions": {
+    "enabled": true,
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:\\Users\\Administrator\\.gemini\\config\\plugins\\dsh-permissions\\scripts\\run-gate.cmd",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "write_to_file|replace_file_content|create_file|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:\\Users\\Administrator\\.gemini\\config\\plugins\\dsh-permissions\\scripts\\englock.cmd",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
