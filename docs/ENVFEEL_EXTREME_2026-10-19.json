@@ -105,5 +105,27 @@
       "result": "PASS"
     }
   ],
-  "scope": "Windows x64; WMI/native query/storage faults include explicit simulation; no arbitrary OS guarantee"
+  "scope": "Windows x64; WMI/native query/storage faults include explicit simulation; no arbitrary OS guarantee",
+  "installed": {
+    "source_commit": "9810b6e8b71c7acd8d2ae0e16913724969b205e1",
+    "adapter_version": "2.4.0",
+    "source_files": 1866,
+    "hash_mismatches": 0,
+    "matrix": {
+      "tests": 20,
+      "pass": 20,
+      "fail": 0,
+      "skipped": 0,
+      "elapsed_seconds": 15.482
+    },
+    "selftest": {
+      "gate": {
+        "pass": 62,
+        "fail": 0
+      },
+      "englock": "30/30",
+      "base_tool": "15/15",
+      "router": "8/8"
+    }
+  }
 }
