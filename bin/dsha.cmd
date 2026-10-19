@@ -9,7 +9,6 @@ set "PYTHONUTF8=1"
 
 set "ROUTER_PY="
 if exist "%~dp0..\scripts\router.py" set "ROUTER_PY=%~dp0..\scripts\router.py"
-if "%ROUTER_PY%"=="" if exist "%~dp0..\plugins\dsh-permissions\scripts\router.py" set "ROUTER_PY=%~dp0..\plugins\dsh-permissions\scripts\router.py"
 if "%ROUTER_PY%"=="" if exist "%USERPROFILE%\.gemini\config\plugins\dsh-permissions\scripts\router.py" set "ROUTER_PY=%USERPROFILE%\.gemini\config\plugins\dsh-permissions\scripts\router.py"
 
 if not "%ROUTER_PY%"=="" goto :HAVE_ROUTER
@@ -19,7 +18,7 @@ exit /b 1
 :HAVE_ROUTER
 set "PY="
 if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" set "PY=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
-if "%PY%"=="" if exist "C:\python312\python.exe" set "PY=C:\python312\python.exe"
+if "%PY%"=="" for %%P in (python.exe) do if not "%%~$PATH:P"=="" set "PY=%%~$PATH:P"
 if "%PY%"=="" set "PY=python"
 
 "%PY%" "%ROUTER_PY%" %*

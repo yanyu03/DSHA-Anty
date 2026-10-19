@@ -259,6 +259,9 @@ $sp = Join-Path $repoRoot 'scripts'
 if (Test-Path $sp) {
   $scanTargets += @(Get-ChildItem $sp -File -Filter *.py -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'gate.py' })
 }
+# bin\ 只扫本层，避开随附的 bin\pwsh 运行时
+$sp = Join-Path $repoRoot 'bin'
+if (Test-Path $sp) { $scanTargets += @(Get-ChildItem $sp -File -Include *.cmd,*.ps1 -ErrorAction SilentlyContinue) }
 $badPaths = @($scanTargets | Where-Object {
   if (-not $_) { return $false }
   $rel = $_.FullName.Substring($repoRoot.Length).TrimStart('\')

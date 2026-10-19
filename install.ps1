@@ -126,6 +126,15 @@ Say "已备份到 $bak"
 Step "2/6 安装插件（权限档位 + 工程锁 + 额度监视器）"
 New-Item -ItemType Directory -Force -Path "$cfg\plugins","$cfg\skills" | Out-Null
 robocopy (Join-Path $root 'plugins\dsh-permissions') "$cfg\plugins\dsh-permissions" /E /XD logs __pycache__ /NFL /NDL /NJH /NJS /NP | Out-Null
+
+# D1：index.py / router.py 在仓库里只保留 scripts\ 一份（单一事实源），此处负责分发到插件目录
+foreach ($pyFile in @('index.py','router.py')) {
+  $from = Join-Path $root "scripts\$pyFile"
+  if (Test-Path $from) {
+    Copy-Item $from "$cfg\plugins\dsh-permissions\scripts\$pyFile" -Force
+    Say "scripts\$pyFile → plugins\dsh-permissions\scripts\"
+  }
+}
 Say "插件已就位：$cfg\plugins\dsh-permissions"
 if (Test-Path (Join-Path $root 'plugins\dsha-meter')) {
   robocopy (Join-Path $root 'plugins\dsha-meter') "$cfg\plugins\dsha-meter" /E /XD __pycache__ /NFL /NDL /NJH /NJS /NP | Out-Null
