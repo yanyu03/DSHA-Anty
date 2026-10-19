@@ -223,6 +223,18 @@ class HostEnvPerceiver:
                 if po.is_file() and cls._is_valid_executable(po):
                     return str(po)
 
+        # 0. Check via unified dsha_env with explicit/DSHA_* precedence if available
+        try:
+            try:
+                import dsha_env
+            except ImportError:
+                import scripts.dsha_env as dsha_env
+            found = dsha_env.find_binary(binary_name)
+            if found and cls._is_valid_executable(Path(found)):
+                return found
+        except Exception:
+            pass
+
         # 1. Search PATH (filtering out 0-byte WindowsApps stubs)
         which_p = shutil.which(binary_name)
         if which_p and cls._is_valid_executable(Path(which_p)):
@@ -247,6 +259,44 @@ class HostEnvPerceiver:
                 return False
         return True
 
+    @staticmethod
+    def can_invoke(binary_path, tool_name=None, timeout=1.5):
+        """
+        Phase 3: Live Smoke Probe (实测拉起验证).
+        Executes an isolated, minimal probe to verify the binary actually runs
+        without crashing, segfaulting, or missing dynamic links (.so/.dll).
+        """
+        if not binary_path or not Path(binary_path).is_file():
+            return False, "binary not found on disk"
+
+        name = (tool_name or Path(binary_path).stem).lower()
+        if "python" in name:
+            probe_cmd = [str(binary_path), "-c", "print('DSHA_SMOKE_OK')"]
+        elif "node" in name:
+            probe_cmd = [str(binary_path), "-e", "console.log('DSHA_SMOKE_OK')"]
+        elif "pwsh" in name or "powershell" in name:
+            probe_cmd = [str(binary_path), "-NoProfile", "-Command", "Write-Output DSHA_SMOKE_OK"]
+        elif "bash" in name or "sh" in name:
+            probe_cmd = [str(binary_path), "-c", "echo DSHA_SMOKE_OK"]
+        else:
+            probe_cmd = [str(binary_path), "--version"]
+
+        try:
+            r = subprocess.run(
+                probe_cmd,
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout,
+            )
+            if r.returncode == 0:
+                return True, "live_probe_passed"
+            return False, f"probe exited with status {r.returncode}"
+        except subprocess.TimeoutExpired:
+            return False, "probe_timed_out"
+        except Exception as e:
+            return False, f"probe_exception: {e}"
+
     @classmethod
     def get_penetrated_path(cls):
         """Build penetrated PATH string by injecting discovered runtime directories."""
@@ -268,14 +318,20 @@ class HostEnvPerceiver:
 
     @classmethod
     def probe_all(cls):
-        """Returns diagnostic map of host runtimes with locations and status."""
+        """Returns diagnostic map of host runtimes with locations, status and live invocation."""
         runtimes = ["python", "node", "wrangler", "pwsh", "bash", "git"]
         status = {}
         for r in runtimes:
             loc = cls.locate(r)
+            can_inv = False
+            inv_msg = "not_located"
+            if loc:
+                can_inv, inv_msg = cls.can_invoke(loc, r, timeout=1.5)
             status[r] = {
                 "located": loc is not None,
                 "path": loc,
+                "can_invoke": can_inv,
+                "invoke_message": inv_msg,
             }
         return status
 
@@ -461,6 +517,7 @@ class ErrBlock:
 
     def format_cli(self):
         lines = [
+            "非常抱歉，DSHA 在当前运行环境中探测到必需工具链无法拉起执行，下游调用链条已即刻安全阻断。",
             f"❌ [DSHA 拒绝执行 · {self.error_code}]",
             f"  受限工具: [{self.category}] {self.tool_name} (id: {self.tool_id})",
             f"  阻断原因: {self.refusal_statement}",

@@ -94,6 +94,23 @@ class RuntimeContracts(unittest.TestCase):
                 self.assertEqual(m.main(), 126)
                 run.assert_not_called()
 
+    def test_err_block_contains_polite_apology_and_short_circuits(self):
+        for m in self.copies('base_tool.py'):
+            with self.subTest(module=m.__file__):
+                err = m.ErrBlock(
+                    error_code="ERR_PREREQUISITE_MISSING",
+                    tool_id="mock_alien",
+                    tool_name="Mock Alien Tool",
+                    category="SysAdmin",
+                    refusal_statement="Missing alien runtime.",
+                    details=[{"binary": "alien_cc", "detected_version": "missing"}],
+                    remediations=["Install alien_cc"],
+                )
+                formatted = err.format_cli()
+                self.assertTrue(formatted.startswith("非常抱歉"))
+                self.assertIn("ERR_PREREQUISITE_MISSING", formatted)
+
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
