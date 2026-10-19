@@ -21,3 +21,9 @@ Four owned regression cases verify staged merging/order/deduplication and variab
 Local evidence directory: verification/msvc-repair-20261019-181551 under the private DSHA host installation. It retains source-gate.local.json, samples.local.json and regression logs. Earlier failed dev-smoke receipts remain intact. Installed-adapter validation is recorded separately after deploying the fixed source revision; source-only PASS is not an installed-adapter claim.
 
 Scope: owned synthetic native programs on this Windows x64 host. Visual Studio IDE GUI, arbitrary third-party projects, cross-targets, external dependencies and ZenOffice product acceptance remain NOT_RUN. No Computer Use native control was available; the investigation used source, installation metadata and filesystem evidence.
+
+## Installed result
+
+Fixed code fd2fedc755bfd071dff8caae0c71826cf75ed606 was deployed as adapter2.5.2 in a new source snapshot. All1883 snapshot files passed the installed manifest check; the old snapshot and complete skill/host backup were retained. The installed adapter independently passed both Cargo and Windows C++ compile/link/run samples. A cl-only call also passed SDK activation and the header-bearing COFF health check without requiring Rust. Local receipts are under the above directory's installed/ child.
+
+Final source regression run:107 discovered,99 PASS,8 SKIPPED,0 failures. All eight skips require an explicit real TypeScript/React/Vue project fixture, which was not selected for this native-toolchain task; no frontend readiness claim is made. The separate adapter suite passed3 tests. Four new INCLUDE regression cases are included in the99 passes. Git branch synchronization was checked by comparing the remote branch SHA with local HEAD; no external CI was run for this repository.
