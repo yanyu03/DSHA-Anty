@@ -15,6 +15,8 @@
 | Scribe/Meter数据位置 | DSHA_BRAIN_DIR、DSHA_PRESENCE_DIR、DSHA_SCRIBE_CACHE、DSHA_METER_CONFIG、DSHA_WORKERD_DIR |
 | Meter本地服务 | DSHA_METER_HOST、DSHA_METER_PORT；默认保留原回环地址/端口，可选空闲端口0；拒绝非回环地址，不开放遥测到局域网 |
 | 指定运维对象 | DSHA_EXTRA_HOOK、DSHA_PATCHER_PATH、DSHA_ANTIGRAVITY_EXE；没有配置就不扫描旧机器的私人工作目录 |
+| 权限配置 | DSHA_TIER_FILE；显式设置但文件缺失、损坏、空值或结构错误时返回invalid并拒绝执行，不回退到auto |
+| REA任务超时 | DSHA_REA_TIMEOUT；正整数秒，默认180；非法值拒绝，不回显输入。--self-test版本探测固定10秒上限，不等于真实分析超时 |
 | 本地路径诊断 | DSHA_SHOW_PATHS=1仅用于明确的本机调试；默认CF状态和Scribe导出不打印宿主路径。此开关不取消凭据脱敏 |
 
 PowerShell脚本通过bin/dsha-env.ps1取配置；安装分发包含该助手和Python dsha_env.py，避免开发环境能跑、安装后缺依赖。安装预演在自制临时位置实际验证不创建配置目录。Bash缺失时明确失败，不再把Bash代码交给cmd执行。
@@ -34,3 +36,5 @@ python scripts/render_mcp_config.py --node <解释器绝对路径> --rea-entry <
 复现：python scripts/test_env_config.py、scripts/test_runtime_contracts.py、codex/skill/scripts/test_adapter.py、codex/skill/scripts/test_mcp_client.py；静态检查python scripts/check_host_literals.py。机器字面量检查限定列出的第一方运行文件与模板，不扫描第三方REA dist、测试构造、完整Git历史或任意二进制；输出只有位置和规则名。研究文档中的历史版本、哈希与公开仓库出处保留，不将它们计作运行配置。
 
 回滚按提交撤回本轮改造；本机技能、host和源快照另有更新前备份。不用旧整份客户端配置覆盖后续无关改动。此次未运行真实Antigravity安装/重启、Meter GUI/HTTP端到端或Cloudflare账号操作；这些与解析、模板渲染和目录查询的通过结果分别记录。
+
+后续补审增加scripts/test_configuration_boundaries.py：私有host配置失败输出、权限配置拒绝、REA探测失败/超时/证据边界、URL凭据及用户目录脱敏、真实CMD的PATH发现与显式目录拒绝。CMD PowerShell/Bash/Sh按显式环境、PATH、安装位置依次解析，不再只依赖标准安装位置。REA自定义驱动仅报告版本探测是否完成，不发布原始版本stdout、宿主路径或“零崩溃”等未经验证结论；厂商分析命令原始输出仍需单独审查。

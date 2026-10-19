@@ -39,7 +39,7 @@ if hasattr(sys.stdout, "reconfigure"):
 def get_default_paths():
     script_dir = Path(__file__).resolve().parent
     repo_root = script_dir.parent if script_dir.name in ("scripts", "bin") else script_dir
-    user_home = Path(os.environ.get("USERPROFILE") or os.environ.get("HOME") or ".")
+    user_home = Path.home()
     gemini_cfg = config_dir()
     brain_dir = optional_path("DSHA_BRAIN_DIR", user_home / ".gemini/antigravity/brain")
 

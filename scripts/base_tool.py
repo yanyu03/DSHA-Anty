@@ -66,7 +66,14 @@ def get_active_tier():
     """Discover active DSH permission tier from tier.json."""
     script_dir = Path(__file__).resolve().parent
     repo_root = script_dir.parent if script_dir.name in ("scripts", "bin") else script_dir
-    user_home = Path(os.environ.get("USERPROFILE") or ".")
+    if "DSHA_TIER_FILE" in os.environ:
+        # An explicit configuration is authoritative, including its failures.
+        try:
+            data = json.loads(Path(os.environ["DSHA_TIER_FILE"]).expanduser().read_text(encoding="utf-8"))
+            tier = data.get("tier") if isinstance(data, dict) else None
+            return tier.lower() if isinstance(tier, str) and tier else "invalid"
+        except (OSError, ValueError):
+            return "invalid"
 
     candidates = [
         Path(os.environ["DSHA_TIER_FILE"]) if os.environ.get("DSHA_TIER_FILE") else config_dir() / "plugins/dsh-permissions/tier.json",
@@ -536,7 +543,7 @@ class BaseTool(ABC):
                 "category": self.category.value,
                 "exit_code": 1,
                 "stdout": "",
-                "stderr": f"[DSHA] Execution error: {e}",
+                "stderr": f"[DSHA] Execution error: {type(e).__name__}",
                 "duration_ms": duration_ms,
             }
 

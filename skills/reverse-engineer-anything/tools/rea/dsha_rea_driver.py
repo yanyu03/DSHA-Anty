@@ -48,7 +48,7 @@ def find_node():
 def preflight_check(args):
     """防御性契约：参数语义前置检查与避坑警示"""
     if not os.path.isfile(REA_MJS):
-        print(f"[杨老师避坑警示] 找不到 REA 运行时入口: {REA_MJS}", file=sys.stderr)
+        print("[FAIL] 找不到 REA 运行时入口；检查 DSHA_REA_ENTRY。", file=sys.stderr)
         print("请确认 skills/reverse-engineer-anything/tools/rea 完整性。", file=sys.stderr)
         return False
 
@@ -58,33 +58,28 @@ def preflight_check(args):
         # 跳过子命令名（如 doctor, mcp, setup）
         subcommands = {"doctor", "setup", "mcp", "providers", "completions", "uninstall", "update"}
         if target_path not in subcommands and not os.path.exists(target_path):
-            print(f"[杨老师防御防线] 目标路径不存在: {target_path}", file=sys.stderr)
+            print("[FAIL] 目标路径不存在；检查传入参数。", file=sys.stderr)
             print("请检查绝对路径或拼写，避免空指针与无效分析调用。", file=sys.stderr)
             return False
 
     return True
 
 def run_self_test(node_bin):
-    """量化实证：自检套件"""
-    print("=== DSHA-REA 杨老师风味运行时自检 ===")
-    print(f"1. Node.js 解释器: [PASS] {node_bin}")
-    
-    # 获取 REA 版本
-    cmd = [node_bin, REA_MJS, "--version"]
-    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8")
-    version = res.stdout.strip() if res.returncode == 0 else "未知"
-    print(f"2. REA 核心版本:   [PASS] v{version} (Exit: {res.returncode})")
-
-    # 检查 Native 引擎环境状态（避坑诊断）
-    ghidra_home = os.environ.get("GHIDRA_INSTALL_DIR")
-    hopper_path = os.environ.get("HOPPER_LAUNCHER_PATH")
-    print(f"3. 逆向引擎环境诊断:")
-    print(f"   - GHIDRA_INSTALL_DIR:  {'[OK] ' + ghidra_home if ghidra_home else '[ADVISORY 未配置 - 自动降级纯静态分析]'}")
-    print(f"   - HOPPER_LAUNCHER_PATH: {'[OK] ' + hopper_path if hopper_path else '[ADVISORY 未配置 - 自动降级纯静态分析]'}")
-    print(f"   - 零依赖静态分析能力:   [PASS 100%] 支持 JS / Electron ASAR / PE 节表 / APK 资源直接解析")
-
-    print("\n自检结论: REA 就地调用环境已就绪，具备零崩溃运行保障。")
-    return res.returncode
+    """Only a bounded version probe; provider readiness needs separate evidence."""
+    print("=== DSHA-REA runtime probe ===")
+    try:
+        res = subprocess.run([node_bin, REA_MJS, "--version"], capture_output=True,
+                             text=True, encoding="utf-8", errors="replace", timeout=10)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        print(f"[FAIL] REA version probe: {type(error).__name__}")
+        return 1
+    passed = res.returncode == 0 and bool(res.stdout.strip())
+    # Even version output may contain arbitrary diagnostics; do not publish it.
+    print(f"[{'PASS' if passed else 'FAIL'}] REA version probe; exit={res.returncode}")
+    for key in ('GHIDRA_INSTALL_DIR', 'HOPPER_LAUNCHER_PATH'):
+        print(f"{key}: {'configured' if os.environ.get(key) else 'unset'}; provider NOT_RUN")
+    print("Static analysis and native target analysis: NOT_RUN")
+    return 0 if passed else 1
 
 def main():
     args = sys.argv[1:]
@@ -110,9 +105,10 @@ def main():
     full_cmd = [node_bin, REA_MJS] + args
 
     # 并发与超时纪律：默认 180 秒防护，防止极端反编译任务卡死
-    timeout_sec = int(os.environ.get("DSHA_REA_TIMEOUT", "180"))
-
     try:
+        timeout_sec = int(os.environ.get("DSHA_REA_TIMEOUT", "180"))
+        if timeout_sec <= 0:
+            raise ValueError('invalid timeout')
         proc = subprocess.run(
             full_cmd,
             timeout=timeout_sec,
@@ -125,8 +121,8 @@ def main():
     except KeyboardInterrupt:
         print("\n[用户中断] 任务已平稳退出。", file=sys.stderr)
         sys.exit(130)
-    except Exception as e:
-        print(f"\n[杨老师防御捕获] 异常: {e}", file=sys.stderr)
+    except (OSError, ValueError) as error:
+        print(f"\n[FAIL] REA invocation: {type(error).__name__}; check runtime and DSHA_REA_TIMEOUT.", file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":

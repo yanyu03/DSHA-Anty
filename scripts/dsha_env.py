@@ -67,12 +67,14 @@ def display_path(value):
 def redact(value):
     """Best-effort publication hygiene, not a secret-detection guarantee."""
     if isinstance(value, dict):
-        return {key: ('[REDACTED]' if re.fullmatch(r'(?i)(?:password|secret|token|api[_-]?key|authorization)', key)
+        return {key: ('[REDACTED]' if isinstance(key, str) and re.search(r'(?i)(?:^|[_-])(?:password|secret|token|api[_-]?key|authorization)$', key)
                       else redact(item)) for key, item in value.items()}
     if isinstance(value, list):
         return [redact(item) for item in value]
     if isinstance(value, str):
-        value = re.sub(r'(?i)[a-z]:[\\/](?:Users|Documents and Settings)[\\/][^\\/\s"\']+', '<USER_HOME>', value)
+        value = re.sub(r'(?i)[a-z]:[\\/](?:Users|Documents and Settings)[\\/][^\\/\r\n"\']+', '<USER_HOME>', value)
+        value = re.sub(r'/(?:home|Users)/[^/\s"\']+', '<USER_HOME>', value)
+        value = re.sub(r'(?i)([a-z][a-z0-9+.-]*://)[^/\s@]+@', r'\1[REDACTED]@', value)
         value = re.sub(r'(?i)(Bearer\s+)[A-Za-z0-9._~+/=-]+', r'\1[REDACTED]', value)
         value = re.sub(r'(?i)((?:api[_-]?key|password|secret|token)\s*[=:]\s*)[^\s,;]+', r'\1[REDACTED]', value)
     return value

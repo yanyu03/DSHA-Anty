@@ -116,7 +116,7 @@ def get_cf_environment():
         except Exception:
             pass
 
-    user_home = Path(os.environ.get("USERPROFILE") or ".")
+    user_home = Path.home()
     workerd_dir = Path(os.environ.get("DSHA_WORKERD_DIR") or Path(os.environ.get("APPDATA") or user_home / "AppData/Roaming") / "npm/node_modules/@cloudflare/workerd-windows-64")
     env_info["workerd_installed"] = workerd_dir.is_dir()
 
@@ -135,7 +135,7 @@ def run_wrangler_cmd(args_list):
         proc = subprocess.run(cmd, env=proxy_environment())
         return proc.returncode
     except Exception as e:
-        print(f"[DSHA-CF] Execution failed: {e}", file=sys.stderr)
+        print(f"[DSHA-CF] Execution failed: {type(e).__name__}", file=sys.stderr)
         return 1
 
 
@@ -168,9 +168,11 @@ def run_status(check_auth=False):
         except subprocess.TimeoutExpired:
             print("    [提示] 鉴权网络检测超时（可在配置代理或登录后正常使用，或使用 'cf dev' 本地运行）。")
         except Exception as e:
-            print(f"    检查失败: {e}")
-    else:
+            print(f"    检查失败: {type(e).__name__}")
+    elif not env["wrangler_path"]:
         print("  [WARN] 未检测到 Wrangler，请先安装 Node.js 与 Wrangler。")
+    else:
+        print("  Auth probe: NOT_RUN (use --check-auth)")
 
 
 def run_selftest():
