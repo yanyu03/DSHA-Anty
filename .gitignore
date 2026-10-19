@@ -63,3 +63,6 @@ DSHA-SOMKE
 .env.*
 !.env.example
 *.local.json
+
+# Public test dependency identities only; no node_modules or local configuration.
+!/scripts/fixtures/frontend-reply/package-lock.json
