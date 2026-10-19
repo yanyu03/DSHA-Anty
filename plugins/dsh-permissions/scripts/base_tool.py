@@ -316,6 +316,25 @@ class HostEnvPerceiver:
             return os.pathsep.join(injected_dirs + [current_path])
         return current_path
 
+    @staticmethod
+    def get_topology():
+        """Retrieve host OS and architecture telemetry."""
+        import platform
+        return {
+            "system": platform.system(),
+            "release": platform.release(),
+            "machine": platform.machine(),
+            "os_name": os.name,
+            "python_version": platform.python_version(),
+            "python_executable": sys.executable,
+        }
+
+    @classmethod
+    def get_topology_string(cls):
+        """Human-readable topology summary string."""
+        topo = cls.get_topology()
+        return f"{topo['system']} {topo['release']} {topo['machine']} ({topo['os_name']})"
+
     @classmethod
     def probe_all(cls):
         """Returns diagnostic map of host runtimes with locations, status and live invocation."""
@@ -325,15 +344,122 @@ class HostEnvPerceiver:
             loc = cls.locate(r)
             can_inv = False
             inv_msg = "not_located"
+            lat_ms = 0
             if loc:
+                t0 = time.time()
                 can_inv, inv_msg = cls.can_invoke(loc, r, timeout=1.5)
+                lat_ms = int((time.time() - t0) * 1000)
             status[r] = {
                 "located": loc is not None,
                 "path": loc,
                 "can_invoke": can_inv,
                 "invoke_message": inv_msg,
+                "latency_ms": lat_ms,
             }
         return status
+
+    @classmethod
+    def render_radar(cls, tool_id=None, as_json=False):
+        """Renders comprehensive Host Perception Radar HUD or returns JSON payload."""
+        topo = cls.get_topology()
+        probe_map = cls.probe_all()
+        tier = get_active_tier()
+
+        registry = globals().get("TOOL_REGISTRY")
+        tools_telemetry = {}
+        if registry:
+            target_tools = [registry.get(tool_id)] if tool_id else list(registry.all().values())
+            for t in target_tools:
+                if not t:
+                    continue
+                ok_env, err_env = t.assert_environment()
+                ok_auth, err_auth = t.assert_authorization()
+                exec_p = t.resolve_executable()
+                tools_telemetry[t.id] = {
+                    "name": t.name,
+                    "category": t.category.value,
+                    "risk_level": t.risk_level.value,
+                    "executable": exec_p,
+                    "env_ready": ok_env,
+                    "auth_ready": ok_auth,
+                    "overall_ready": bool(exec_p and ok_env and ok_auth),
+                    "prerequisites": [
+                        {
+                            "binary": pr.binary,
+                            "min_version": pr.min_version,
+                            "status": pr.verify(),
+                        }
+                        for pr in t.prerequisites
+                    ],
+                }
+
+        payload = {
+            "dsha_protocol": "v1.1.0-std",
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "topology": topo,
+            "active_tier": tier,
+            "core_runtimes": probe_map,
+            "tools": tools_telemetry,
+        }
+
+        if as_json:
+            return json.dumps(payload, ensure_ascii=False, indent=2)
+
+        lines = [
+            "========================================================================",
+            "🌐 DSHA EnvFeel 宿主自感知雷达 (Host Perception Radar · v1.1.0-std)",
+            "========================================================================",
+            f"  • 宿主拓扑架构: {cls.get_topology_string()}",
+            f"  • 宿主解释器:   Python {topo['python_version']} ({topo['python_executable']})",
+            f"  • 当前权限档位: {tier}",
+            "",
+            "📡 核心工具链寻径与探针实时拉起感知 (Core Runtimes Telemetry):",
+        ]
+
+        try:
+            from dsha_env import redact
+        except Exception:
+            try:
+                from scripts.dsha_env import redact
+            except Exception:
+                redact = lambda s: s
+
+        for r_name, r_info in probe_map.items():
+            loc = r_info["path"]
+            if loc:
+                disp_loc = redact(loc)
+                if r_info["can_invoke"]:
+                    status_badge = "🟢 [可用]"
+                    probe_detail = f"实测拉起正常 (耗时: {r_info.get('latency_ms', 0)}ms)"
+                else:
+                    status_badge = "🔴 [不可拉起]"
+                    probe_detail = f"探针异常: {r_info['invoke_message']}"
+            else:
+                status_badge = "⚪ [未发现]"
+                disp_loc = "未寻获可执行文件"
+                probe_detail = "未配置/未安装"
+
+            lines.append(f"  {status_badge} {r_name.ljust(10)}: {disp_loc}")
+            lines.append(f"     └─ 探针状态: {probe_detail}")
+
+        lines.append("")
+        lines.append("🛠️ DSHA 标准工具链感知与就绪态势 (DSHA Toolchain Readiness):")
+        for tid, tmeta in tools_telemetry.items():
+            if tmeta["overall_ready"]:
+                badge = "🟢 [就绪]"
+            elif not tmeta["env_ready"]:
+                badge = "🟡 [缺少环境]"
+            elif not tmeta["auth_ready"]:
+                badge = "🔒 [越权阻断]"
+            else:
+                badge = "🔴 [未就绪]"
+
+            prereq_names = ", ".join([p["binary"] for p in tmeta["prerequisites"]]) or "无需外部运行时"
+            lines.append(f"  {badge} {tid.ljust(8)}: [{tmeta['category']}] {tmeta['name']} (依赖: {prereq_names})")
+
+        lines.append("========================================================================")
+        return "\n".join(lines)
+
 
 
 class ExecutionEnvelope:
@@ -425,19 +551,33 @@ class PrerequisiteEnv:
                 "binary": self.binary,
                 "located_path": None,
                 "detected_version": None,
+                "can_invoke": False,
                 "required_version": f">={self.min_version}" if self.min_version else "any",
                 "message": f"Prerequisite binary '{self.binary}' not found on system.",
                 "remediation": self.remediation,
             }
 
         if not self.min_version:
+            can_inv, inv_msg = HostEnvPerceiver.can_invoke(loc, self.binary)
+            if not can_inv:
+                return {
+                    "satisfied": False,
+                    "binary": self.binary,
+                    "located_path": loc,
+                    "detected_version": "corrupted",
+                    "can_invoke": False,
+                    "required_version": "any",
+                    "message": f"Prerequisite binary '{self.binary}' failed live invocation probe: {inv_msg}",
+                    "remediation": self.remediation,
+                }
             return {
                 "satisfied": True,
                 "binary": self.binary,
                 "located_path": loc,
                 "detected_version": "available",
+                "can_invoke": True,
                 "required_version": "any",
-                "message": "Binary located.",
+                "message": "Binary located and verified via live probe.",
                 "remediation": None,
             }
 
@@ -465,6 +605,7 @@ class PrerequisiteEnv:
                     "binary": self.binary,
                     "located_path": loc,
                     "detected_version": detected_ver_str,
+                    "can_invoke": True,
                     "required_version": f">={self.min_version}",
                     "message": "Version requirement satisfied.",
                     "remediation": None,
@@ -475,6 +616,7 @@ class PrerequisiteEnv:
                     "binary": self.binary,
                     "located_path": loc,
                     "detected_version": detected_ver_str,
+                    "can_invoke": True,
                     "required_version": f">={self.min_version}",
                     "message": f"Version mismatch: found {detected_ver_str}, requires >={self.min_version}.",
                     "remediation": self.remediation,
@@ -485,10 +627,12 @@ class PrerequisiteEnv:
                 "binary": self.binary,
                 "located_path": loc,
                 "detected_version": "probe_error",
+                "can_invoke": False,
                 "required_version": f">={self.min_version}",
                 "message": f"Failed probing binary version: {e}",
                 "remediation": self.remediation,
             }
+
 
 
 class ErrBlock:
@@ -727,6 +871,12 @@ class BaseTool(ABC):
                 "stderr": err_env.format_cli(),
                 "err_block": err_env.to_dict(),
                 "duration_ms": 0,
+                "envfeel": {
+                    "status": "REFUSED",
+                    "platform": HostEnvPerceiver.get_topology_string(),
+                    "reason": "prerequisites_missing",
+                    "details": err_env.details,
+                },
             }
 
         # 2. Authorization Assertion (Anti-privilege escalation principle)
@@ -743,6 +893,12 @@ class BaseTool(ABC):
                 "stderr": err_auth.format_cli(),
                 "err_block": err_auth.to_dict(),
                 "duration_ms": 0,
+                "envfeel": {
+                    "status": "REFUSED",
+                    "platform": HostEnvPerceiver.get_topology_string(),
+                    "reason": "authorization_denied",
+                    "tier": active_tier or get_active_tier(),
+                },
             }
 
         # 3. Resolve Launcher
@@ -757,6 +913,12 @@ class BaseTool(ABC):
                 "stdout": "",
                 "stderr": f"[DSHA] Error: Launcher '{self.cmd}' could not be resolved on disk.",
                 "duration_ms": 0,
+                "err_block": None,
+                "envfeel": {
+                    "status": "REFUSED",
+                    "platform": HostEnvPerceiver.get_topology_string(),
+                    "reason": "launcher_not_found",
+                },
             }
 
         # 3.5 Target Containment Assertion (目标必须在白名单根内)
@@ -772,6 +934,11 @@ class BaseTool(ABC):
                 "stderr": f"[DSHA] Error: target outside allowed roots: {exec_path}",
                 "duration_ms": 0,
                 "err_block": err_contained.to_dict() if err_contained is not None else {},
+                "envfeel": {
+                    "status": "REFUSED",
+                    "platform": HostEnvPerceiver.get_topology_string(),
+                    "reason": "target_outside_sandbox",
+                },
             }
 
         # 4. Execute with Environment Isolation & Unidirectional Parameter Envelope
@@ -811,6 +978,13 @@ class BaseTool(ABC):
                     "stderr": proc.stderr,
                     "duration_ms": duration_ms,
                     "cmd": cmd_list,
+                    "err_block": None,
+                    "envfeel": {
+                        "status": "HEALTHY" if proc.returncode == 0 else "EXECUTION_ERROR",
+                        "platform": HostEnvPerceiver.get_topology_string(),
+                        "tier": active_tier or get_active_tier(),
+                        "cwd": cwd,
+                    },
                 }
             else:
                 proc = subprocess.run(cmd_list, cwd=cwd, env=exec_env, timeout=timeout)
@@ -825,6 +999,13 @@ class BaseTool(ABC):
                     "stderr": "",
                     "duration_ms": duration_ms,
                     "cmd": cmd_list,
+                    "err_block": None,
+                    "envfeel": {
+                        "status": "HEALTHY" if proc.returncode == 0 else "EXECUTION_ERROR",
+                        "platform": HostEnvPerceiver.get_topology_string(),
+                        "tier": active_tier or get_active_tier(),
+                        "cwd": cwd,
+                    },
                 }
         except subprocess.TimeoutExpired:
             duration_ms = int((time.time() - start_time) * 1000)
@@ -837,6 +1018,12 @@ class BaseTool(ABC):
                 "stdout": "",
                 "stderr": f"[DSHA] Execution timed out after {timeout} seconds.",
                 "duration_ms": duration_ms,
+                "err_block": None,
+                "envfeel": {
+                    "status": "TIMEOUT",
+                    "platform": HostEnvPerceiver.get_topology_string(),
+                    "timeout_seconds": timeout,
+                },
             }
         except Exception as e:
             duration_ms = int((time.time() - start_time) * 1000)
@@ -849,6 +1036,12 @@ class BaseTool(ABC):
                 "stdout": "",
                 "stderr": f"[DSHA] Execution error: {e}",
                 "duration_ms": duration_ms,
+                "err_block": None,
+                "envfeel": {
+                    "status": "ERROR",
+                    "platform": HostEnvPerceiver.get_topology_string(),
+                    "error": str(e),
+                },
             }
 
 
@@ -1154,6 +1347,12 @@ def Call_Tools(tool_name, args=None, context=None):
             "stdout": "",
             "stderr": f"[DSHA] Error: Tool '{tool_name}' not registered in DSHA ToolRegistry.",
             "duration_ms": 0,
+            "err_block": None,
+            "envfeel": {
+                "status": "REFUSED",
+                "platform": HostEnvPerceiver.get_topology_string(),
+                "reason": "tool_not_registered",
+            },
         }
 
     return tool.execute(args, context)
@@ -1305,6 +1504,25 @@ def run_selftest():
         and bounded_envelope.tier == "read-only"
     ))
 
+    # Test 16: HostEnvPerceiver renders radar telemetry HUD and JSON
+    radar_text = HostEnvPerceiver.render_radar()
+    radar_json = HostEnvPerceiver.render_radar(as_json=True)
+    tests.append((
+        "host_env_perceiver_radar_hud",
+        "DSHA EnvFeel" in radar_text
+        and "v1.1.0-std" in radar_text
+        and isinstance(json.loads(radar_json), dict)
+    ))
+
+    # Test 17: Standard response envelope always includes envfeel payload
+    res_feel_check = Call_Tools("scribe", ["status"], {"timeout": 10})
+    tests.append((
+        "standard_response_envelope_envfeel",
+        "envfeel" in res_feel_check
+        and "status" in res_feel_check["envfeel"]
+        and "platform" in res_feel_check["envfeel"]
+    ))
+
     passed = sum(1 for _, ok in tests if ok)
     total = len(tests)
     print(f"selftest: {passed}/{total}")
@@ -1330,6 +1548,11 @@ def main():
     check_p = subparsers.add_parser("check", help="Check prerequisite environments")
     check_p.add_argument("tool", nargs="?", help="Tool ID to check (optional)")
 
+    # feel
+    feel_p = subparsers.add_parser("feel", help="Display host environment perception radar HUD")
+    feel_p.add_argument("tool", nargs="?", help="Specific tool ID to inspect (optional)")
+    feel_p.add_argument("--json", action="store_true", help="Output telemetry as JSON")
+
     # selftest
     subparsers.add_parser("selftest", help="Run automated unit tests")
 
@@ -1338,6 +1561,11 @@ def main():
     if args.subcmd == "selftest":
         ok = run_selftest()
         sys.exit(0 if ok else 1)
+
+    if args.subcmd == "feel":
+        out = HostEnvPerceiver.render_radar(tool_id=getattr(args, "tool", None), as_json=getattr(args, "json", False))
+        print(out)
+        return 0
 
     if args.subcmd == "categories":
         for cat in TOOL_REGISTRY.list_categories():

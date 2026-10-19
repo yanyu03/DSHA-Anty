@@ -110,7 +110,29 @@ class RuntimeContracts(unittest.TestCase):
                 self.assertTrue(formatted.startswith("非常抱歉"))
                 self.assertIn("ERR_PREREQUISITE_MISSING", formatted)
 
+    def test_envfeel_standard_response_envelope(self):
+        for m in self.copies('base_tool.py'):
+            tool = m.ScribeTool()
+            with self.subTest(module=m.__file__), patch.object(m, 'get_active_tier', return_value='auto'), patch.object(tool, 'assert_environment', return_value=(True, None)), patch.object(tool, 'resolve_executable', return_value=sys.executable), patch.object(tool, 'assert_target_contained', return_value=(True, None)), patch.object(m.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0, stdout='ok', stderr='')):
+                res = tool.execute()
+                self.assertIn('envfeel', res)
+                self.assertEqual(res['envfeel']['status'], 'HEALTHY')
+                self.assertIn('platform', res['envfeel'])
+
+    def test_prerequisite_live_can_invoke_flag(self):
+        for m in self.copies('base_tool.py'):
+            with self.subTest(module=m.__file__), patch.object(m.PrerequisiteEnv, 'locate_binary', return_value=sys.executable), patch.object(m.HostEnvPerceiver, 'can_invoke', return_value=(True, 'live_probe_passed')):
+                res = m.PrerequisiteEnv('mock_tool').verify()
+                self.assertTrue(res['can_invoke'])
+                self.assertTrue(res['satisfied'])
+
+    def test_router_feel_command(self):
+        for m in self.copies('router.py'):
+            with self.subTest(module=m.__file__), patch.object(sys, 'argv', ['router.py', 'feel']):
+                code = m.main()
+                self.assertEqual(code, 0)
 
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
+

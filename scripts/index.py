@@ -165,6 +165,15 @@ def run_selftest():
         and "ERR_PERMISSION_DENIED" in res_auth["stderr"]
     ))
 
+    # Test 9: Call_Tools response includes standard envfeel payload
+    res_envfeel = Call_Tools("scribe", ["status"], {"timeout": 10})
+    tests.append((
+        "call_tools_standard_envfeel_payload",
+        "envfeel" in res_envfeel
+        and "status" in res_envfeel["envfeel"]
+        and "platform" in res_envfeel["envfeel"]
+    ))
+
     passed = sum(1 for _, ok in tests if ok)
     total = len(tests)
     print(f"selftest: {passed}/{total}")
@@ -180,6 +189,7 @@ def main():
         print("Usage:")
         print("  index.py list [-c|--category <cat>]   # Display master index table (optionally filtered)")
         print("  index.py categories                   # List all registered capability categories")
+        print("  index.py feel [tool] [--json]         # Display Host Perception Radar HUD")
         print("  index.py check [tool]                 # Check prerequisite host environment")
         print("  index.py get <tool>                   # Display JSON metadata for tool")
         print("  index.py call <tool> [args...]        # Invoke tool via Call_Tools")
@@ -187,6 +197,17 @@ def main():
         return 0
 
     cmd = sys.argv[1].lower()
+
+    if cmd in ("feel", "envfeel"):
+        target_tool = None
+        as_json = "--json" in sys.argv
+        for arg in sys.argv[2:]:
+            if not arg.startswith("-"):
+                target_tool = arg
+                break
+        from base_tool import HostEnvPerceiver
+        print(HostEnvPerceiver.render_radar(tool_id=target_tool, as_json=as_json))
+        return 0
 
     if cmd == "list":
         category = None
@@ -244,11 +265,15 @@ def main():
         tool_name = sys.argv[2]
         call_args = sys.argv[3:]
         res = Call_Tools(tool_name, call_args, {"capture": False})
+        if not res["success"] and res.get("stderr"):
+            print(res["stderr"], file=sys.stderr)
         return res["exit_code"]
 
     # Direct tool call shorthand: index.py <tool> [args...]
     if TOOL_REGISTRY.get(cmd):
         res = Call_Tools(cmd, sys.argv[2:], {"capture": False})
+        if not res["success"] and res.get("stderr"):
+            print(res["stderr"], file=sys.stderr)
         return res["exit_code"]
 
     print_index_table()

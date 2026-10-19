@@ -305,6 +305,14 @@ def run_selftest():
         else:
             print(f"  [FAIL] \"{q[:25]}...\" -> got {res['selected_tool']}, expected {expected}")
 
+    # Test 9: Host Perception Radar telemetry
+    if HostEnvPerceiver:
+        radar_text = HostEnvPerceiver.render_radar()
+        if "DSHA EnvFeel" in radar_text:
+            passed += 1
+            total += 1
+            print("  [PASS] \"HostEnvPerceiver.render_radar()\" -> 宿主感知雷达 HUD 就绪")
+
     print(f"selftest: {passed}/{total}  (n={total}, miss={total - passed})")
     return passed == total
 
@@ -315,6 +323,8 @@ def main():
         print("Usage:")
         print("  dsha route \"<intent or file>\" [--json]")
         print("  dsha exec \"<intent or file>\" [args...]")
+        print("  dsha feel [tool] [--json]             # 宿主自感知雷达与运行时探针 HUD")
+        print("  dsha envfeel [tool] [--json]          # 同上")
         print("  dsha <cf|rea|scribe|pwsh|sh|tier|meter> [args...]")
         print("  dsha status")
         print("  dsha selftest")
@@ -325,6 +335,21 @@ def main():
     if cmd == "selftest":
         ok = run_selftest()
         sys.exit(0 if ok else 1)
+
+    if cmd in ("feel", "envfeel"):
+        target_tool = None
+        as_json = "--json" in sys.argv
+        for arg in sys.argv[2:]:
+            if not arg.startswith("-"):
+                target_tool = arg
+                break
+
+        if HostEnvPerceiver:
+            print(HostEnvPerceiver.render_radar(tool_id=target_tool, as_json=as_json))
+            return 0
+        else:
+            print("[DSHA-ROUTER] Error: HostEnvPerceiver not available.", file=sys.stderr)
+            return 1
 
     if cmd == "status":
         print("=== DSHA 路由层全工具链与环境激活状态 ===")
@@ -369,13 +394,19 @@ def main():
 
         if cmd == "call":
             tool_target = sys.argv[2]
-            return Call_Tools(tool_target, sys.argv[3:], {"capture": False})["exit_code"]
+            res = Call_Tools(tool_target, sys.argv[3:], {"capture": False})
+            if not res["success"] and res.get("stderr"):
+                print(res["stderr"], file=sys.stderr)
+            return res["exit_code"]
         else:
             query = sys.argv[2]
             res = analyze_route(query)
             print(f"[DSHA-ROUTER] Routing intent to [{res['selected_tool'].upper()}] {res['tool_name']} (得分占比: {int(res['score_share']*100)}%)...")
             tool_args = sys.argv[3:] if len(sys.argv) > 3 else ["status"]
-            return Call_Tools(res["selected_tool"], tool_args, {"capture": False})["exit_code"]
+            call_res = Call_Tools(res["selected_tool"], tool_args, {"capture": False})
+            if not call_res["success"] and call_res.get("stderr"):
+                print(call_res["stderr"], file=sys.stderr)
+            return call_res["exit_code"]
 
     # Direct tool proxy via Call_Tools
     if cmd in TOOL_REGISTRY:
@@ -384,7 +415,10 @@ def main():
                 from index import Call_Tools
             except ImportError:
                 from scripts.index import Call_Tools
-            return Call_Tools(cmd, sys.argv[2:], {"capture": False})["exit_code"]
+            call_res = Call_Tools(cmd, sys.argv[2:], {"capture": False})
+            if not call_res["success"] and call_res.get("stderr"):
+                print(call_res["stderr"], file=sys.stderr)
+            return call_res["exit_code"]
         except Exception as error:
             # Never bypass prerequisite/authorization checks after a dispatcher error.
             print(f"[DSHA-ROUTER] Dispatcher failed; execution refused: {error}", file=sys.stderr)
