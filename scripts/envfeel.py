@@ -168,6 +168,10 @@ class EnvFeel:
         if any(record['status'] != 'PASS' for record in report['tools']):
             report['reason'] = 'required tool launch/version/identity contract failed'
             return report
+        sdk_required = os.name == 'nt' and 'cl' in self.executables
+        if os.name == 'nt' and set(self.executables) & {'rustc', 'cl'}:
+            profile = {'x86_64': 'x64', 'x86': 'x86', 'arm64': 'arm64'}.get(context['architecture_reported'])
+            host = profile
         if os.name == 'nt' and 'rustc' in self.executables:
             host_info = subprocess.run([self.executables['rustc'], '-vV'], env=self.environment,
                                        capture_output=True, encoding='utf-8', errors='replace', timeout=10)
@@ -176,14 +180,15 @@ class EnvFeel:
                 report['reason'] = 'Rust host target contract unavailable'
                 return report
             if target.group(1).endswith('-pc-windows-msvc'):
-                report['visual_studio_discovery'] = discover_visual_studio(self.environment)
+                sdk_required = True
                 profile = {'x86_64': 'x64', 'i686': 'x86', 'aarch64': 'arm64'}.get(target.group(1).split('-')[0])
-                host = {'x86_64': 'x64', 'x86': 'x86', 'arm64': 'arm64'}.get(context['architecture_reported'])
-                report['sdk_activation'] = activate_msvc_sdk(self.environment, profile, host)
-                if report['sdk_activation']['status'] != 'PASS':
-                    report['reason'] = 'required MSVC linker/SDK activation failed'
-                    return report
-                self.environment = activate_environment(self.executables, self.environment)
+        if sdk_required:
+            report['visual_studio_discovery'] = discover_visual_studio(self.environment)
+            report['sdk_activation'] = activate_msvc_sdk(self.environment, profile, host)
+            if report['sdk_activation']['status'] != 'PASS':
+                report['reason'] = 'required MSVC linker/SDK activation failed'
+                return report
+            self.environment = activate_environment(self.executables, self.environment)
         for name in names:
             if name in ('python', 'node', 'rustc', 'java', 'cl', 'pwsh', 'bash', 'sh'):
                 report['health'][name] = fixture_probe(name, self.executables, self.environment)

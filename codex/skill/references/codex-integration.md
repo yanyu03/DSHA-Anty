@@ -8,4 +8,6 @@ After runtime updates inspect actual tools/list and schemas, then qualify an own
 
 Checks: dsha.py status, verify-source, selftest, catalog --json, route <intent> --json; scripts/test_mcp_client.py; source scripts/test_runtime_contracts.py. Gate selftests run in an isolated plugin copy because they rewrite tier.json. Keep raw logs, configuration backups and host.json local; publish sanitized findings and reproducible tests.
 
+Windows MSVC: staged core/VC initialization must merge deferred compiler includes. A version probe or header-free object compile cannot establish SDK/header readiness. Current cl health checks include Windows SDK and MSVC headers; native link/run remains separately measured. If headers exist but compilation cannot find them, inspect the prepared child INCLUDE before recommending additional installations.
+
 Rollback: preserve current state, restore the exact backed-up skill and host.json, then replace only the rea runtime argument in current Codex configuration. Do not overwrite unrelated later configuration with an entire old backup. Retain previous runtimes, source snapshots and evidence.

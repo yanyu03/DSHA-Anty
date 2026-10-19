@@ -96,7 +96,7 @@ def fixture_probe(name, executables, environ=None):
                 passed = command_ok([executables['javac'], str(source)], root, environ=environ) and command_ok([executable, '-cp', str(root), 'DshaSmoke'], root, expected, environ)
             elif name == 'cl':
                 source = root / 'smoke.c'
-                source.write_text(f'int dsha_smoke_{nonce}(void) {{ return {left} * {right}; }}', encoding='utf-8')
+                source.write_text(f'#include <windows.h>\n#include <excpt.h>\nint dsha_smoke_{nonce}(void) {{ return {left} * {right}; }}', encoding='utf-8')
                 obj = root / 'smoke.obj'
                 passed = command_ok([executable, '/nologo', '/c', str(source), '/Fo' + str(obj)], root, environ=environ) and obj.is_file()
                 if passed:
@@ -105,7 +105,7 @@ def fixture_probe(name, executables, environ=None):
                         header = stream.read(20)
                     machine, sections = struct.unpack('<HH', header[:4]) if len(header) == 20 else (0, 0)
                     passed = machine in (0x8664, 0x14c, 0xAA64) and sections > 0 and obj.stat().st_size >= 20 + sections * 40
-                return {'status': 'PASS' if passed else 'FAIL', 'sample': 'owned C file compiled to object; link NOT_RUN'}
+                return {'status': 'PASS' if passed else 'FAIL', 'sample': 'owned C file with Windows SDK and MSVC headers compiled to COFF object; link NOT_RUN'}
             elif name == 'pwsh':
                 program = f"Write-Output ('{prefix}' + ({left} * {right}))"
                 passed = command_ok([executable, '-NoProfile', '-NonInteractive', '-Command', program], root, expected, environ)
@@ -180,10 +180,25 @@ def activate_msvc_sdk(environ, target='x64', host='x64'):
         selected = {}
         for line in result.stdout.splitlines():
             key, separator, value = line.partition('=')
-            if separator and key.upper() in allowed:
+            if separator and key.upper() in allowed | {'__VSCMD_VCVARS_INCLUDE'}:
                 selected[key.upper()] = value
+        # VsDevCmd -no_ext merges only core includes. The later VC extension
+        # fills this accumulator, which must precede the SDK INCLUDE entries.
+        vc_include = selected.pop('__VSCMD_VCVARS_INCLUDE', '')
+        includes = []
+        seen = set()
+        for entry in (vc_include + ';' + selected.get('INCLUDE', '')).split(';'):
+            entry = entry.strip().strip('"')
+            identity = os.path.normcase(os.path.normpath(entry))
+            if entry and identity not in seen:
+                includes.append(entry)
+                seen.add(identity)
+        selected['INCLUDE'] = ';'.join(includes)
         if not all(selected.get(name) for name in ('PATH', 'INCLUDE', 'LIB')):
             return {'status': 'FAIL', 'reason': 'SDK activation incomplete'}
+        if not all(any((Path(entry) / header).is_file() for entry in includes)
+                   for header in ('excpt.h', 'vcruntime.h', 'windows.h')):
+            return {'status': 'FAIL', 'reason': 'SDK/MSVC required headers unavailable in activated INCLUDE'}
         linker = shutil.which('link.exe', path=selected['PATH'])
         if not linker or not Path(linker).resolve().is_relative_to(Path(root).resolve()):
             return {'status': 'FAIL', 'reason': 'SDK linker identity/location not established'}

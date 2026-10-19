@@ -24,7 +24,7 @@ Windows架构现在使用原生IsWow64Process2查询，不使用WMI失败后的P
 
 激活仅构造当前调用的子进程环境：设置选中工具对应DSHA_*、前置工具目录至PATH，必要时设置JAVA_HOME与UTF-8输出。发现、自检及执行使用同一份环境；不改系统或用户环境、不修改注册表、不下载安装工具。环境文件不会执行或插值。
 
-HOME缺失时仅跳过依赖用户目录的候选，不阻断引导Python和明确SDK根，也不从父进程借用被省略的HOME。缺少Windows机器目录时可只读查询本机登记的ProgramFiles/ProgramData，受限展开已知SystemDrive字段；不展开任意命令。Rust MSVC目标还须定位并在子进程中初始化Windows SDK/VC链接环境，再做编译链接。初始化只加载所需核心SDK和VC脚本，合并PATH/INCLUDE/LIB等允许变量；不加载无关VS扩展，不改系统配置。
+HOME缺失时仅跳过依赖用户目录的候选，不阻断引导Python和明确SDK根，也不从父进程借用被省略的HOME。缺少Windows机器目录时可只读查询本机登记的ProgramFiles/ProgramData，受限展开已知SystemDrive字段；不展开任意命令。Rust MSVC目标及直接声明cl均须定位并在子进程中初始化Windows SDK/VC链接环境，再做健康检查。初始化只加载所需核心SDK和VC脚本，合并PATH/INCLUDE/LIB等允许变量；不加载无关VS扩展，不改系统配置。分阶段初始化时须将VC脚本的延迟头文件路径合并到SDK路径之前并去重；检查excpt.h、vcruntime.h及windows.h可通过最终INCLUDE找到，失败不发布部分环境。cl健康样本实际包含Windows SDK和MSVC头文件，再检查生成COFF对象；链接运行仍须独立任务验证。见[MSVC头文件路径事故](ENVFEEL_MSVC_INCLUDE_2026-10-19.md)。
 
 执行前检查工具品牌、版本及已定义健康样本。Python/Node执行、Rust/Java编译运行、MSVC对象编译、PowerShell/Bash/Sh标记输出分别有自有样本。其他具备品牌版本契约的条目只证明该探测可运行，不证明项目、网络、服务端或账号已可用。仅有数字版本而没有充分身份契约的条目返回INSUFFICIENT_CONTRACT；盘点可记录，门禁不能据此放行。
 
