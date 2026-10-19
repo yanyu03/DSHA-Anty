@@ -142,7 +142,7 @@ DSHA/
 │   │   └── reference.md        # 四档警告与运维陷阱参考
 │   └── reverse-engineer-anything/ # REA 逆向套件与本地驱动器
 ├── install.ps1                 # 幂等安装器（带时间戳备份与一键卸载）
-├── verify.ps1                  # 59 项自动化体检套件（全绿）
+├── verify.ps1                  # 自动化体检套件（通过与否以脚本自身打印的 PASS/FAIL 为准）
 ├── CHANGELOG.md                # 版本演进历程
 ├── README.md                   # 项目说明
 └── VERSION                     # 当前版本号 (1.0.0)
@@ -165,3 +165,38 @@ DSHA/
 
 - 本项目基于 **MIT License** 开源。
 - 灵感致敬 **DeepSeek Harness** 开源项目与 **资深工程师 Programer 系统级代码思维体系**。
+
+---
+
+## 六、 授权、表述修正与 D41H 增量
+
+> 本节由 `D41H` 分支追加。**上文原有表述未作改动**；仅修正 6.1 所列的错误。
+
+### 6.1 已修正的表述
+
+| 位置 | 原表述 | 问题 | 现表述 |
+| :--- | :--- | :--- | :--- |
+| 目录树注释 | `verify.ps1` 标注为「59 项自动化体检套件（全绿）」 | 体检项数随版本增长，写死数字会与实现漂移：`CHANGELOG` 中另有 55 / 51 / 43 / 39 等历史值，本次实点 `Check` 调用为 38 | 改为以脚本自身打印的 `PASS` / `FAIL` 为准 |
+
+### 6.2 许可证
+
+`README` 此前已声明 MIT，但仓库内没有许可证文件，GitHub 也未能识别出许可证——这两种状态的法律含义不同。现补齐 [`LICENSE`](./LICENSE)（MIT 全文，含版权行），使声明与文件一致。
+
+### 6.3 D41H 增量（已并入主线）
+
+| 项 | 内容 |
+| :--- | :--- |
+| D1 | 移除 `plugins/dsh-permissions/scripts/` 下与 `scripts/` 字节相同的 `index.py` / `router.py`，改由 `install.ps1` 分发 |
+| D2 | 钩子模板、`mcp_config`、启动器、`scribe.py`、`test_skill_integration.py` 中的机器相关路径改为环境变量或 PATH 解析 |
+| D3 | `README` 的体检提示去掉写死项数 |
+| D4 | `CHANGELOG` 中「准确率 100%」改为「8/8 用例通过（n=8，不构成准确率）」 |
+| D5 | 新增 `VERSION_SCHEME.md`，说明 1.x 正式线与 2.x 实验线不可比较 |
+| D6 | `verify.ps1` 的 `Check` 增加分类计数，按 behavior / contract / existence 分栏报告 |
+| D7 | `base_tool.py` 新增 `assert_target_contained`：解析出的目标须落在仓库 `bin/` 或 `~/.gemini/config/` 内，越界返回退出码 125 |
+| D8 | `router.py` 新增 `score_share` 字段（`confidence` 保留为别名），报告注明该值为得分占比、不是正确概率 |
+
+### 6.4 效力边界
+
+- 6.3 的验证在 **Windows x64** 上完成；其中非 Windows 分支已写但未执行，不构成跨平台结论。
+- 体检是否通过反映的是**本机**状态：干净机器上会因缺少随附运行时或未安装插件而出现失败项。
+- 体检通过只说明**列出的检查项通过**，不等于第三方工具、外部 MCP、网络服务或账号可用。
