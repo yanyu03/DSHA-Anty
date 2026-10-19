@@ -1,0 +1,234 @@
+{
+  "schema": 1,
+  "time_utc": "2026-10-19T06:29:06.452111+00:00",
+  "scope": "whitelisted tool version probes; absence means not discovered, not proven uninstalled",
+  "sdk_variables_present": [
+    "JAVA_HOME",
+    "VSINSTALLDIR"
+  ],
+  "visual_studio_discovery": "vswhere",
+  "tools": [
+    {
+      "tool": "python",
+      "source": "environment:DSHA_PYTHON",
+      "status": "PASS",
+      "identity_check": "brand-and-version",
+      "version": "3.12.14",
+      "exit_code": 0
+    },
+    {
+      "tool": "node",
+      "source": "parameter",
+      "status": "PASS",
+      "identity_check": "brand-and-version",
+      "version": "24.14.1",
+      "exit_code": 0
+    },
+    {
+      "tool": "npm",
+      "source": "PATH",
+      "status": "PASS",
+      "identity_check": "version-format-only",
+      "version": "11.11.0",
+      "exit_code": 0
+    },
+    {
+      "tool": "npx",
+      "source": "PATH",
+      "status": "PASS",
+      "identity_check": "version-format-only",
+      "version": "11.11.0",
+      "exit_code": 0
+    },
+    {
+      "tool": "git",
+      "source": "environment:DSHA_GIT",
+      "status": "PASS",
+      "identity_check": "brand-and-version",
+      "version": "2.55.0",
+      "exit_code": 0
+    },
+    {
+      "tool": "gh",
+      "source": "SDK/environment-derived-location",
+      "status": "PASS",
+      "identity_check": "brand-and-version",
+      "version": "2.102.0",
+      "exit_code": 0
+    },
+    {
+      "tool": "pwsh",
+      "source": "PATH",
+      "status": "PASS",
+      "identity_check": "brand-and-version",
+      "version": "7.6.5",
+      "exit_code": 0
+    },
+    {
+      "tool": "bash",
+      "source": "SDK/environment-derived-location",
+      "status": "PASS",
+      "identity_check": "brand-and-version",
+      "version": "5.3.15",
+      "exit_code": 0
+    },
+    {
+      "tool": "sh",
+      "source": "SDK/environment-derived-location",
+      "status": "PASS",
+      "identity_check": "brand-and-version",
+      "version": "5.3.15",
+      "exit_code": 0
+    },
+    {
+      "tool": "rustc",
+      "source": "environment:DSHA_RUSTC",
+      "status": "PASS",
+      "identity_check": "brand-and-version",
+      "version": "1.99.1",
+      "exit_code": 0
+    },
+    {
+      "tool": "cargo",
+      "source": "SDK/environment-derived-location",
+      "status": "PASS",
+      "identity_check": "brand-and-version",
+      "version": "1.99.1",
+      "exit_code": 0
+    },
+    {
+      "tool": "rustup",
+      "source": "SDK/environment-derived-location",
+      "status": "PASS",
+      "identity_check": "brand-and-version",
+      "version": "1.29.1",
+      "exit_code": 0
+    },
+    {
+      "tool": "dotnet",
+      "source": "PATH",
+      "status": "PASS",
+      "identity_check": "version-format-only",
+      "version": "10.0.402",
+      "exit_code": 0
+    },
+    {
+      "tool": "cmake",
+      "source": "SDK/environment-derived-location",
+      "status": "PASS",
+      "identity_check": "brand-and-version",
+      "version": "4.3.1-msvc1",
+      "exit_code": 0
+    },
+    {
+      "tool": "ninja",
+      "source": "SDK/environment-derived-location",
+      "status": "PASS",
+      "identity_check": "version-format-only",
+      "version": "1.13.2",
+      "exit_code": 0
+    },
+    {
+      "tool": "go",
+      "source": "not-discovered",
+      "status": "NOT_DISCOVERED"
+    },
+    {
+      "tool": "gcc",
+      "source": "not-discovered",
+      "status": "NOT_DISCOVERED"
+    },
+    {
+      "tool": "clang",
+      "source": "not-discovered",
+      "status": "NOT_DISCOVERED"
+    },
+    {
+      "tool": "make",
+      "source": "not-discovered",
+      "status": "NOT_DISCOVERED"
+    },
+    {
+      "tool": "docker",
+      "source": "not-discovered",
+      "status": "NOT_DISCOVERED"
+    },
+    {
+      "tool": "sqlite3",
+      "source": "not-discovered",
+      "status": "NOT_DISCOVERED"
+    },
+    {
+      "tool": "uv",
+      "source": "not-discovered",
+      "status": "NOT_DISCOVERED"
+    },
+    {
+      "tool": "java",
+      "source": "PATH",
+      "status": "PASS",
+      "identity_check": "brand-and-version",
+      "version": "21.0.12.1",
+      "exit_code": 0
+    },
+    {
+      "tool": "javac",
+      "source": "PATH",
+      "status": "PASS",
+      "identity_check": "brand-and-version",
+      "version": "21.0.12.1",
+      "exit_code": 0
+    },
+    {
+      "tool": "adb",
+      "source": "not-discovered",
+      "status": "NOT_DISCOVERED"
+    },
+    {
+      "tool": "msbuild",
+      "source": "SDK/environment-derived-location",
+      "status": "PASS",
+      "identity_check": "version-format-only",
+      "version": "18.11.0.47511",
+      "exit_code": 0
+    },
+    {
+      "tool": "cl",
+      "source": "SDK/environment-derived-location",
+      "status": "PASS",
+      "identity_check": "brand-and-version",
+      "version": "19.51.36260",
+      "exit_code": 2
+    }
+  ],
+  "summary": {
+    "PASS": 19,
+    "NOT_DISCOVERED": 8
+  },
+  "fixtures": {
+    "python": {
+      "status": "PASS",
+      "sample": "owned minimal program"
+    },
+    "node": {
+      "status": "PASS",
+      "sample": "owned minimal program"
+    },
+    "rustc": {
+      "status": "PASS",
+      "sample": "owned minimal program"
+    },
+    "java": {
+      "status": "PASS",
+      "sample": "owned minimal program"
+    },
+    "cl": {
+      "status": "PASS",
+      "sample": "owned C file compiled to object; link NOT_RUN"
+    }
+  },
+  "env_file_applied_names": [
+    "DSHA_GIT",
+    "DSHA_RUSTC"
+  ]
+}
