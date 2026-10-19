@@ -44,6 +44,7 @@
 #>
 [CmdletBinding()]
 param(
+    [string]$ConfigDir = $env:DSHA_CONFIG_DIR,
     [Parameter(Position = 0)]
     [ValidateSet('read-only', 'workspace-write', 'danger-full-access', 'auto')]
     [string]$Tier,
@@ -59,7 +60,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$ConfigDir   = Join-Path $env:USERPROFILE '.gemini\config'
+. "$PSScriptRoot/dsha-env.ps1"
+$ConfigDir = Get-DshaConfigDir $ConfigDir
 $ConfigPath  = Join-Path $ConfigDir 'config.json'
 $PluginsPath = Join-Path $ConfigDir 'plugins.json'
 $PluginDir   = Join-Path $ConfigDir 'plugins\dsh-permissions'
@@ -67,7 +69,7 @@ $TierPath    = Join-Path $PluginDir 'tier.json'
 $HooksPath   = Join-Path $PluginDir 'hooks.json'
 $GateLog     = Join-Path $PluginDir 'logs\gate.log'
 $RollbackDir = Join-Path $ConfigDir '_rollback'
-$AppExe      = Join-Path $env:LOCALAPPDATA 'Programs\antigravity\Antigravity.exe'
+$AppExe = if ($env:DSHA_ANTIGRAVITY_EXE) { $env:DSHA_ANTIGRAVITY_EXE } else { Join-Path $env:LOCALAPPDATA 'Programs/antigravity/Antigravity.exe' }
 
 $PluginKey = 'dsh-permissions'
 
@@ -196,14 +198,7 @@ $Tiers = [ordered]@{
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-function Get-PythonPath {
-    $cmd = Get-Command python -ErrorAction SilentlyContinue
-    if ($cmd -and $cmd.Source) { return $cmd.Source }
-    foreach ($p in @('C:\python312\python.exe', "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe")) {
-        if (Test-Path -LiteralPath $p) { return $p }
-    }
-    throw 'python not found; the gate is a Python script and needs an interpreter'
-}
+function Get-PythonPath { return Get-DshaPython $env:DSHA_PYTHON }
 
 function Backup-File([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) { return }

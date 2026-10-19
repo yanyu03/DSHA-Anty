@@ -25,6 +25,7 @@
 #>
 [CmdletBinding()]
 param(
+    [string]$ConfigDir = $env:DSHA_CONFIG_DIR,
     [switch]$All,
     [string]$Tier,
     [int]$Tail = 20
@@ -32,7 +33,8 @@ param(
 
 $ErrorActionPreference = 'Continue'
 
-$ConfigDir = Join-Path $env:USERPROFILE '.gemini\config'
+. "$PSScriptRoot/dsha-env.ps1"
+$ConfigDir = Get-DshaConfigDir $ConfigDir
 $PluginDir = Join-Path $ConfigDir 'plugins\dsh-permissions'
 $LogPath   = Join-Path $PluginDir 'logs\gate.log'
 $RotPath   = "$LogPath.1"

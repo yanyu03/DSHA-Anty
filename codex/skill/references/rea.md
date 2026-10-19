@@ -92,7 +92,7 @@
 |---|---|
 | REA 运行时 | `rea-agents@6.4.0`，全局安装于 `%APPDATA%\npm\node_modules\rea-agents\` |
 | Node | `C:\Program Files\nodejs\node.exe`（24.14.1） |
-| Ghidra | `C:\Users\Administrator\Desktop\MYSQL\MTK8400\rea_workspace\ghidra_12.1.4_PUBLIC` |
+| Ghidra | `${DSHA_LOCAL_PATH}` |
 | JDK | `C:\Program Files\Eclipse Adoptium\jdk-26.0.2+10` |
 | Antigravity 的 MCP 注册 | `~\.gemini\config\mcp_config.json` 的 `mcpServers.rea`，由 `agy-rea.ps1` 维护 |
 | 工程环境包装 | `rea_workspace\rea-env.ps1`（设置 provider/超时变量） |

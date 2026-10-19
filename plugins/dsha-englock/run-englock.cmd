@@ -1,4 +1,6 @@
 @echo off
-rem DSHA Engineering Lock (independent plugin). ASCII only, fail-open, always exit 0.
-"C:\python312\python.exe" "C:\Users\Administrator\.gemini\config\plugins\dsh-permissions\scripts\englock.py" 2>nul
-exit /b 0
+setlocal
+if not defined DSHA_PYTHON set "DSHA_PYTHON=python.exe"
+set "PYTHONUTF8=1"
+"%DSHA_PYTHON%" "%~dp0..\dsh-permissions\scripts\englock.py" %*
+exit /b %ERRORLEVEL%

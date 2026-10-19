@@ -1,8 +1,9 @@
-# DSHA 安装后体检（只读，不改任何文件）
+﻿# DSHA 安装后体检（只读，不改任何文件）
 #   pwsh -File verify.ps1
 
 $ErrorActionPreference = 'Continue'
-$cfg = Join-Path $env:USERPROFILE '.gemini\config'
+. "$PSScriptRoot/bin/dsha-env.ps1"
+$cfg = Get-DshaConfigDir $env:DSHA_CONFIG_DIR
 $ok = 0; $fail = 0; $warn = 0
 
 function Check($name, $cond, $detail = '') {

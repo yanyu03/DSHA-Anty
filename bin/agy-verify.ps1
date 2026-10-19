@@ -12,17 +12,19 @@
     pwsh -File agy-verify.ps1
 #>
 [CmdletBinding()]
-param()
+param([string]$ConfigDir = $env:DSHA_CONFIG_DIR, [string]$HookPath = $env:DSHA_EXTRA_HOOK, [string]$PatcherPath = $env:DSHA_PATCHER_PATH)
 
 $ErrorActionPreference = 'Continue'
 
-$ConfigPath   = Join-Path $env:USERPROFILE '.gemini\config\config.json'
-$PluginsPath  = Join-Path $env:USERPROFILE '.gemini\config\plugins.json'
+. "$PSScriptRoot/dsha-env.ps1"
+$ConfigDir = Get-DshaConfigDir $ConfigDir
+$ConfigPath = Join-Path $ConfigDir "config.json"
+$PluginsPath = Join-Path $ConfigDir "plugins.json"
 $InstallDir   = Join-Path $env:LOCALAPPDATA 'Programs\antigravity'
 $ResourcesDir = Join-Path $InstallDir 'resources'
 $AppData      = Join-Path $env:APPDATA 'Antigravity'
 $MainLog      = Join-Path $AppData 'logs\main.log'
-$HookPath     = Join-Path $env:USERPROFILE 'Desktop\MYSQL\.agents\hooks.json'
+
 
 $pass = 0; $fail = 0; $warn = 0
 
@@ -89,8 +91,8 @@ if (Test-Path -LiteralPath $preload) {
     if ($len -gt 6000) { Bad ("injected preload.js is back ({0} bytes; official is 4925)" -f $len) }
     else { Warn ("resources\app\dist\preload.js present ({0} bytes)" -f $len) }
 }
-$patcher = Join-Path $env:USERPROFILE 'Desktop\MYSQL\0921\Antigravity-Patcher.exe'
-if (Test-Path -LiteralPath $patcher) { Warn 'Antigravity-Patcher.exe still on disk -- do NOT run it, it re-applies the patch' }
+$patcher = $PatcherPath
+if ($patcher -and (Test-Path -LiteralPath $patcher)) { Warn 'Antigravity-Patcher.exe still on disk -- do NOT run it, it re-applies the patch' }
 
 Head 'Plugin / hook rollback'
 if (Test-Path -LiteralPath $PluginsPath) {
@@ -100,7 +102,7 @@ if (Test-Path -LiteralPath $PluginsPath) {
         else { Bad ("plugins.json registers {0} plugin(s) again" -f $entries.Count) }
     } catch { Warn 'could not parse plugins.json' }
 }
-if (Test-Path -LiteralPath $HookPath) { Bad 'MYSQL\.agents\hooks.json is active again (per-command Python spawn)' }
+if ($HookPath -and (Test-Path -LiteralPath $HookPath)) { Bad 'Explicit extra hook is active (per-command Python spawn)' }
 else { Ok 'workspace hooks.json is disabled' }
 
 # ---------------------------------------------------------------- 4. log

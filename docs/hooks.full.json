@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "C:\\Users\\Administrator\\.gemini\\config\\plugins\\dsh-permissions\\scripts\\run-gate.cmd",
+            "command": "%DSHA_CONFIG_DIR%\\plugins\\dsh-permissions\\scripts\\run-gate.cmd",
             "timeout": 10
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "C:\\Users\\Administrator\\.gemini\\config\\plugins\\dsh-permissions\\scripts\\englock.cmd",
+            "command": "%DSHA_CONFIG_DIR%\\plugins\\dsh-permissions\\scripts\\englock.cmd",
             "timeout": 10
           }
         ]

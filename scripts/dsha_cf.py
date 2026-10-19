@@ -25,6 +25,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from dsha_env import find_binary, proxy_environment, display_path
 
 # Ensure UTF-8 output across Windows consoles
 if hasattr(sys.stdout, "reconfigure"):
@@ -35,43 +36,8 @@ if hasattr(sys.stdout, "reconfigure"):
         pass
 
 
-def find_tool(name):
-    # Check standard PATH
-    p = shutil.which(name)
-    if p:
-        return p
-
-    user_home = Path(os.environ.get("USERPROFILE") or ".")
-    app_data = Path(os.environ.get("APPDATA") or str(user_home / "AppData" / "Roaming"))
-    local_app_data = Path(os.environ.get("LOCALAPPDATA") or str(user_home / "AppData" / "Local"))
-
-    candidates = {
-        "cf": [
-            app_data / "npm" / "cloudflare.cmd",
-            app_data / "npm" / "cf.cmd",
-            local_app_data / "Programs" / "nodejs" / "cloudflare.cmd",
-        ],
-        "wrangler": [
-            app_data / "npm" / "wrangler.cmd",
-            app_data / "npm" / "wrangler",
-            local_app_data / "Programs" / "nodejs" / "wrangler.cmd",
-        ],
-        "node": [
-            Path("C:/Program Files/nodejs/node.exe"),
-            local_app_data / "Programs" / "nodejs" / "node.exe",
-        ],
-        "cloudflared": [
-            Path("C:/Program Files/cloudflared/cloudflared.exe"),
-            user_home / "bin" / "cloudflared.exe",
-            user_home / ".gemini" / "config" / "bin" / "cloudflared.exe",
-        ],
-    }
-
-    for c in candidates.get(name, []):
-        if c.is_file():
-            return str(c)
-
-    return None
+def find_tool(name, explicit=None):
+    return find_binary(name, explicit=explicit)
 
 
 def get_cf_environment():
@@ -151,7 +117,7 @@ def get_cf_environment():
             pass
 
     user_home = Path(os.environ.get("USERPROFILE") or ".")
-    workerd_dir = user_home / "AppData" / "Roaming" / "npm" / "node_modules" / "@cloudflare" / "workerd-windows-64"
+    workerd_dir = Path(os.environ.get("DSHA_WORKERD_DIR") or Path(os.environ.get("APPDATA") or user_home / "AppData/Roaming") / "npm/node_modules/@cloudflare/workerd-windows-64")
     env_info["workerd_installed"] = workerd_dir.is_dir()
 
     return env_info
@@ -166,31 +132,27 @@ def run_wrangler_cmd(args_list):
 
     cmd = [wrangler] + args_list
     try:
-        proc = subprocess.run(cmd)
+        proc = subprocess.run(cmd, env=proxy_environment())
         return proc.returncode
     except Exception as e:
         print(f"[DSHA-CF] Execution failed: {e}", file=sys.stderr)
         return 1
 
 
-def run_status():
+def run_status(check_auth=False):
     env = get_cf_environment()
     print("=== DSHA Cloudflare 工具链状态 (Cloudflare Conduit) ===")
     print(f"  分支特性: DHSA-TestWeb 直通引擎")
-    print(f"  Node.js:  {env['node_version'] or '未检测到'} ({env['node_path'] or '未找到'})")
-    print(f"  CF Forge: {env['cf_version'] or '未检测到'} ({env['cf_path'] or '未找到'})")
-    print(f"  Wrangler: {env['wrangler_version'] or '未检测到'} ({env['wrangler_path'] or '未找到'})")
+    print(f"  Node.js:  {env['node_version'] or '未检测到'} ({display_path(env['node_path'])})")
+    print(f"  CF Forge: {env['cf_version'] or '未检测到'} ({display_path(env['cf_path'])})")
+    print(f"  Wrangler: {env['wrangler_version'] or '未检测到'} ({display_path(env['wrangler_path'])})")
     workerd_tag = "就绪 (@cloudflare/workerd-windows-64)" if env['workerd_installed'] else "未安装"
     print(f"  Workerd:  {workerd_tag}")
     print(f"  Tunnel:   {env['cloudflared_version'] or '支持 (通过 cf tunnels 或 cloudflared)'}")
 
-    if env["wrangler_path"]:
+    if env["wrangler_path"] and check_auth:
         print("\n  测试 Wrangler 鉴权状态 (wrangler whoami)...")
-        custom_env = os.environ.copy()
-        if "HTTPS_PROXY" not in custom_env and "ALL_PROXY" not in custom_env:
-            # Propagate local socks5 proxy if available
-            custom_env["ALL_PROXY"] = "socks5://127.0.0.1:10808"
-            custom_env["HTTPS_PROXY"] = "http://127.0.0.1:10809"
+        custom_env = proxy_environment()
         try:
             r = subprocess.run(
                 [env["wrangler_path"], "whoami"],
@@ -200,9 +162,7 @@ def run_status():
                 timeout=12,
                 env=custom_env,
             )
-            for line in r.stdout.splitlines():
-                if line.strip():
-                    print(f"    {line}")
+            print("    Auth probe: " + ("completed" if r.returncode == 0 else "failed"))
             if "You are not authenticated" in r.stdout:
                 print("    [提示] 未登录 Cloudflare 账号。可执行 'cf login' 授权，或使用 'cf deploy --temporary' 测试预览。")
         except subprocess.TimeoutExpired:
@@ -279,7 +239,7 @@ def main():
         sys.exit(0 if ok else 1)
 
     if len(sys.argv) > 1 and sys.argv[1] == "status":
-        run_status()
+        run_status(check_auth="--check-auth" in sys.argv)
         return 0
 
     if len(sys.argv) > 1 and sys.argv[1] == "whoami":

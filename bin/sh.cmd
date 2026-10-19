@@ -1,9 +1,6 @@
 @echo off
-rem DSHA Sh Launcher - Zero Parenthesis Blocks
-if not exist "C:\Program Files\Git\bin\sh.exe" goto :FALLBACK
-"C:\Program Files\Git\bin\sh.exe" %*
-exit /b %ERRORLEVEL%
-
-:FALLBACK
-sh.exe %*
+setlocal
+call "%~dp0dsha-env.cmd" sh
+if errorlevel 1 exit /b 126
+"%DSHA_SH%" %*
 exit /b %ERRORLEVEL%

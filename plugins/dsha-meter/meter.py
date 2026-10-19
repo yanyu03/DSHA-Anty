@@ -18,7 +18,7 @@ except Exception:
 import tkinter as tk
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "meter_config.json")
+CONFIG_PATH = os.environ.get('DSHA_METER_CONFIG') or os.path.join(os.path.dirname(os.path.abspath(__file__)), "meter_config.json")
 DEFAULT_CONFIG = {
     "limits": {
         "5h_request_limit": 200,
@@ -47,7 +47,7 @@ def load_config():
     return DEFAULT_CONFIG
 
 def get_telemetry():
-    brain_dir = os.path.expanduser(r"~\.gemini\antigravity\brain")
+    brain_dir = os.environ.get('DSHA_BRAIN_DIR') or os.path.expanduser(r"~\.gemini\antigravity\brain")
     now = datetime.now(timezone.utc)
     five_hours_ago = now - timedelta(hours=5)
     seven_days_ago = now - timedelta(days=7)
@@ -75,7 +75,7 @@ def get_telemetry():
     if not os.path.exists(brain_dir):
         return stats
 
-    presence_dir = os.path.expanduser(r"~\.gemini\antigravity\presence")
+    presence_dir = os.environ.get('DSHA_PRESENCE_DIR') or os.path.expanduser(r"~\.gemini\antigravity\presence")
     active_cid = ""
     if os.path.exists(presence_dir):
         for f in os.listdir(presence_dir):
@@ -257,10 +257,15 @@ class LocalHttpHandler(BaseHTTPRequestHandler):
 
 def start_http_server():
     try:
-        server = HTTPServer(("127.0.0.1", 48123), LocalHttpHandler)
-        server.serve_forever()
-    except Exception:
-        pass
+        address = os.environ.get('DSHA_METER_HOST', '127.0.0.1')
+        port = int(os.environ.get('DSHA_METER_PORT', '48123'))
+        # Telemetry must remain local even when an environment override is supplied.
+        if address not in ('127.0.0.1', '::1') or not 0 <= port <= 65535:
+            raise ValueError('Invalid local meter endpoint')
+        with HTTPServer((address, port), LocalHttpHandler) as server:
+            server.serve_forever()
+    except (OSError, ValueError):
+        print('[DSHA-Meter] Local server unavailable; check DSHA_METER_HOST/DSHA_METER_PORT', file=sys.stderr)
 
 class DshaMeterApp:
     def __init__(self, root):

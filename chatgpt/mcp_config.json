@@ -1,10 +1,9 @@
 {
   "mcpServers": {
     "dsha-rea": {
-      "command": "cmd.exe",
+      "command": "node",
       "args": [
-        "/c",
-        "c:\\Users\\admin\\Desktop\\GOOGLE\\DSHA\\bin\\rea.cmd",
+        "${DSHA_REA_ENTRY}",
         "mcp"
       ],
       "env": {
