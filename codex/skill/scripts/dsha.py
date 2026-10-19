@@ -9,6 +9,7 @@ import subprocess
 import sys
 import shutil
 import tempfile
+from refusal import halt, RefusalParser
 
 SKILL = Path(__file__).resolve().parents[1]
 CODEX_HOME = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex'))
@@ -47,6 +48,7 @@ def verify_sources(config):
         path = (source / name).resolve()
         if not path.is_relative_to(source.resolve()) or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
             failed.append(name)
+            break
     return {'files': len(manifest['source_sha256']), 'mismatches': failed}
 
 
@@ -61,7 +63,7 @@ def prepare_action_environment(config, env, include_node=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = RefusalParser(description=__doc__)
     parser.add_argument('--host-config', type=Path, help='Private host configuration; takes precedence over DSHA_HOST_CONFIG')
     parser.add_argument('action', choices=['status', 'selftest', 'englock', 'rea', 'verify-source', 'catalog', 'route', 'inventory', 'envfeel'])
     parser.add_argument('args', nargs=argparse.REMAINDER)
@@ -71,16 +73,18 @@ def main():
     scripts = Path(config['dsha_source']) / 'plugins/dsh-permissions/scripts'
     identity = verify_sources(config)
     if identity['mismatches'] and args.action != 'verify-source':
-        print(json.dumps({'status': 'REFUSED', 'source_identity': identity}, ensure_ascii=False))
+        print(json.dumps(halt({'source_identity': identity}, 'SOURCE_IDENTITY'), ensure_ascii=True))
         return 1
     if args.action == 'verify-source':
         result = verify_sources(config)
-        print(json.dumps(result, ensure_ascii=False))
+        if result['mismatches']:
+            result = halt(result, 'SOURCE_IDENTITY')
+        print(json.dumps(result, ensure_ascii=True))
         return 1 if result['mismatches'] else 0
     if args.action not in ('status', 'envfeel'):
         env, refusal = prepare_action_environment(config, env, include_node=args.action == 'rea')
         if refusal is not None:
-            print(json.dumps(refusal, ensure_ascii=False))
+            print(json.dumps(halt(refusal), ensure_ascii=True))
             return 126
     if args.action == 'status':
         checks = {name: Path(config[name]).is_file() for name in ['node', 'python', 'rea_entry']}
@@ -91,7 +95,7 @@ def main():
                   'checks': checks, 'source_identity': verify_sources(config),
                   'mcp_server': config.get('mcp_server', 'rea'), 'codex_permissions_modified': False,
                   'provider_readiness': 'use real MCP/provider verification; file presence alone is insufficient'}
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        print(json.dumps(result, ensure_ascii=True, indent=2))
         return 0 if all(checks.values()) and not result['source_identity']['mismatches'] else 1
     if args.action == 'selftest':
         codes = []
@@ -128,6 +132,5 @@ if __name__ == '__main__':
         sys.exit(main())
     except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
         # Configurations are private: do not echo paths, values or tracebacks.
-        print(json.dumps({'status': 'REFUSED', 'error': type(error).__name__,
-                          'message': 'Check host configuration, source manifest and runtime availability.'}), file=sys.stderr)
+        print(json.dumps(halt({'error': type(error).__name__}),ensure_ascii=True), file=sys.stderr)
         sys.exit(2)

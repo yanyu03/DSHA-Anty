@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-19",
+  "timezone": "Asia/Shanghai",
+  "device": "Windows x64; firmware NOT_COLLECTED",
+  "python": "3.12.14",
+  "node": "24.14.1",
+  "adapter_version": "2.5.1",
+  "unique_tests": 110,
+  "failed": 0,
+  "skipped": 0,
+  "new_stop_tests": 16,
+  "logs": [
+    {
+      "log": ".local/refusal-regressions-final.log",
+      "test_count": 103,
+      "status": "PASS",
+      "sha256": "8248898dd283174cd1877e5c89d0af3ba6e477d5b00c0ea016534d622197536e"
+    },
+    {
+      "log": ".local/refusal-adapter-final.log",
+      "test_count": 7,
+      "status": "PASS",
+      "sha256": "90e6efa59c73f48ec28da8a2c5aa2e584f4740c91395406ce63ae7c570a2f7d0"
+    },
+    {
+      "log": ".local/refusal-stop-final.log",
+      "test_count": 16,
+      "status": "PASS",
+      "sha256": "fcb768d0ee745caf1b7822ce6bc0d85fbc05c95e81c0ea190a9e1f66adc7e8a5"
+    }
+  ],
+  "earlier_failure": {
+    "tests": 14,
+    "passed": 13,
+    "errors": 1,
+    "cause": "GBK stdout vs UTF8 reader; corrected portable JSON encoding",
+    "log_sha256": "e4da7c1a22f3906d1c6effa352e64e1e30d43118f6e8dc04b84625860566bab0"
+  },
+  "code_sha256_canonical_lf": {
+    "scripts/envfeel.py": "4d43c1aac4a09e8003bb51a950d3f6334fc4f7faac393529c4f2ff53d9b7b755",
+    "scripts/environment_smoke.py": "e5bfa471a9832ee54a0dda76cc64dfb97a2b7662ab6d73b8cdb7534c4abd30ed",
+    "scripts/project_probe.py": "bd4421088c639dca5bdde688069e76a18dbf5bfb773ecb565bd307388045b187",
+    "scripts/base_tool.py": "2e7480b5d72a9998b82737bc72cf484dee4e00258ae4c33ae701e63b0b0a4f73",
+    "scripts/refusal.py": "a2b164b5ff05fbd841539e1ec0bab8ab5fc00dd449b91912ed7b7c0548f520cd",
+    "codex/skill/scripts/dsha.py": "81e3d57c8939d2a6fba565f642354432d76ee6ad666428fe663044d2df53b23a",
+    "codex/skill/SKILL.md": "1678451ecd971fdb35d0ad0b6cd74dbf372cc88e87a62101faae1457f749d130"
+  },
+  "policy": {
+    "first_failure_stops": true,
+    "later_capabilities": "NOT_RUN",
+    "same_gate_refusal_latched": true,
+    "automatic_repairs": false,
+    "new_explicit_user_request_required": true,
+    "global_hard_interrupt_claimed": false
+  },
+  "limits": [
+    "Independent fault-injection specimens are not real refused tasks resumed by the model",
+    "Skills govern the model workflow, not external tools or unrelated chats",
+    "Timeouts do not prove external descendants stopped"
+  ]
+}

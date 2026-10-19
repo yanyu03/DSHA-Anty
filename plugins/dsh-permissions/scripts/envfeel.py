@@ -6,9 +6,11 @@ import platform
 import re
 import struct
 import subprocess
+import copy
 
 from dsha_env import find_binary, normalize_environment, machine_environment
 from project_probe import CAPABILITIES, probe_frontend
+from refusal import halt
 
 
 def detect_architecture():
@@ -79,16 +81,29 @@ class EnvFeel:
         self.project_root = None
         self.executables = {}
         self.environment = {}
+        self._stopped = None
+
+    def _stop(self, report):
+        self._stopped = halt(report)
+        self.executables = {}
+        self.environment = {}
+        self.project_root = None
+        return copy.deepcopy(self._stopped)
 
     def check(self):
+        if self._stopped is not None:
+            return copy.deepcopy(self._stopped)
         try:
-            return self._check()
-        except (OSError, ValueError, RuntimeError) as error:
+            report = self._check()
+            return self._stop(report) if report['status'] == 'REFUSED' else report
+        except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
             self.executables = {}
             self.environment = {}
             self.project_evidence = []
             self.project_root = None
-            return {'status': 'REFUSED', 'error': type(error).__name__, 'task': {'status': 'NOT_RUN'}}
+            return self._stop({'status': 'REFUSED', 'error': type(error).__name__,
+                               'reason':'PROBE_TIMEOUT' if isinstance(error,subprocess.TimeoutExpired) else 'configuration check failed',
+                               'task': {'status': 'NOT_RUN'}})
 
     def _check(self):
         from environment_smoke import TOOLS, apply_env_file, discover_visual_studio, version_probe, fixture_probe, activate_msvc_sdk
@@ -110,6 +125,12 @@ class EnvFeel:
         env = machine_environment(self.base_env)
         report['env_file_applied_names'] = apply_env_file(self.env_file, env) if self.env_file else []
         selected_project = self.project if self.project is not None else env.get('DSHA_PROJECT_ROOT')
+        if capabilities:
+            root = Path(selected_project) if isinstance(selected_project, (str, os.PathLike)) and str(selected_project) else None
+            if root is None or not root.is_absolute() or not root.is_dir() or not (root/'package.json').is_file():
+                report['capabilities'] = [{'capability':capabilities[0], 'status':'FAIL', 'reason':'PROJECT_REQUIRED'}]
+                report['capabilities'].extend({'capability':c, 'status':'NOT_RUN', 'reason':'EARLIER_REQUIREMENT_FAILED'} for c in capabilities[1:])
+                return report
         report['visual_studio_discovery'] = discover_visual_studio(env) if set(self.required) & {'cl', 'cmake', 'msbuild', 'ninja'} else 'NOT_RUN'
         names = list(tools)
         dependencies = {'java': ('javac',), 'javac': ('java',), 'cargo': ('rustc',)}
@@ -122,6 +143,8 @@ class EnvFeel:
             report['tools'].append(record)
             if not path:
                 record['status'] = 'INVALID_OVERRIDE' if configured else 'NOT_DISCOVERED'
+                report['reason'] = 'required tool location failed'
+                return report
             else:
                 record['status'] = 'LOCATED'
                 self.executables[name] = str(Path(path).resolve())
@@ -139,6 +162,9 @@ class EnvFeel:
             record.update(version_probe(record['tool'], self.executables[record['tool']], self.environment))
             if record['status'] == 'PASS' and record.get('identity_check') == 'version-format-only':
                 record['status'] = 'INSUFFICIENT_CONTRACT'
+            if record['status'] != 'PASS':
+                report['reason'] = 'required tool launch/version/identity contract failed'
+                return report
         if any(record['status'] != 'PASS' for record in report['tools']):
             report['reason'] = 'required tool launch/version/identity contract failed'
             return report
@@ -161,6 +187,9 @@ class EnvFeel:
         for name in names:
             if name in ('python', 'node', 'rustc', 'java', 'cl', 'pwsh', 'bash', 'sh'):
                 report['health'][name] = fixture_probe(name, self.executables, self.environment)
+                if report['health'][name]['status'] != 'PASS':
+                    report['reason'] = 'required health check failed'
+                    return report
         if any(value['status'] != 'PASS' for value in report['health'].values()):
             report['reason'] = 'required health check failed'
             return report
@@ -177,13 +206,20 @@ class EnvFeel:
         return report
 
     def execute(self, tool, arguments, timeout=60):
+        if self._stopped is not None:
+            return copy.deepcopy(self._stopped), {}
+        allowed = (tool in self.required and tool not in CAPABILITIES) or (tool == 'node' and any(c in self.required for c in CAPABILITIES))
+        if not allowed:
+            return self._stop({'reason':'execution tool not declared'}), {}
+        if type(timeout) is not int or timeout <= 0 or not isinstance(arguments,(list,tuple)) or any(not isinstance(a,str) for a in arguments):
+            return self._stop({'reason':'INVALID_ARGUMENTS'}), {}
         # A saved READY report is never an execution ticket; always check again.
         report = self.check()
         allowed = tool in self.required or (tool == 'node' and any(c in self.required for c in CAPABILITIES))
         if report['status'] != 'READY' or not allowed or tool not in self.executables:
             report['status'] = 'REFUSED'
             report.setdefault('reason', 'execution tool not declared')
-            return report, {}
+            return self._stop(report), {}
         try:
             result = subprocess.run([self.executables[tool], *arguments], env=self.environment,
                                     capture_output=True, encoding='utf-8', errors='replace', timeout=timeout,
@@ -227,10 +263,10 @@ def main():
             with args.private_output.open('x', encoding='utf-8') as stream:
                 json.dump({'report': report, 'resolved_executables': gate.executables,
                            'project_evidence': gate.project_evidence, 'task_output': output}, stream, indent=2)
-        print(json.dumps(report, ensure_ascii=False, indent=2))
+        print(json.dumps(report, ensure_ascii=True, indent=2))
         return 0 if report['status'] in ('READY', 'COMPLETE') else 126
     except (OSError, ValueError, RuntimeError) as error:
-        print(json.dumps({'status': 'REFUSED', 'error': type(error).__name__, 'task': {'status': 'NOT_RUN'}}))
+        print(json.dumps(halt({'status': 'REFUSED', 'error': type(error).__name__, 'task': {'status': 'NOT_RUN'}}),ensure_ascii=True))
         return 126
 
 

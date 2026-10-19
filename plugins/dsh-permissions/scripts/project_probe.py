@@ -14,7 +14,9 @@ def probe_frontend(node, project, capabilities, environ, timeout=20):
     # A project must be selected explicitly; no guessing from cwd or HOME.
     root = Path(project) if isinstance(project, (str, os.PathLike)) and str(project) else None
     if root is None or not root.is_absolute() or not root.is_dir() or not (root / 'package.json').is_file():
-        return [{'capability': c, 'status': 'FAIL', 'reason': 'PROJECT_REQUIRED'} for c in capabilities], private
+        return [{'capability': c, 'status': 'FAIL' if i == 0 else 'NOT_RUN',
+                 'reason':'PROJECT_REQUIRED' if i == 0 else 'EARLIER_REQUIREMENT_FAILED'}
+                for i,c in enumerate(capabilities)], private
     child = dict(environ)
     # Do not allow NODE_OPTIONS hooks or NODE_PATH to select unrelated project libraries.
     for key in list(child):
@@ -49,4 +51,9 @@ def probe_frontend(node, project, capabilities, environ, timeout=20):
         except (OSError, ValueError, IndexError, KeyError, TypeError):
             record['reason'] = 'INVALID_REPLY'
         public.append(record)
+        if record['status'] != 'PASS':
+            public.extend({'capability': remaining, 'status':'NOT_RUN',
+                           'reason':'EARLIER_REQUIREMENT_FAILED'}
+                          for remaining in capabilities[len(public):])
+            break
     return public, private

@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 
 from dsha_env import find_binary, machine_environment
+from refusal import RefusalParser
 
 TOOLS = {name: ['--version'] for name in (
     'python', 'node', 'npm', 'npx', 'git', 'gh', 'pwsh', 'bash', 'sh',
@@ -226,9 +227,8 @@ def _inventory(names, overrides, smoke, vs_source):
     return public, executables
 
 
-class PrivateParser(argparse.ArgumentParser):
-    def error(self, message):
-        self.exit(2, 'Invalid inventory arguments; use --help. Values omitted.\n')
+class PrivateParser(RefusalParser):
+    """Invalid arguments stop with private-value-free user guidance."""
 
 
 def apply_env_file(path, environ=None):

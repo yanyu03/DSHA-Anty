@@ -29,6 +29,7 @@ from enum import Enum
 from pathlib import Path
 from dsha_env import config_dir, find_binary, proxy_environment, redact
 from envfeel import activate_environment, runtime_context
+from refusal import halt
 from environment_smoke import BRANDS, fixture_probe
 
 # Ensure UTF-8 output across Windows consoles
@@ -192,7 +193,7 @@ class ErrBlock:
         self.remediations = remediations
 
     def to_dict(self):
-        return {
+        return halt({
             "status": "REFUSED",
             "error_code": self.error_code,
             "tool_id": self.tool_id,
@@ -201,10 +202,11 @@ class ErrBlock:
             "refusal_statement": self.refusal_statement,
             "details": self.details,
             "remediations": self.remediations,
-        }
+        }, 'PERMISSION_DENIED' if self.error_code == 'ERR_PERMISSION_DENIED' else None)
 
     def format_cli(self):
         lines = [
+            self.to_dict()['user_response']['apology'],
             f"❌ [DSHA 拒绝执行 · {self.error_code}]",
             f"  受限工具: [{self.category}] {self.tool_name} (id: {self.tool_id})",
             f"  阻断原因: {self.refusal_statement}",
@@ -214,7 +216,7 @@ class ErrBlock:
             for d in self.details:
                 if "binary" in d:
                     req = d.get("required_version", "any")
-                    cur = d.get("detected_version") or "missing"
+                    cur = d.get("detected_version") or "未确认"
                     lines.append(f"    - {d.get('binary')}: 要求 {req} (实测: {cur})")
                 elif "active_tier" in d:
                     lines.append(f"    - 当前权限档位: {d.get('active_tier')}, 工具风险级别: {d.get('tool_risk_level')}")
@@ -222,6 +224,10 @@ class ErrBlock:
             lines.append("  环境修复指引:")
             for r in self.remediations:
                 lines.append(f"    💡 {r}")
+        response=self.to_dict()['user_response']
+        lines.extend(['  检查去处: '+response['where_to_check'],
+                      '  手动配置: '+response['manual_configuration'],
+                      '  '+response['resume']])
         return "\n".join(lines)
 
 
@@ -269,9 +275,15 @@ class BaseTool(ABC):
         else:
             base_env = dict(os.environ if environ is None else environ)
             try:
-                selected = {req.binary: str(Path(path).resolve()) for req in self.prerequisites
-                            if (path := req.locate_binary(environ=base_env))}
-                self._prepared_env = activate_environment(selected, base_env)
+                selected = {}
+                for req in self.prerequisites:
+                    path = req.locate_binary(environ=base_env)
+                    if not path:
+                        failed_prereqs.append({'binary':req.binary,'status':'NOT_DISCOVERED'})
+                        break
+                    selected[req.binary] = str(Path(path).resolve())
+                if not failed_prereqs:
+                    self._prepared_env = activate_environment(selected, base_env)
             except (OSError, ValueError, RuntimeError) as error:
                 failed_prereqs.append({'stage': 'EnvFeel activation', 'error': type(error).__name__})
         for req in self.prerequisites:
@@ -289,6 +301,7 @@ class BaseTool(ABC):
                     health = fixture_probe(req.binary, selected, self._prepared_env)
                     if health['status'] != 'PASS':
                         failed_prereqs.append({'stage': 'EnvFeel health', 'binary': req.binary, **health})
+                        break
 
         if failed_prereqs:
             err = ErrBlock(
@@ -296,7 +309,7 @@ class BaseTool(ABC):
                 tool_id=self.id,
                 tool_name=self.name,
                 category=self.category.value,
-                refusal_statement=f"DSHA 拒绝执行: 工具 '{self.id}' 缺少必需宿主运行环境，DSHA 坚持不臃肿合并运行时的纯净原则。",
+                refusal_statement=f"工具 '{self.id}' 的必需环境检查未通过，本次调用结束。",
                 details=failed_prereqs,
                 remediations=remediations,
             )
@@ -323,7 +336,7 @@ class BaseTool(ABC):
                 category=self.category.value,
                 refusal_statement=f"DSHA 越权拦截: 当前权限处于 '{tier}' 档位，禁止调用具有修改/写操作风险等级 ({self.risk_level.value}) 的工具。",
                 details=[{"active_tier": tiers[0], "requested_tier": active_tier, "invalid_tier": invalid, "tool_risk_level": self.risk_level.value}],
-                remediations=["如需执行此操作，请先确认并将权限档位切换为 workspace-write、auto 或 danger-full-access。"],
+                remediations=["请项目或系统授权负责人确认所需许可；本次调用结束，不自动切换权限档位。"],
             )
             return False, err
 
@@ -408,7 +421,7 @@ class BaseTool(ABC):
             details=[{"binary": self.id, "reason": "target-outside-sandbox"}],
             remediations=[
                 "确认 DSHA-Index 里该工具的 cmd 未被改写成相对路径或仓库外路径。",
-                "如确需仓库外目标，请先在白名单中显式声明它，再重试。",
+                "由项目维护者确认目标和授权边界；本次调用结束，不自动改目标或扩大白名单。",
             ],
         )
         return False, err
@@ -419,6 +432,12 @@ class BaseTool(ABC):
         if context is None:
             context = {}
 
+        # A known authorization refusal must precede any environment probes.
+        ok_auth, err_auth = self.assert_authorization(context.get('tier'))
+        if not ok_auth:
+            return {'success':False, 'tool':self.id, 'tool_name':self.name,
+                    'category':self.category.value, 'exit_code':126, 'stdout':'',
+                    'stderr':err_auth.format_cli(), 'err_block':err_auth.to_dict(), 'duration_ms':0}
         # 1. Environment Assertion (No bundled runtime principle)
         requested_env = proxy_environment(context.get('proxy'))
         ok_env, err_env = self.assert_environment(environ=requested_env)
@@ -435,35 +454,19 @@ class BaseTool(ABC):
                 "duration_ms": 0,
             }
 
-        # 2. Authorization Assertion (Anti-privilege escalation principle)
-        active_tier = context.get("tier")
-        ok_auth, err_auth = self.assert_authorization(active_tier)
-        if not ok_auth:
-            return {
-                "success": False,
-                "tool": self.id,
-                "tool_name": self.name,
-                "category": self.category.value,
-                "exit_code": 126,
-                "stdout": "",
-                "stderr": err_auth.format_cli(),
-                "err_block": err_auth.to_dict(),
-                "duration_ms": 0,
-            }
-
         # 3. Resolve Launcher
         exec_path = self.resolve_executable()
         if not exec_path:
-            return {
+            return halt({
                 "success": False,
                 "tool": self.id,
                 "tool_name": self.name,
                 "category": self.category.value,
                 "exit_code": 127,
                 "stdout": "",
-                "stderr": f"[DSHA] Error: Launcher '{self.cmd}' could not be resolved on disk.",
+                "stderr": "[DSHA] Launcher not located; value omitted.",
                 "duration_ms": 0,
-            }
+            },'LAUNCHER_NOT_FOUND')
 
         # 3.5 Target Containment Assertion (目标必须在白名单根内)
         ok_contained, err_contained = self.assert_target_contained(exec_path)

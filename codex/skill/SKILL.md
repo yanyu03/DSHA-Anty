@@ -16,6 +16,14 @@ Local adaptation based on the user's `Desktop/GOOGLE/DSHA` Git repository, `http
 - For an evidence report, apply the relevant [engineering locks](references/engineering-lock.md) and [language discipline](references/language-norm.md): retain source identity, sample count, reproducible commands, unknowns and limitations. They are evidence aids, not evidence of correctness themselves.
 - The original permission-tier branch is Antigravity-specific. Installing this skill does not change Codex sandbox/approval settings, add hooks, or authorize restarting Antigravity. Only use the preserved Antigravity scripts for an explicit Antigravity request.
 
+## On refusal: stop and explain
+
+If DSHA refuses, returns a failed prerequisite, or a known condition already requires refusal, end the current task immediately. Respond in the user's language: briefly apologize, name the specific failed or unverified condition, state the task was not run (or precisely identify any step already run), and point to the appropriate project/tool owner or documentation with manual parameter/environment configuration instructions. Use `user_response` when present; do not infer "not installed" from an unsupported contract or failed health check.
+
+After refusal, do not continue probing, try an alternative tool/environment, remove a requirement, install, edit configuration, elevate permissions, rebuild a source lock, or retry. Give guidance only; wait for a new explicit user request before a new invocation, even if earlier broad work was authorized. Do not append an offer that implies execution is continuing. Existing owned cleanup and an explicitly requested receipt may finish; they do not authorize repair. This governs DSHA tasks, not unrelated chats or a global operating-system lock.
+
+In an explicitly authorized fault-injection test suite, each refused specimen ends that tested call; only the predeclared test harness may advance to the next independent specimen. Do not use that testing boundary to continue a real refused task or repair its environment automatically.
+
 ## Local environment and tools
 
 Use the Python executable recorded in `host.json`, or a working Python 3.11+:
