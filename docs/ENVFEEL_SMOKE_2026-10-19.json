@@ -1,0 +1,107 @@
+{
+  "schema": 1,
+  "date": "2026-10-19",
+  "source_commit": "5bfdbc7ed3253ec95d092503b0263dae9d8defab",
+  "adapter_version": "2.3.0",
+  "cases": {
+    "activated_execution": {
+      "report": {
+        "status": "COMPLETE",
+        "context": {
+          "status": "PASS",
+          "os": "Windows",
+          "architecture_reported": "x86_64",
+          "process_bits": 64,
+          "scope": "runtime-reported facts, not hardware attestation",
+          "reason": null
+        },
+        "tools": [
+          {
+            "tool": "python",
+            "located": true,
+            "source": "parameter",
+            "status": "PASS",
+            "identity_check": "brand-and-version",
+            "version": "3.12.14",
+            "exit_code": 0
+          },
+          {
+            "tool": "node",
+            "located": true,
+            "source": "parameter",
+            "status": "PASS",
+            "identity_check": "brand-and-version",
+            "version": "24.14.1",
+            "exit_code": 0
+          }
+        ],
+        "health": {
+          "python": {
+            "status": "PASS",
+            "sample": "owned minimal program"
+          },
+          "node": {
+            "status": "PASS",
+            "sample": "owned minimal program"
+          }
+        },
+        "task": {
+          "status": "PASS",
+          "exit_code": 0
+        },
+        "env_file_applied_names": [],
+        "visual_studio_discovery": "NOT_RUN",
+        "activation": {
+          "status": "PREPARED",
+          "scope": "child mapping only",
+          "variable_names": [
+            "PATH",
+            "PYTHONUTF8",
+            "PYTHONIOENCODING",
+            "DSHA_PYTHON",
+            "DSHA_NODE"
+          ]
+        },
+        "scope": "declared requirements only; version probes plus listed owned health checks"
+      },
+      "task_output_marker_verified": true,
+      "node_found_in_child_path": true
+    },
+    "missing_dependency": {
+      "report": {
+        "status": "REFUSED",
+        "context": {
+          "status": "PASS",
+          "os": "Windows",
+          "architecture_reported": "x86_64",
+          "process_bits": 64,
+          "scope": "runtime-reported facts, not hardware attestation",
+          "reason": null
+        },
+        "tools": [
+          {
+            "tool": "python",
+            "located": true,
+            "source": "environment",
+            "status": "LOCATED"
+          },
+          {
+            "tool": "node",
+            "located": false,
+            "source": "environment",
+            "status": "INVALID_OVERRIDE"
+          }
+        ],
+        "health": {},
+        "task": {
+          "status": "NOT_RUN"
+        },
+        "env_file_applied_names": [],
+        "visual_studio_discovery": "NOT_RUN",
+        "reason": "required tool location failed"
+      },
+      "exit_code": 126,
+      "task_marker_absent": true
+    }
+  }
+}
