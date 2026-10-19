@@ -1,0 +1,7 @@
+name = "dsha-smoke-worker"
+main = "src/index.js"
+compatibility_date = "2026-10-19"
+
+[vars]
+ENVIRONMENT = "smoke-test"
+ENGINE = "DSHA-SharBoy"
