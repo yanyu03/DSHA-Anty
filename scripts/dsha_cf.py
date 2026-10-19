@@ -46,6 +46,11 @@ def find_tool(name):
     local_app_data = Path(os.environ.get("LOCALAPPDATA") or str(user_home / "AppData" / "Local"))
 
     candidates = {
+        "cf": [
+            app_data / "npm" / "cloudflare.cmd",
+            app_data / "npm" / "cf.cmd",
+            local_app_data / "Programs" / "nodejs" / "cloudflare.cmd",
+        ],
         "wrangler": [
             app_data / "npm" / "wrangler.cmd",
             app_data / "npm" / "wrangler",
@@ -70,20 +75,38 @@ def find_tool(name):
 
 
 def get_cf_environment():
+    cf_path = find_tool("cf")
     wrangler_path = find_tool("wrangler")
     node_path = find_tool("node")
     cloudflared_path = find_tool("cloudflared")
 
     env_info = {
+        "cf_path": cf_path,
+        "cf_version": None,
         "wrangler_path": wrangler_path,
         "wrangler_version": None,
         "node_path": node_path,
         "node_version": None,
         "cloudflared_path": cloudflared_path,
         "cloudflared_version": None,
+        "workerd_installed": False,
         "authenticated": False,
         "auth_detail": None,
     }
+
+    if cf_path:
+        try:
+            r = subprocess.run(
+                [cf_path, "--version"],
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+            )
+            if r.returncode == 0:
+                env_info["cf_version"] = r.stdout.strip()
+        except Exception:
+            pass
 
     if node_path:
         try:
@@ -127,6 +150,10 @@ def get_cf_environment():
         except Exception:
             pass
 
+    user_home = Path(os.environ.get("USERPROFILE") or ".")
+    workerd_dir = user_home / "AppData" / "Roaming" / "npm" / "node_modules" / "@cloudflare" / "workerd-windows-64"
+    env_info["workerd_installed"] = workerd_dir.is_dir()
+
     return env_info
 
 
@@ -151,8 +178,11 @@ def run_status():
     print("=== DSHA Cloudflare 工具链状态 (Cloudflare Conduit) ===")
     print(f"  分支特性: DHSA-TestWeb 直通引擎")
     print(f"  Node.js:  {env['node_version'] or '未检测到'} ({env['node_path'] or '未找到'})")
+    print(f"  CF Forge: {env['cf_version'] or '未检测到'} ({env['cf_path'] or '未找到'})")
     print(f"  Wrangler: {env['wrangler_version'] or '未检测到'} ({env['wrangler_path'] or '未找到'})")
-    print(f"  Tunnel:   {env['cloudflared_version'] or '未安装 (可选)'} ({env['cloudflared_path'] or '未配置'})")
+    workerd_tag = "就绪 (@cloudflare/workerd-windows-64)" if env['workerd_installed'] else "未安装"
+    print(f"  Workerd:  {workerd_tag}")
+    print(f"  Tunnel:   {env['cloudflared_version'] or '支持 (通过 cf tunnels 或 cloudflared)'}")
 
     if env["wrangler_path"]:
         print("\n  测试 Wrangler 鉴权状态 (wrangler whoami)...")
@@ -255,6 +285,42 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == "whoami":
         return run_wrangler_cmd(["whoami"])
 
+    if len(sys.argv) > 1 and sys.argv[1] == "search":
+        cf_bin = find_tool("cf")
+        if not cf_bin:
+            print("[DSHA-CF] Error: Cloudflare Forge CLI ('cf' / 'cloudflare') not found.", file=sys.stderr)
+            return 1
+        cmd = [cf_bin, "cli", "search"] + sys.argv[2:]
+        return subprocess.run(cmd).returncode
+
+    if len(sys.argv) > 1 and sys.argv[1] == "mcp":
+        cf_bin = find_tool("cf")
+        if not cf_bin:
+            print("[DSHA-CF] Error: Cloudflare Forge CLI ('cf' / 'cloudflare') not found.", file=sys.stderr)
+            return 1
+        cmd = [cf_bin, "mcp"] + sys.argv[2:]
+        return subprocess.run(cmd).returncode
+
+    if len(sys.argv) > 1 and sys.argv[1] == "api":
+        cf_bin = find_tool("cf")
+        if not cf_bin:
+            print("[DSHA-CF] Error: Cloudflare Forge CLI ('cf' / 'cloudflare') not found.", file=sys.stderr)
+            return 1
+        cmd = [cf_bin] + sys.argv[2:]
+        return subprocess.run(cmd).returncode
+
+    if len(sys.argv) > 1 and sys.argv[1] == "wrangler":
+        return run_wrangler_cmd(sys.argv[2:])
+
+    # Unified CF API operations
+    unified_cmds = ("zones", "dns", "radar", "zero-trust", "migrate", "workflows", "vectorize", "queues", "pipelines")
+    if len(sys.argv) > 1 and sys.argv[1] in unified_cmds:
+        cf_bin = find_tool("cf")
+        if cf_bin:
+            cmd = [cf_bin] + sys.argv[1:]
+            return subprocess.run(cmd).returncode
+        return run_wrangler_cmd(sys.argv[1:])
+
     if len(sys.argv) > 1 and sys.argv[1] in ("dev", "deploy", "pages", "types", "tail", "kv", "d1", "r2", "ai"):
         # Direct pass-through to wrangler
         return run_wrangler_cmd(sys.argv[1:])
@@ -265,6 +331,10 @@ def main():
             cmd = [cloudflared] + sys.argv[2:]
             return subprocess.run(cmd).returncode
         else:
+            cf_bin = find_tool("cf")
+            if cf_bin:
+                cmd = [cf_bin, "tunnels"] + sys.argv[2:]
+                return subprocess.run(cmd).returncode
             print("[DSHA-CF] cloudflared.exe not found in standard paths.")
             print("[DSHA-CF] To run tunnels: winget install --id Cloudflare.cloudflared or download cloudflared.exe", file=sys.stderr)
             return 1
