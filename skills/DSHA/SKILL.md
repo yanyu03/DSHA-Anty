@@ -205,27 +205,27 @@ powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.gemini\config\agy-me
 
 ---
 
-## TeacherYang 编程思维与工程辅助模式 (TeacherYang Mindset)
+## Programer 编程思维与工程辅助模式 (Programer Mindset)
 
-DSHA 家族第四位成员：蒸馏自 U 盘《杨老师代码课程全集（Python 高级编程、多任务与 Linux 体系）》的系统级编程思维规范与工程辅助导师。
+DSHA 家族第四位成员：蒸馏自资深系统级工程师与导师脱敏课程体系的系统级编程思维规范与工程辅助导师。
 
 ### 核心五大支柱：
 1. **系统底层穿透律**：跨平台绝对锚定，UTF-8 BOM vs 无 BOM 物理隔离，Job Object 与 DWM 穿透；
 2. **防御性契约与生命周期**：严格 `with` 上下文回收，字典 `.get()` 兜底，杜绝可变默认形参；
 3. **并发安全与锁纪律**：I/O 密集用守护线程，独立 UI 跨进程隔离，共享状态互斥锁 (`Lock`) 保护；
 4. **高内聚与无侵入切面**：AOP 钩子横切接入，保持核心业务纯粹，模块自带 `__main__` 自检；
-5. **精炼范式与量化实证**：完美契合 DSHA L1-L9 工程锁，三件套交付（报告 + 指令 + 回滚）。
+5. **精炼范式与量化实证**：契合 DSHA L1-L9 工程锁，三件套交付（报告 + 指令 + 回滚）。
 
 详情参考：
-- 完整蒸馏报告：`docs/TEACHER_YANG_DISTILLATION.md`
-- 架构思维规范：`docs/TEACHER_YANG_MINDSET.md`
-- 技能实践速查：`skills/DSHA/teacher-yang.md`
+- 完整蒸馏报告：`docs/PROGRAMER_DISTILLATION.md`
+- 架构思维规范：`docs/PROGRAMER_MINDSET.md`
+- 技能实践速查：`skills/DSHA/programer.md`
 
 ---
 
 ## REA 逆向工程与证据抽取工具集 (Reverse Engineer Anything)
 
-DSHA 家族第五位成员：引入自开源 `morluto/rea` 并在本地就地执行的逆向工程工具集。具备零依赖静态提取能力与 150+ 项指令，以杨老师风味 Python 驱动器保障底层稳定与防御性降级。
+DSHA 家族第五位成员：引入自开源 `morluto/rea` 并在本地就地执行的逆向工程工具集。具备零依赖静态提取能力与 150+ 项指令，以 Programer 风味 Python 驱动器保障底层稳定与防御性降级。
 
 ### 核心功能与就地调用
 - **运行时环境自检**：
@@ -249,7 +249,7 @@ DSHA 家族第五位成员：引入自开源 `morluto/rea` 并在本地就地执
   rea mcp
   ```
 
-> **杨老师避坑指引**：即使系统未安装 Ghidra、Hopper 或 IDA，驱动器也会自动安全降级至纯静态提取模式（支持 ASAR 解包、JS 依赖提取、PE 节表与 APK 资源分析），杜绝抛出致命崩溃。
+> **Programer 避坑指引**：即使系统未安装 Ghidra、Hopper 或 IDA，驱动器也会自动安全降级至纯静态提取模式（支持 ASAR 解包、JS 依赖提取、PE 节表与 APK 资源分析），杜绝抛出致命崩溃。
 
 ---
 

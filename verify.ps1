@@ -247,8 +247,8 @@ Check "仓库内 index.py / router.py 无重复副本" ((-not (Test-Path $dupInd
 
 Check "存在 VERSION_SCHEME.md" (Test-Path (Join-Path $repoRoot 'VERSION_SCHEME.md')) '' 'existence'
 
-# 硬编码盘符路径扫描（白名单须显式列明，不做模糊豁免）
-$allowPrefixes = @('docs\teacher_yang_corpus\', 'docs\TEACHER_YANG_DISTILLATION.md')
+# 硬编码盘符路径扫描（公开版本已彻底脱敏，零白名单豁免）
+$allowPrefixes = @()
 $scanTargets = @()
 foreach ($rel in @('docs','chatgpt')) {
   $sp = Join-Path $repoRoot $rel
@@ -269,7 +269,7 @@ $badPaths = @($scanTargets | Where-Object {
   foreach ($a in $allowPrefixes) { if ($rel.StartsWith($a)) { return $false } }
   (Select-String -Path $_.FullName -Pattern 'C:\\Users\\|[A-Za-z]:\\' -Quiet)
 })
-Check "第一方文件无硬编码盘符路径" ($badPaths.Count -eq 0) ("命中 {0} 个文件（白名单：OCR 语料 / 资料出处）" -f $badPaths.Count) 'contract'
+Check "第一方文件无硬编码盘符路径" ($badPaths.Count -eq 0) ("命中 {0} 个文件（公开版本零白名单豁免）" -f $badPaths.Count) 'contract'
 
 $claimFiles = @((Join-Path $repoRoot 'README.md'), (Join-Path $repoRoot 'CHANGELOG.md'))
 $badClaims = @($claimFiles | Where-Object { (Test-Path $_) -and (Select-String -Path $_ -Pattern '准确率\s*100%|零缺陷' -Quiet) })

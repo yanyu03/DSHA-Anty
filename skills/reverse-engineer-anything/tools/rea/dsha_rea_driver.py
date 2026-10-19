@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-DSHA-REA Driver (杨老师风味系统级逆向工具驱动器)
-贯彻 TeacherYang 五大支柱：
+DSHA-REA Driver (Programer 风味系统级逆向工具驱动器)
+贯彻 Programer 五大支柱：
  1. 系统底层穿透律：自动探测 Node.js、规范化跨平台路径、解决 Windows 编码与引号转义。
  2. 防御性契约与生命周期：入参前置校验、目标存在性检查、缺少 Native 引擎时安全降级不崩溃。
  3. 并发安全与超时纪律：带超时保护的隔离子进程，杜绝反编译死循环锁死终端。
@@ -44,7 +44,7 @@ def find_node():
 def preflight_check(args):
     """防御性契约：参数语义前置检查与避坑警示"""
     if not os.path.isfile(REA_MJS):
-        print(f"[杨老师避坑警示] 找不到 REA 运行时入口: {REA_MJS}", file=sys.stderr)
+        print(f"[Programer 避坑警示] 找不到 REA 运行时入口: {REA_MJS}", file=sys.stderr)
         print("请确认 skills/reverse-engineer-anything/tools/rea 完整性。", file=sys.stderr)
         return False
 
@@ -54,7 +54,7 @@ def preflight_check(args):
         # 跳过子命令名（如 doctor, mcp, setup）
         subcommands = {"doctor", "setup", "mcp", "providers", "completions", "uninstall", "update"}
         if target_path not in subcommands and not os.path.exists(target_path):
-            print(f"[杨老师防御防线] 目标路径不存在: {target_path}", file=sys.stderr)
+            print(f"[Programer 防御防线] 目标路径不存在: {target_path}", file=sys.stderr)
             print("请检查绝对路径或拼写，避免空指针与无效分析调用。", file=sys.stderr)
             return False
 
@@ -62,7 +62,7 @@ def preflight_check(args):
 
 def run_self_test(node_bin):
     """量化实证：自检套件"""
-    print("=== DSHA-REA 杨老师风味运行时自检 ===")
+    print("=== DSHA-REA Programer 风味运行时自检 ===")
     print(f"1. Node.js 解释器: [PASS] {node_bin}")
     
     # 获取 REA 版本
@@ -95,7 +95,7 @@ def main():
 
     node_bin = find_node()
     if not node_bin:
-        print("[杨老师系统底层穿透] ❌ 找不到可用的 Node.js 解释器。", file=sys.stderr)
+        print("[Programer 系统底层穿透] ❌ 找不到可用的 Node.js 解释器。", file=sys.stderr)
         print("建议安装 Node.js LTS (https://nodejs.org) 并加入系统 PATH。", file=sys.stderr)
         sys.exit(1)
 
@@ -116,13 +116,13 @@ def main():
         )
         sys.exit(proc.returncode)
     except subprocess.TimeoutExpired:
-        print(f"\n[杨老师超时断开] 任务执行超过 {timeout_sec} 秒，已安全截断以防终端假死。", file=sys.stderr)
+        print(f"\n[Programer 超时断开] 任务执行超过 {timeout_sec} 秒，已安全截断以防终端假死。", file=sys.stderr)
         sys.exit(124)
     except KeyboardInterrupt:
         print("\n[用户中断] 任务已平稳退出。", file=sys.stderr)
         sys.exit(130)
     except Exception as e:
-        print(f"\n[杨老师防御捕获] 异常: {e}", file=sys.stderr)
+        print(f"\n[Programer 防御捕获] 异常: {e}", file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":

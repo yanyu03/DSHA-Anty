@@ -1,7 +1,7 @@
-# DSHA 体系 · 杨老师风格系统级编程思维规范
-# (TeacherYang Systems Programming Mindset for DSHA)
+# DSHA 体系 · Programer 风格系统级编程思维规范
+# (Programer Systems Programming Mindset for DSHA)
 
-> **思想渊源**：汲取自 U 盘《杨老师代码课程全集（Python 高级编程、系统多任务与 Linux 体系）》核心精髓。  
+> **思想渊源**：汲取自资深系统级工程师与导师课程体系（Python 高级编程、系统多任务与 Linux/Windows 体系）核心精髓。  
 > **核心宗旨**：**去粗取精，剔除排版与口语杂音，直击底层概念、代码范式与避坑防线；自底向上看透系统本质，以防御性契约保障工程健壮，以并发锁纪律榨干系统效能。**
 
 ---
@@ -10,7 +10,7 @@
 
 ```mermaid
 graph TD
-    A["杨老师系统级编程思维<br>(TeacherYang Mindset)"] --> B["第一支柱：系统底层穿透律<br>Linux 树 / 进程物理隔离 / 编码字节流"]
+    A["Programer 系统级编程思维<br>(Programer Mindset)"] --> B["第一支柱：系统底层穿透律<br>Linux 树 / 进程物理隔离 / 编码字节流"]
     A --> C["第二支柱：防御性契约与生命周期<br>with 上下文 / 默认参数避坑 / 资源回收"]
     A --> D["第三支柱：并发选型与锁纪律<br>GIL 判定 / Lock 互斥 / I/O与CPU任务解耦"]
     A --> E["第四支柱：高内聚与切面增强<br>闭包三要素 / 装饰器 AOP / 显式命名空间"]
@@ -78,7 +78,7 @@ graph TD
 
 ### 1. 无侵入切面思维 (AOP)
 - DSHA 体系的门禁拦截（`gate.py`）与工程质检（`englock.py`）正是此思维的工业级体现：
-  - 不篡改 Anty 原生工具执行核心，而是在执行前后织入切面；
+  - 不篡改原生工具执行核心，而是在执行前后织入切面；
   - 遵循通用闭包设计模式，利用 `@functools.wraps` 保留被修饰对象的原始元数据（`__name__`, docstring）。
 
 ### 2. 模块与包的纯粹性

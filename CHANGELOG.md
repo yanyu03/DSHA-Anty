@@ -38,10 +38,10 @@
 - **品牌全面更名为 DSHA-SharBoy**：GitHub 开源仓库同步更新为 [https://github.com/yanyu03/DSHA-SharBoy](https://github.com/yanyu03/DSHA-SharBoy)。
 - **分享至 ChatGPT 桌面客户端**：新增 `chatgpt/SHARBOY_PROMPT.md` 与桌面直接可用的 `DSHA-SharBoy_ChatGPT提示词.txt`，一键注入 Custom Instructions。
 - **MCP (Model Context Protocol) 工具支持**：新增 `chatgpt/mcp_config.json`，支持外部客户端挂载本地 REA 静态逆向引擎。
-- **杨老师 13 章 10,211 行笔记全量入库**：收录 `docs/teacher_yang_corpus/1_Python笔记_全集.md`，蒸馏报告升级至 v2.2（264,700+ 字符语料）。
+- **Programer 13 章 10,211 行笔记脱敏蒸馏**：蒸馏报告升级至 v2.2（264,700+ 字符语料认知沉淀，公开版本仅保留脱敏提纯成果）。
 
 ## v2.0.0 — 2026-10-18
-**DSHA-Anty 家族全功能矩阵成型（四位一体：Gate + EngLock + Meter + TeacherYang Mindset）**
+**DSHA-Anty 家族全功能矩阵成型（四位一体：Gate + EngLock + Meter + Programer Mindset）**
 
 **1. DSHA-Meter（额度与 Token 监视器）**
 - **5H / 7D 双重配额与单轮上下文追踪**：解析 Antigravity 本地 JSONL 事务日志，计算 5H（200次/100万 tok）与 7D（1500次/1000万 tok）滚动水位。
@@ -50,11 +50,11 @@
 - **高内聚多进程并发架构**：GUI 独占主线程，后台守护线程 2s 轮询，跨线程共享缓存严格使用 `threading.Lock()` 互斥保护。
 - **控制器脚本 `agy-meter.ps1`**：提供 `-Start` / `-Stop` / `-Restart` / `-Status` 标准幂等运维界面，脱壳常驻桌面。
 
-**2. TeacherYang 系统级编程思维与工程导师模式 (TeacherYang Mindset)**
-- **U 盘课件深度语料蒸馏**：提取自 14 门 PPTX、980+ 幻灯片、17,600+ 文本词条（Linux、数据容器、闭包装饰器、文件 I/O、异常、面向对象、进程、线程、Socket、标准库、正则）。
+**2. Programer 系统级编程思维与工程导师模式 (Programer Mindset)**
+- **系统级课件深度语料蒸馏**：提取自 14 门系统级架构 PPT、980+ 幻灯片、17,600+ 文本词条（Linux、数据容器、闭包装饰器、文件 I/O、异常、面向对象、进程、线程、Socket、标准库、正则）。
 - **五步启发认知脚手架**：痛点启发 (Socratic Inquiry) -> 本质穿透 -> 步骤拆解 -> 避坑防线 (110+ 处陷阱预警) -> 运行实证。
 - **系统级五大支柱确立**：系统底层穿透律、防御性契约与生命周期、并发选型与锁纪律、高内聚与无侵入切面、精炼范式与量化实证。
-- **完整工程产物与导师提示词**：新增 `docs/TEACHER_YANG_DISTILLATION.md`、`docs/TEACHER_YANG_MINDSET.md` 与 Agent 指南 `skills/DSHA/teacher-yang.md`。
+- **完整工程产物与导师提示词**：新增 `docs/PROGRAMER_DISTILLATION.md`、`docs/PROGRAMER_MINDSET.md` 与 Agent 指南 `skills/DSHA/programer.md`。
 
 **3. 开源与隐私安全加固**
 - **个人路径彻底脱敏**：消除所有硬编码 `Users/admin` 路径，采用 `$env:USERPROFILE` 动态解析与自适应 Python/Pythonw 探测。
@@ -64,7 +64,7 @@
 **4. REA 逆向工程与证据抽取工具集就地调用 (Reverse Engineer Anything)**
 - **代码库就地引入**：引入 `morluto/rea` 核心静态分析与 MCP 引擎，作为 Skill 专属工具集常驻 `skills/reverse-engineer-anything/tools/rea/`。
 - **150+ 逆向分析指令**：涵盖 JavaScript / Electron ASAR 解包与语义追踪、PE / ELF / Mach-O 节表与哈希证据图、Android APK 资源清单及 SQLite 分析。
-- **杨老师风味 Python 驱动器 (`dsha_rea_driver.py`)**：底层自适应探测 Node.js；目标存在性前置断言；缺少 Ghidra/Hopper 时自动安全降级至纯静态提取；180s 超时隔离，永不假死。
+- **Programer 风味 Python 驱动器 (`dsha_rea_driver.py`)**：底层自适应探测 Node.js；目标存在性前置断言；缺少 Ghidra/Hopper 时自动安全降级至纯静态提取；180s 超时隔离，永不假死。
 - **全局与就地双通道调用**：支持 `rea.cmd <command>`、`rea --self-test` 与 MCP stdio 服务就地唤起。
 
 **5. 合规防咬人 Shell 环境 (No Parenthesis Biting)**
@@ -76,7 +76,7 @@
 **6. 专用 Pwsh 运行时环境（彻底摆脱 Windows 原厂 PowerShell 5.1）**
 - **原生 PowerShell 7.6 独立运行时**：集成自包含 .NET Core 运行时，彻底解决 Windows 原厂 PowerShell 5.1 内置别名冲突（`curl`、`wget`、`R`）、GBK 编码破坏、管道括号咬人等顽疾。
 - **零圆括号与加固启动器 (`pwsh.cmd` / `dsha-pwsh.cmd`)**：提供无括号块语法转发与 `-NoProfile -ExecutionPolicy Bypass` 预置安全调用。
-- **自举式镜像拉取脚本 (`scripts/fetch-pwsh.ps1`)**：基于杨老师底层穿透原则，支持 npmmirror/npmjs 多通道秒级自举与无污染安装。
+- **自举式镜像拉取脚本 (`scripts/fetch-pwsh.ps1`)**：基于 Programer 底层穿透原则，支持 npmmirror/npmjs 多通道秒级自举与无污染安装。
 - **安装器与体检流水线升级**：`install.ps1` 自动分发与注册 User PATH；`verify.ps1` 新增 Section 9 专用体检，39 项检查全通过。
 
 ## v1.0.0 — 2026-10-05

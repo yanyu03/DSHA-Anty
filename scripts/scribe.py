@@ -374,7 +374,7 @@ def generate_dossier(data, issue_query=None):
     else:
         dossier_lines.append("1. **基线验证**：核心测试套件已在最近运行中保持通过，重点审查新增业务逻辑的边界输入；")
     dossier_lines.append("2. **权限与命令规范**：在 PowerShell 7 专用运行时中复现命令，避免 PowerShell 5.1 括号与重定向歧义；")
-    dossier_lines.append("3. **杨老师思维审视**：核查涉及资源申请的地方是否已完全纳入上下文管理器 (`with`) 成对闭环管理。")
+    dossier_lines.append("3. **Programer 思维审视**：核查涉及资源申请的地方是否已完全纳入上下文管理器 (`with`) 成对闭环管理。")
     dossier_lines.append("")
 
     return "\n".join(dossier_lines)
