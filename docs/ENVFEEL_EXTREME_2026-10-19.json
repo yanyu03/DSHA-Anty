@@ -1,0 +1,109 @@
+{
+  "schema": 1,
+  "date": "2026-10-19",
+  "baseline_source": "5bfdbc7ed3253ec95d092503b0263dae9d8defab",
+  "baseline": {
+    "tests": 17,
+    "pass": 9,
+    "fail": 7,
+    "skipped": 1
+  },
+  "after_initial_fixes": {
+    "tests": 20,
+    "pass": 19,
+    "fail": 1,
+    "skipped": 0,
+    "remaining_issue": "MSVC linker/SDK unavailable in stripped Rust environment"
+  },
+  "final": {
+    "tests": 20,
+    "pass": 20,
+    "fail": 0,
+    "skipped": 0
+  },
+  "existing_regression_pass": 52,
+  "combined_pass": 72,
+  "cases": [
+    {
+      "id": "test_absent_home_cannot_borrow_parent_rust_location",
+      "result": "PASS"
+    },
+    {
+      "id": "test_bootstrap_python_with_no_home_path_or_sdk",
+      "result": "PASS"
+    },
+    {
+      "id": "test_corrupted_executable_is_refused",
+      "result": "PASS"
+    },
+    {
+      "id": "test_counterfeit_static_version_and_health_is_refused",
+      "result": "PASS"
+    },
+    {
+      "id": "test_directory_is_not_executable",
+      "result": "PASS"
+    },
+    {
+      "id": "test_env_file_does_not_execute_shell_content",
+      "result": "PASS"
+    },
+    {
+      "id": "test_explicit_env_file_without_home",
+      "result": "PASS"
+    },
+    {
+      "id": "test_explicit_tools_survive_empty_environment_and_foreign_cwd",
+      "result": "PASS"
+    },
+    {
+      "id": "test_failed_native_architecture_query_refuses_without_environment_fallback",
+      "result": "PASS"
+    },
+    {
+      "id": "test_invalid_environment_never_falls_back_to_real_path_tool",
+      "result": "PASS"
+    },
+    {
+      "id": "test_java_sdk_only_without_home",
+      "result": "PASS"
+    },
+    {
+      "id": "test_msvc_sdk_only_without_home",
+      "result": "PASS"
+    },
+    {
+      "id": "test_native_architecture_ignores_environment_when_wmi_unavailable",
+      "result": "PASS"
+    },
+    {
+      "id": "test_parameter_overrides_invalid_environment",
+      "result": "PASS"
+    },
+    {
+      "id": "test_poisoned_path_static_counterfeit_is_refused",
+      "result": "PASS"
+    },
+    {
+      "id": "test_real_hanging_probe_is_bounded",
+      "result": "PASS"
+    },
+    {
+      "id": "test_rust_sdk_only_without_home",
+      "result": "PASS"
+    },
+    {
+      "id": "test_spaces_unicode_in_real_executable_location",
+      "result": "PASS"
+    },
+    {
+      "id": "test_standard_install_root_case_insensitive_without_home",
+      "result": "PASS"
+    },
+    {
+      "id": "test_temporary_storage_failure_cannot_launch_task",
+      "result": "PASS"
+    }
+  ],
+  "scope": "Windows x64; WMI/native query/storage faults include explicit simulation; no arbitrary OS guarantee"
+}

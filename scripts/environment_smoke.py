@@ -6,11 +6,12 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import shutil
 import subprocess
 import tempfile
 
-from dsha_env import find_binary
+from dsha_env import find_binary, machine_environment
 
 TOOLS = {name: ['--version'] for name in (
     'python', 'node', 'npm', 'npx', 'git', 'gh', 'pwsh', 'bash', 'sh',
@@ -60,7 +61,8 @@ def version_probe(name, executable, environ=None):
 def command_ok(command, cwd, marker=False, environ=None):
     result = subprocess.run(command, cwd=cwd, capture_output=True,
                             encoding='utf-8', errors='replace', timeout=45, env=environ)
-    return result.returncode == 0 and (not marker or result.stdout.strip() == 'DSHA_SMOKE_OK')
+    expected = 'DSHA_SMOKE_OK' if marker is True else marker
+    return result.returncode == 0 and (not marker or result.stdout.strip() == expected)
 
 
 def fixture_probe(name, executables, environ=None):
@@ -70,31 +72,45 @@ def fixture_probe(name, executables, environ=None):
         with tempfile.TemporaryDirectory(prefix='dsha smoke ') as folder:
             root = Path(folder)
             executable = executables[name]
+            nonce = secrets.token_hex(16)
+            left, right = secrets.randbelow(9000) + 1000, secrets.randbelow(9000) + 1000
+            prefix = 'DSHA_SMOKE_' + nonce + '_'
+            expected = prefix + str(left * right)
             if name == 'python':
-                passed = command_ok([executable, '-c', "print('DSHA_SMOKE_OK')"], root, True, environ)
+                program = f'print({prefix!r} + str({left} * {right}))'
+                passed = command_ok([executable, '-c', program], root, expected, environ)
             elif name == 'node':
-                passed = command_ok([executable, '-e', "console.log('DSHA_SMOKE_OK')"], root, True, environ)
+                program = f'console.log({prefix!r} + ({left} * {right}))'
+                passed = command_ok([executable, '-e', program], root, expected, environ)
             elif name == 'rustc':
                 source = root / 'main.rs'
-                source.write_text('fn main() { println!("DSHA_SMOKE_OK"); }', encoding='utf-8')
+                source.write_text(f'fn main() {{ println!("{prefix}{{}}", {left} * {right}); }}', encoding='utf-8')
                 binary = root / ('smoke.exe' if os.name == 'nt' else 'smoke')
-                passed = command_ok([executable, str(source), '-o', str(binary)], root, environ=environ) and command_ok([str(binary)], root, True, environ)
+                passed = command_ok([executable, str(source), '-o', str(binary)], root, environ=environ) and command_ok([str(binary)], root, expected, environ)
             elif name == 'java':
                 if not executables.get('javac'):
                     return {'status': 'NOT_RUN', 'reason': 'javac not discovered'}
                 source = root / 'DshaSmoke.java'
-                source.write_text('class DshaSmoke { public static void main(String[] args) { System.out.println("DSHA_SMOKE_OK"); } }', encoding='utf-8')
-                passed = command_ok([executables['javac'], str(source)], root, environ=environ) and command_ok([executable, '-cp', str(root), 'DshaSmoke'], root, True, environ)
+                source.write_text(f'class DshaSmoke {{ public static void main(String[] args) {{ System.out.println("{prefix}" + ({left} * {right})); }} }}', encoding='utf-8')
+                passed = command_ok([executables['javac'], str(source)], root, environ=environ) and command_ok([executable, '-cp', str(root), 'DshaSmoke'], root, expected, environ)
             elif name == 'cl':
                 source = root / 'smoke.c'
-                source.write_text('int dsha_smoke(void) { return 0; }', encoding='utf-8')
+                source.write_text(f'int dsha_smoke_{nonce}(void) {{ return {left} * {right}; }}', encoding='utf-8')
                 obj = root / 'smoke.obj'
                 passed = command_ok([executable, '/nologo', '/c', str(source), '/Fo' + str(obj)], root, environ=environ) and obj.is_file()
+                if passed:
+                    import struct
+                    with obj.open('rb') as stream:
+                        header = stream.read(20)
+                    machine, sections = struct.unpack('<HH', header[:4]) if len(header) == 20 else (0, 0)
+                    passed = machine in (0x8664, 0x14c, 0xAA64) and sections > 0 and obj.stat().st_size >= 20 + sections * 40
                 return {'status': 'PASS' if passed else 'FAIL', 'sample': 'owned C file compiled to object; link NOT_RUN'}
             elif name == 'pwsh':
-                passed = command_ok([executable, '-NoProfile', '-NonInteractive', '-Command', 'Write-Output DSHA_SMOKE_OK'], root, True, environ)
+                program = f"Write-Output ('{prefix}' + ({left} * {right}))"
+                passed = command_ok([executable, '-NoProfile', '-NonInteractive', '-Command', program], root, expected, environ)
             elif name in ('bash', 'sh'):
-                passed = command_ok([executable, '-c', "printf '%s\\n' DSHA_SMOKE_OK"], root, True, environ)
+                program = f"printf '%s%s\\n' '{prefix}' $(({left} * {right}))"
+                passed = command_ok([executable, '-c', program], root, expected, environ)
             else:
                 return {'status': 'NOT_RUN', 'reason': 'no fixture defined'}
             return {'status': 'PASS' if passed else 'FAIL', 'sample': 'owned minimal program'}
@@ -106,7 +122,8 @@ def discover_visual_studio(environ=None):
     env = os.environ if environ is None else environ
     if env.get('VSINSTALLDIR'):
         return 'environment'
-    program_files = env.get('ProgramFiles(x86)')
+    discovery_env = machine_environment(env)
+    program_files = discovery_env.get('PROGRAMFILES(X86)' if os.name == 'nt' else 'ProgramFiles(x86)')
     if not program_files:
         return 'NOT_DISCOVERED'
     helper = Path(program_files) / 'Microsoft Visual Studio/Installer/vswhere.exe'
@@ -115,14 +132,64 @@ def discover_visual_studio(environ=None):
     try:
         result = subprocess.run([str(helper), '-latest', '-products', '*', '-requires',
                                  'Microsoft.VisualStudio.Component.VC.Tools.x86.x64', '-property', 'installationPath'],
-                                capture_output=True, encoding='utf-8', errors='replace', timeout=10, env=env)
+                                capture_output=True, encoding='utf-8', errors='replace', timeout=10, env=discovery_env)
         root = result.stdout.strip()
         if result.returncode == 0 and root and Path(root).is_dir():
+            if environ is not None:
+                env.update(discovery_env)
             env['VSINSTALLDIR'] = root
             return 'vswhere'
     except (OSError, subprocess.TimeoutExpired):
         pass
     return 'NOT_DISCOVERED'
+
+
+def activate_msvc_sdk(environ, target='x64', host='x64'):
+    """Import selected installed SDK variables from an owned child cmd session."""
+    if os.name != 'nt' or target not in ('x64', 'x86', 'arm64') or host not in ('x64', 'x86', 'arm64'):
+        return {'status': 'FAIL', 'reason': 'unsupported SDK activation profile'}
+    root = environ.get('VSINSTALLDIR')
+    system = environ.get('SYSTEMROOT') or environ.get('WINDIR')
+    if not root or not system:
+        return {'status': 'FAIL', 'reason': 'installed SDK or system command runtime not located'}
+    script = Path(root) / 'Common7/Tools/VsDevCmd.bat'
+    vc_script = Path(root) / 'Common7/Tools/vsdevcmd/ext/vcvars.bat'
+    command = Path(system) / 'System32/cmd.exe'
+    if not script.is_file() or not vc_script.is_file() or not command.is_file():
+        return {'status': 'FAIL', 'reason': 'SDK activation entry missing'}
+    if any(character in str(script) + str(command) for character in ('"', '%', '!', '&', '|', '<', '>', '^', '\r', '\n')):
+        return {'status': 'FAIL', 'reason': 'unsupported SDK command path syntax'}
+    try:
+        # Only core SDK + VC are required; unrelated optional VS extensions can fail.
+        invocation = f'call "{script}" -no_logo -no_ext -arch={target} -host_arch={host} >nul && call "{vc_script}" >nul && set'
+        command_env = dict(environ)
+        command_env['VSINSTALLDIR'] = str(Path(root)) + os.sep
+        system_root = Path(system)
+        bootstrap = [system_root / 'System32', system_root, system_root / 'System32/Wbem',
+                     system_root / 'System32/WindowsPowerShell/v1.0']
+        command_env['PATH'] = os.pathsep.join([str(path) for path in bootstrap if path.is_dir()] + [environ.get('PATH', '')])
+        # cmd uses its own quoting grammar; list2cmdline's backslash quotes are wrong here.
+        command_line = f'"{command}" /d /u /s /c "{invocation}"'
+        result = subprocess.run(command_line,
+                                env=command_env, capture_output=True, encoding='utf-16le', errors='replace', timeout=20)
+        if result.returncode:
+            return {'status': 'FAIL', 'reason': 'SDK activation command failed', 'exit_code': result.returncode}
+        allowed = {'PATH', 'INCLUDE', 'LIB', 'LIBPATH', 'VCTOOLSINSTALLDIR', 'WINDOWSSDKDIR',
+                   'WINDOWSSDKVERSION', 'UNIVERSALCRTSDKDIR', 'UCRTVERSION'}
+        selected = {}
+        for line in result.stdout.splitlines():
+            key, separator, value = line.partition('=')
+            if separator and key.upper() in allowed:
+                selected[key.upper()] = value
+        if not all(selected.get(name) for name in ('PATH', 'INCLUDE', 'LIB')):
+            return {'status': 'FAIL', 'reason': 'SDK activation incomplete'}
+        linker = shutil.which('link.exe', path=selected['PATH'])
+        if not linker or not Path(linker).resolve().is_relative_to(Path(root).resolve()):
+            return {'status': 'FAIL', 'reason': 'SDK linker identity/location not established'}
+        environ.update(selected)
+        return {'status': 'PASS', 'scope': 'child mapping only', 'variable_names': sorted(selected), 'linker_located': True}
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return {'status': 'FAIL', 'error': type(error).__name__}
 
 
 def inventory(names, overrides, smoke=False):

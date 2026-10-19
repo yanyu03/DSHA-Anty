@@ -27,7 +27,7 @@ class EnvFeelTests(unittest.TestCase):
             run.assert_not_called()
 
     def test_unknown_architecture_blocks_before_any_command(self):
-        with patch.object(envfeel.platform, 'machine', return_value='unknown-cpu'), patch.object(envfeel.subprocess, 'run') as run:
+        with patch.object(envfeel, 'detect_architecture', return_value=('unknown-cpu', 'simulated')), patch.object(envfeel.subprocess, 'run') as run:
             self.assertEqual(envfeel.EnvFeel(['python']).check()['status'], 'REFUSED')
             run.assert_not_called()
 

@@ -3,15 +3,37 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import struct
 import subprocess
 
-from dsha_env import find_binary
+from dsha_env import find_binary, normalize_environment, machine_environment
+
+
+def detect_architecture():
+    if os.name != 'nt':
+        return os.uname().machine.lower(), 'uname'
+    # Avoid platform.machine()'s Windows environment fallback when WMI fails.
+    try:
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        current = kernel.GetCurrentProcess
+        current.argtypes, current.restype = [], wintypes.HANDLE
+        query = kernel.IsWow64Process2
+        query.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.WORD), ctypes.POINTER(wintypes.WORD)]
+        query.restype = wintypes.BOOL
+        process, native = wintypes.WORD(), wintypes.WORD()
+        if query(current(), ctypes.byref(process), ctypes.byref(native)):
+            return {0x8664: 'amd64', 0xAA64: 'arm64', 0x14c: 'x86'}.get(native.value, 'unrecognized'), 'windows-native-api'
+    except (OSError, AttributeError):
+        pass
+    return 'unrecognized', 'native-query-unavailable'
 
 
 def runtime_context():
     system = platform.system()
-    machine = platform.machine().lower()
+    machine, architecture_source = detect_architecture()
     families = {'Windows': 'nt', 'Linux': 'posix', 'Darwin': 'posix'}
     architectures = {'amd64': 'x86_64', 'x86_64': 'x86_64', 'arm64': 'arm64',
                      'aarch64': 'arm64', 'x86': 'x86', 'i386': 'x86', 'i686': 'x86'}
@@ -19,6 +41,7 @@ def runtime_context():
     return {'status': 'PASS' if supported else 'REFUSED',
             'os': system if system in families else 'unrecognized',
             'architecture_reported': architectures.get(machine, 'unrecognized'),
+            'architecture_source': architecture_source,
             'process_bits': struct.calcsize('P') * 8,
             'scope': 'runtime-reported facts, not hardware attestation',
             'reason': None if supported else 'unsupported runtime OS/architecture combination'}
@@ -26,7 +49,7 @@ def runtime_context():
 
 def activate_environment(executables, environ=None):
     """Prepare a private mapping; never mutate caller/system environment."""
-    result = dict(os.environ if environ is None else environ)
+    result = normalize_environment(environ)
     directories = []
     for name, executable in executables.items():
         path = Path(executable).resolve(strict=True)
@@ -62,7 +85,7 @@ class EnvFeel:
             return {'status': 'REFUSED', 'error': type(error).__name__, 'task': {'status': 'NOT_RUN'}}
 
     def _check(self):
-        from environment_smoke import TOOLS, apply_env_file, discover_visual_studio, version_probe, fixture_probe
+        from environment_smoke import TOOLS, apply_env_file, discover_visual_studio, version_probe, fixture_probe, activate_msvc_sdk
         context = runtime_context()
         report = {'status': 'REFUSED', 'context': context, 'tools': [], 'health': {}, 'task': {'status': 'NOT_RUN'}}
         self.executables = {}
@@ -72,7 +95,7 @@ class EnvFeel:
         if not self.required or any(name not in TOOLS for name in self.required) or any(name not in self.required for name in self.overrides):
             report['reason'] = 'undeclared or unsupported requirement'
             return report
-        env = self.base_env.copy()
+        env = machine_environment(self.base_env)
         report['env_file_applied_names'] = apply_env_file(self.env_file, env) if self.env_file else []
         report['visual_studio_discovery'] = discover_visual_studio(env) if set(self.required) & {'cl', 'cmake', 'msbuild', 'ninja'} else 'NOT_RUN'
         names = list(self.required)
@@ -102,6 +125,22 @@ class EnvFeel:
         if any(record['status'] != 'PASS' for record in report['tools']):
             report['reason'] = 'required tool launch/version/identity contract failed'
             return report
+        if os.name == 'nt' and 'rustc' in self.executables:
+            host_info = subprocess.run([self.executables['rustc'], '-vV'], env=self.environment,
+                                       capture_output=True, encoding='utf-8', errors='replace', timeout=10)
+            target = re.search(r'^host:\s*(\S+)', host_info.stdout, re.MULTILINE)
+            if host_info.returncode or not target:
+                report['reason'] = 'Rust host target contract unavailable'
+                return report
+            if target.group(1).endswith('-pc-windows-msvc'):
+                report['visual_studio_discovery'] = discover_visual_studio(self.environment)
+                profile = {'x86_64': 'x64', 'i686': 'x86', 'aarch64': 'arm64'}.get(target.group(1).split('-')[0])
+                host = {'x86_64': 'x64', 'x86': 'x86', 'arm64': 'arm64'}.get(context['architecture_reported'])
+                report['sdk_activation'] = activate_msvc_sdk(self.environment, profile, host)
+                if report['sdk_activation']['status'] != 'PASS':
+                    report['reason'] = 'required MSVC linker/SDK activation failed'
+                    return report
+                self.environment = activate_environment(self.executables, self.environment)
         for name in names:
             if name in ('python', 'node', 'rustc', 'java', 'cl', 'pwsh', 'bash', 'sh'):
                 report['health'][name] = fixture_probe(name, self.executables, self.environment)

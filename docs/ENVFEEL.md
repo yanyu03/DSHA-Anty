@@ -18,11 +18,17 @@ flowchart LR
 
 感知使用运行时报告的OS、架构和进程位数，不用OS环境变量冒充实际平台。当前规则覆盖Windows、Linux、Darwin与已列出的x86/x86_64/arm64名称；未知组合拒绝。真实跨平台运行仍需分别实测，规则存在不代表这些平台已验收。Python引导运行时本身必须已可执行；本模块不能在完全无法启动Python的OS上自举，也不是硬件身份认证。
 
+Windows架构现在使用原生IsWow64Process2查询，不使用WMI失败后的PROCESSOR_*环境回退。接口不可用或查询失败就拒绝，未给旧Windows添加猜测式回退；接口要求见[Microsoft说明](https://learn.microsoft.com/windows/win32/api/wow64apiset/nf-wow64apiset-iswow64process2)。Unix路径使用uname。Windows环境映射按键名大小写不敏感解析，冲突值拒绝。
+
 定位优先使用明确参数，再进程环境、指定环境文件和PATH/SDK位置。无效覆盖不得回退。所需路径固定为绝对路径，原始位置只写私有清单。
 
 激活仅构造当前调用的子进程环境：设置选中工具对应DSHA_*、前置工具目录至PATH，必要时设置JAVA_HOME与UTF-8输出。发现、自检及执行使用同一份环境；不改系统或用户环境、不修改注册表、不下载安装工具。环境文件不会执行或插值。
 
+HOME缺失时仅跳过依赖用户目录的候选，不阻断引导Python和明确SDK根，也不从父进程借用被省略的HOME。缺少Windows机器目录时可只读查询本机登记的ProgramFiles/ProgramData，受限展开已知SystemDrive字段；不展开任意命令。Rust MSVC目标还须定位并在子进程中初始化Windows SDK/VC链接环境，再做编译链接。初始化只加载所需核心SDK和VC脚本，合并PATH/INCLUDE/LIB等允许变量；不加载无关VS扩展，不改系统配置。
+
 执行前检查工具品牌、版本及已定义健康样本。Python/Node执行、Rust/Java编译运行、MSVC对象编译、PowerShell/Bash/Sh标记输出分别有自有样本。其他具备品牌版本契约的条目只证明该探测可运行，不证明项目、网络、服务端或账号已可用。仅有数字版本而没有充分身份契约的条目返回INSUFFICIENT_CONTRACT；盘点可记录，门禁不能据此放行。
+
+健康输出采用每次随机挑战及计算结果，拒绝只回显固定版本/固定标记的伪装程序；MSVC还检查生成对象的基本COFF结构。这是行为一致性检查，不是签名信任或完整工具身份认证，不能排除会模拟协议的恶意程序。极端工况前后对照见ENVFEEL_EXTREME_2026-10-19.md。
 
 每次execute重新检查。READY只表示本轮声明条件通过，不是可重放的通行证；检查失败时任务为NOT_RUN，退出126。任务自身失败则TASK_FAILED，不能伪报环境检查失败或任务成功。超时不是外部后代或远程操作已停止的证明。
 
