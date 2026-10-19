@@ -1,0 +1,211 @@
+{
+  "date": "2026-10-19",
+  "timezone": "Asia/Shanghai",
+  "tested_source_commit": "0e2c614d5e99107622e1b4e939c62d1f7dc36bb8",
+  "adapter_version": "2.5.0",
+  "platform": "Windows x64; firmware NOT_COLLECTED",
+  "python": "3.12.14",
+  "node": "24.14.1",
+  "packages": {
+    "typescript": "5.9.3",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "vue": "3.5.22",
+    "@vue/server-renderer": "3.5.22"
+  },
+  "unique_test_count": 94,
+  "unique_test_failed": 0,
+  "unique_test_skipped": 0,
+  "installed_repeated_test_count": 22,
+  "initial_failure": {
+    "tests": 18,
+    "passed": 16,
+    "failed": 2,
+    "sha256": "ea161c0a181809672d7248427ca5c4ce4eeba10fcbb4b376798e42798b3509b0",
+    "cause": "Vue renderer wrapper was mistaken for actual renderer package identity; preserved before correction"
+  },
+  "logs": [
+    {
+      "log": ".local/frontend-final.log",
+      "tests": 22,
+      "status": "PASS",
+      "sha256": "aa25a6dd12c3f85a4a3a12801f1decf30262880636da3ed6ef643d9eb22f5038"
+    },
+    {
+      "log": ".local/project-env-regressions.log",
+      "tests": 47,
+      "status": "PASS",
+      "sha256": "439f69ef3a8e98248ed0a9ca621895a232bc36192f508189bc52b98e02eefc3d"
+    },
+    {
+      "log": ".local/project-adapter-regressions.log",
+      "tests": 7,
+      "status": "PASS",
+      "sha256": "244847337772069bff2f162b294b4118fc3a863331d5df9bf763c742715af718"
+    },
+    {
+      "log": ".local/project-runtime-regressions.log",
+      "tests": 9,
+      "status": "PASS",
+      "sha256": "1ae661bcad94aa4cb983277fa24ed444a99c42bfc3445f44fd6915f7198276e3"
+    },
+    {
+      "log": ".local/project-config-regressions.log",
+      "tests": 9,
+      "status": "PASS",
+      "sha256": "3c8060178be32c6e40df47744cc6ad6712daad80019ce0ae252d6895be5fe700"
+    },
+    {
+      "log": ".local/frontend-installed.log",
+      "tests": 22,
+      "status": "PASS",
+      "sha256": "718c9af5515938ecd17efe0c2c4a29020ecbc9be789ea08fe79663b50aa268f9"
+    }
+  ],
+  "fixture_dependency_count": 27,
+  "fixture_lock_sha256": "1f502617779871aebf0b2a5a1ca4d38bb9cedcb5b470bab5df774bd5bdd7bea4",
+  "installed_positive": {
+    "status": "COMPLETE",
+    "context": {
+      "status": "PASS",
+      "os": "Windows",
+      "architecture_reported": "x86_64",
+      "architecture_source": "windows-native-api",
+      "process_bits": 64,
+      "scope": "runtime-reported facts, not hardware attestation",
+      "reason": null
+    },
+    "tools": [
+      {
+        "tool": "node",
+        "located": true,
+        "source": "parameter",
+        "status": "PASS",
+        "identity_check": "brand-and-version",
+        "version": "24.14.1",
+        "exit_code": 0
+      }
+    ],
+    "health": {
+      "node": {
+        "status": "PASS",
+        "sample": "owned minimal program"
+      }
+    },
+    "task": {
+      "status": "PASS",
+      "exit_code": 0
+    },
+    "env_file_applied_names": [],
+    "visual_studio_discovery": "NOT_RUN",
+    "activation": {
+      "status": "PREPARED",
+      "scope": "child mapping only",
+      "variable_names": [
+        "PATH",
+        "PYTHONUTF8",
+        "PYTHONIOENCODING",
+        "DSHA_NODE"
+      ]
+    },
+    "capabilities": [
+      {
+        "capability": "typescript",
+        "status": "PASS",
+        "version": "5.9.3",
+        "proof": "owned typed compile/reject/run",
+        "challenge_verified": true
+      },
+      {
+        "capability": "react",
+        "status": "PASS",
+        "version": "19.2.0",
+        "proof": "owned SSR sample",
+        "challenge_verified": true
+      },
+      {
+        "capability": "vue",
+        "status": "PASS",
+        "version": "3.5.22",
+        "proof": "owned SSR sample",
+        "challenge_verified": true
+      }
+    ],
+    "scope": "declared requirements only; version probes plus listed owned health checks"
+  },
+  "installed_negative": {
+    "status": "REFUSED",
+    "context": {
+      "status": "PASS",
+      "os": "Windows",
+      "architecture_reported": "x86_64",
+      "architecture_source": "windows-native-api",
+      "process_bits": 64,
+      "scope": "runtime-reported facts, not hardware attestation",
+      "reason": null
+    },
+    "tools": [
+      {
+        "tool": "node",
+        "located": true,
+        "source": "parameter",
+        "status": "PASS",
+        "identity_check": "brand-and-version",
+        "version": "24.14.1",
+        "exit_code": 0
+      }
+    ],
+    "health": {
+      "node": {
+        "status": "PASS",
+        "sample": "owned minimal program"
+      }
+    },
+    "task": {
+      "status": "NOT_RUN"
+    },
+    "env_file_applied_names": [],
+    "visual_studio_discovery": "NOT_RUN",
+    "activation": {
+      "status": "PREPARED",
+      "scope": "child mapping only",
+      "variable_names": [
+        "PATH",
+        "PYTHONUTF8",
+        "PYTHONIOENCODING",
+        "DSHA_NODE"
+      ]
+    },
+    "capabilities": [
+      {
+        "capability": "typescript",
+        "status": "FAIL",
+        "reason": "PACKAGE_NOT_FOUND"
+      },
+      {
+        "capability": "react",
+        "status": "FAIL",
+        "reason": "PACKAGE_NOT_FOUND"
+      },
+      {
+        "capability": "vue",
+        "status": "FAIL",
+        "reason": "PACKAGE_NOT_FOUND"
+      }
+    ],
+    "reason": "required project capability did not reply correctly"
+  },
+  "initial_install_source_files": 1873,
+  "client_registration_changed": false,
+  "limits": [
+    "Only this Windows host was run",
+    "Behavioral challenges are not malicious-package attestation or full project builds",
+    "Project-specific capabilities must be explicitly declared; Node-only success is not framework readiness"
+  ],
+  "code_sha256": {
+    "scripts/envfeel.py": "7b60a26745b2ed4bb72d53e825d3de4af12c169a1c1ae7b0b18329c9bfc74161",
+    "scripts/environment_smoke.py": "94b2bdf2bb9ac6e328d3106ea9213c335d84756ff3bc0c28d6031f7e9affb99e",
+    "scripts/project_probe.py": "c61d399b8cd369a479a94f15930d8e67f49c5178500e125c4e149f6c9d964696",
+    "scripts/frontend_probe.cjs": "cab2ee77a59545c04af01a357e7ff00db9b135b96326de27c41fd692f3dfd517"
+  }
+}
