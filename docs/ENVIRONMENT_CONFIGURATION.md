@@ -38,3 +38,20 @@ python scripts/render_mcp_config.py --node <解释器绝对路径> --rea-entry <
 回滚按提交撤回本轮改造；本机技能、host和源快照另有更新前备份。不用旧整份客户端配置覆盖后续无关改动。此次未运行真实Antigravity安装/重启、Meter GUI/HTTP端到端或Cloudflare账号操作；这些与解析、模板渲染和目录查询的通过结果分别记录。
 
 后续补审增加scripts/test_configuration_boundaries.py：私有host配置失败输出、权限配置拒绝、REA探测失败/超时/证据边界、URL凭据及用户目录脱敏、真实CMD的PATH发现与显式目录拒绝。CMD PowerShell/Bash/Sh按显式环境、PATH、安装位置依次解析，不再只依赖标准安装位置。REA自定义驱动仅报告版本探测是否完成，不发布原始版本stdout、宿主路径或“零崩溃”等未经验证结论；厂商分析命令原始输出仍需单独审查。
+
+## 开发环境发现与冒烟
+
+```text
+python <skill-dir>/scripts/dsha.py inventory --smoke --env-file <private.env> --private-output <inventory.local.json>
+python scripts/environment_smoke.py --tool node --binary node=<executable>
+```
+
+不提供--env-file也可使用进程环境及SDK发现；不会自动读取邻近.env。工具选择用重复--tool，默认27项；--binary可以重复。优先级为显式--binary、进程DSHA_*、指定环境文件，再PATH及环境派生SDK位置。无效显式覆盖拒绝，不回退。
+
+环境文件只接收KEY=VALUE、整行#注释及配对单/双引号。允许DSHA_<工具名>、JAVA_HOME、CARGO_HOME、RUSTUP_HOME、DOTNET_ROOT、ANDROID_SDK_ROOT、ANDROID_HOME、VSINSTALLDIR、VCToolsInstallDir。重复键、未知键和未闭合引号拒绝；不执行命令、不插值变量。配置路径使用绝对路径，引用已有工具也可使用PATH命令名。
+
+VSINSTALLDIR未配置时只通过标准安装位置的vswhere查询VC组件位置，在当前发现作用域内使用并恢复环境，不修改系统/用户环境或注册表。Rust从CARGO_HOME或用户标准目录发现，Java从JAVA_HOME，Android从SDK环境，CMake/Ninja/MSBuild/MSVC从已发现VS位置查找。缺少候选记NOT_DISCOVERED，不说未安装。
+
+--smoke对自制Python/Node程序做执行、Rust/Java程序做编译运行、C源码做MSVC对象编译；临时产物随作用域清理。C链接、.NET项目构建、Docker守护进程、云账号等未测。版本格式无法独立证明工具身份的条目标记version-format-only；其余检查品牌与版本。MSVC /Bv可能返回2，只有识别到编译器品牌和版本才接受该版本探测结果，真实编译另外记录。
+
+公开JSON不包含工具原始输出和真实路径；--private-output仅允许新的*.local.json并拒绝覆盖，保存本机解析位置供后续核对。清单是带日期的证据，后续使用前仍须复核，不能凭旧清单执行过期路径。不会下载安装工具。

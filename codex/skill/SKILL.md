@@ -22,6 +22,7 @@ Use the Python executable recorded in `host.json`, or a working Python 3.11+:
 
 ```powershell
 python <skill-dir>/scripts/dsha.py status
+python <skill-dir>/scripts/dsha.py inventory --smoke --env-file <private.env> --private-output <inventory.local.json>
 python <skill-dir>/scripts/dsha.py selftest
 python <skill-dir>/scripts/dsha.py englock status
 python <skill-dir>/scripts/dsha.py englock check <report.md>
@@ -29,6 +30,8 @@ python <skill-dir>/scripts/dsha.py rea doctor --format json
 python <skill-dir>/scripts/dsha.py catalog --json
 python <skill-dir>/scripts/dsha.py route "investigate a declared shipped binary" --json
 ```
+
+Inventory probes allowlisted development tools with parameters, process environment, an explicitly supplied environment file, PATH and SDK locations. It publishes versions/status only; resolved executable paths stay in the optional private inventory. Environment files accept documented KEY=VALUE entries without evaluation or interpolation. Missing discovery is not proof of absence, and version probes do not prove build readiness; owned fixture results are reported separately. A saved inventory is a dated hint, not permission or permanent readiness evidence.
 
 Prefer the configured `rea` MCP server and the tools it actually advertises. Verify `tools/list` rather than assuming historical `mcp__rea__*` names or provider readiness. A new registration may require a fresh client session. When tools are not yet exposed, the bundled `scripts/mcp_client.py` can keep one stdio MCP session alive through an interactive shell session; inspect its `--help` and use JSON tool calls. Avoid repeated CLI invocations for the same native target because each can import it again.
 

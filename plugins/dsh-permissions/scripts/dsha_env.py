@@ -41,11 +41,48 @@ def find_binary(name, explicit=None):
         'cf': [app / 'npm/cloudflare.cmd', app / 'npm/cf.cmd'],
         'cloudflared': [home / 'bin/cloudflared.exe', config_dir() / 'bin/cloudflared.exe'],
         'pwsh': [config_dir() / 'pwsh/pwsh.exe'],
+        'gh': [],
     }
+    cargo_home = optional_path('CARGO_HOME', home / '.cargo')
+    for tool in ('cargo', 'rustc', 'rustup'):
+        choices[tool] = [cargo_home / 'bin' / (tool + ('.exe' if os.name == 'nt' else ''))]
+    java_home = optional_path('JAVA_HOME')
+    if java_home:
+        for tool in ('java', 'javac'):
+            choices[tool] = [java_home / 'bin' / (tool + ('.exe' if os.name == 'nt' else ''))]
+    dotnet_root = optional_path('DOTNET_ROOT')
+    if dotnet_root:
+        choices['dotnet'] = [dotnet_root / ('dotnet.exe' if os.name == 'nt' else 'dotnet')]
+    android_root = optional_path('ANDROID_SDK_ROOT') or optional_path('ANDROID_HOME')
+    if android_root:
+        choices['adb'] = [android_root / 'platform-tools' / ('adb.exe' if os.name == 'nt' else 'adb')]
+    for tool in ('npm', 'npx'):
+        choices[tool] = [app / 'npm' / (tool + '.cmd')]
+    vs_root = optional_path('VSINSTALLDIR')
+    if vs_root:
+        choices['msbuild'] = [vs_root / 'MSBuild/Current/Bin/MSBuild.exe']
+        choices.setdefault('cmake', []).append(vs_root / 'Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe')
+        choices['ninja'] = [vs_root / 'Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe']
+        version_file = vs_root / 'VC/Auxiliary/Build/Microsoft.VCToolsVersion.default.txt'
+        try:
+            version = version_file.read_text(encoding='utf-8-sig').strip()
+            if re.fullmatch(r'\d+(?:\.\d+)+', version):
+                choices['cl'] = [vs_root / 'VC/Tools/MSVC' / version / 'bin/Hostx64/x64/cl.exe']
+        except (OSError, UnicodeError):
+            pass
+    vc_tools = optional_path('VCToolsInstallDir')
+    if vc_tools:
+        choices['cl'] = [vc_tools / 'bin/Hostx64/x64/cl.exe', *choices.get('cl', [])]
     if pf:
         choices.setdefault('node', []).append(pf / 'nodejs/node.exe')
         choices.setdefault('pwsh', []).append(pf / 'PowerShell/7/pwsh.exe')
         choices.setdefault('git', []).append(pf / 'Git/cmd/git.exe')
+        choices['gh'].append(pf / 'GitHub CLI/gh.exe')
+        choices.setdefault('dotnet', []).append(pf / 'dotnet/dotnet.exe')
+        choices.setdefault('cmake', []).append(pf / 'CMake/bin/cmake.exe')
+        choices.setdefault('go', []).append(pf / 'Go/bin/go.exe')
+        for tool in ('npm', 'npx'):
+            choices[tool].append(pf / 'nodejs' / (tool + '.cmd'))
         choices.setdefault('cloudflared', []).append(pf / 'cloudflared/cloudflared.exe')
         for shell in ('bash', 'sh'):
             choices[shell] = [pf / f'Git/bin/{shell}.exe', pf / f'Git/usr/bin/{shell}.exe']

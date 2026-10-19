@@ -53,7 +53,7 @@ def verify_sources(config):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--host-config', type=Path, help='Private host configuration; takes precedence over DSHA_HOST_CONFIG')
-    parser.add_argument('action', choices=['status', 'selftest', 'englock', 'rea', 'verify-source', 'catalog', 'route'])
+    parser.add_argument('action', choices=['status', 'selftest', 'englock', 'rea', 'verify-source', 'catalog', 'route', 'inventory'])
     parser.add_argument('args', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     config = host(args.host_config) if args.host_config else host()
@@ -97,6 +97,8 @@ def main():
         return 1 if any(codes) else 0
     if args.action == 'catalog':
         return subprocess.run([config['python'], str(Path(config['dsha_source']) / 'scripts/base_tool.py'), 'list', *args.args], env=env).returncode
+    if args.action == 'inventory':
+        return subprocess.run([config['python'], str(Path(config['dsha_source']) / 'scripts/environment_smoke.py'), *args.args], env=env).returncode
     if args.action == 'route':
         return subprocess.run([config['python'], str(Path(config['dsha_source']) / 'scripts/router.py'), 'route', *args.args], env=env).returncode
     if args.action == 'englock':
