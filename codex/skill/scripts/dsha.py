@@ -83,7 +83,7 @@ def main():
             codes.append(subprocess.run([config['python'], str(Path(config['dsha_source']) / 'scripts' / name), 'selftest'], env=env).returncode)
         return 1 if any(codes) else 0
     if args.action == 'catalog':
-        return subprocess.run([config['python'], str(Path(config['dsha_source']) / 'scripts/index.py'), 'list', *args.args], env=env).returncode
+        return subprocess.run([config['python'], str(Path(config['dsha_source']) / 'scripts/base_tool.py'), 'list', *args.args], env=env).returncode
     if args.action == 'route':
         return subprocess.run([config['python'], str(Path(config['dsha_source']) / 'scripts/router.py'), 'route', *args.args], env=env).returncode
     if args.action == 'englock':
