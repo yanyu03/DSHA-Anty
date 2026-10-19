@@ -36,7 +36,8 @@ def main():
     archives = {}
     for fmt in ('zip', 'tar'):
         target = args.output / (stem + '-source.' + fmt)
-        subprocess.run(['git', 'archive', '--format=' + fmt, '--prefix=' + prefix,
+        subprocess.run(['git', '-c', 'core.autocrlf=false', '-c', 'core.eol=lf',
+                        'archive', '--format=' + fmt, '--prefix=' + prefix,
                         '--output=' + str(target.resolve()), commit], check=True)
         archives[fmt] = target
     with zipfile.ZipFile(archives['zip']) as z:
