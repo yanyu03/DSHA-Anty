@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "C:\\Users\\Administrator\\.gemini\\config\\plugins\\dsha-englock\\run-englock.cmd",
+            "command": "%USERPROFILE%\\.gemini\\config\\plugins\\dsha-englock\\run-englock.cmd",
             "timeout": 10
           }
         ]

@@ -1,13 +1,19 @@
-# DSHA 安装后体检（只读，不改任何文件）
+﻿# DSHA 安装后体检（只读，不改任何文件）
 #   pwsh -File verify.ps1
 
 $ErrorActionPreference = 'Continue'
+$repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $cfg = Join-Path $env:USERPROFILE '.gemini\config'
-$ok = 0; $fail = 0; $warn = 0
+$ok = 0; $fail = 0; $warn = 0; $catBehavior = 0; $catContract = 0; $catExistence = 0
 
-function Check($name, $cond, $detail = '') {
+function Check($name, $cond, $detail = '', $Cat = 'behavior') {
   if ($cond) { Write-Host ("  [PASS] {0} {1}" -f $name, $detail) -ForegroundColor Green; $script:ok++ }
   else       { Write-Host ("  [FAIL] {0} {1}" -f $name, $detail) -ForegroundColor Red;   $script:fail++ }
+  switch ($Cat) {
+    'existence' { $script:catExistence++ }
+    'contract'  { $script:catContract++ }
+    default     { $script:catBehavior++ }
+  }
 }
 function Note($name, $detail = '') { Write-Host ("  [WARN] {0} {1}" -f $name, $detail) -ForegroundColor Yellow; $script:warn++ }
 
@@ -99,11 +105,10 @@ if (Test-Path $conf) {
 
 Write-Host "`n=== 8. REA 工具与防咬人 Shell ===" -ForegroundColor Cyan
 $safeSh = Join-Path $cfg 'dsha-sh.cmd'
-if (-not (Test-Path $safeSh)) { $safeSh = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\dsha-sh.cmd" }
-Check "dsha-sh.cmd 防咬人 Shell 就位" (Test-Path $safeSh)
-
+if (-not (Test-Path $safeSh)) { $safeSh = Join-Path $repoRoot 'bin\dsha-sh.cmd' }
+Check "dsha-sh.cmd 防咬人 Shell 就位" (Test-Path $safeSh) '' 'existence'
 $reaCmd = Join-Path $cfg 'rea.cmd'
-if (-not (Test-Path $reaCmd)) { $reaCmd = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\rea.cmd" }
+if (-not (Test-Path $reaCmd)) { $reaCmd = Join-Path $repoRoot 'bin\rea.cmd' }
 if (Test-Path $reaCmd) {
   $reaSelf = & $reaCmd --self-test
   $reaPass = ($LASTEXITCODE -eq 0 -and ($reaSelf | Out-String) -match 'v\d+\.\d+')
@@ -114,17 +119,17 @@ if (Test-Path $reaCmd) {
 
 Write-Host "`n=== 9. DSHA Dedicated Pwsh (PowerShell 7) Runtime ===" -ForegroundColor Cyan
 $pwshExe = Join-Path $cfg 'pwsh\pwsh.exe'
-if (-not (Test-Path $pwshExe)) { $pwshExe = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\pwsh\pwsh.exe" }
+if (-not (Test-Path $pwshExe)) { $pwshExe = Join-Path $repoRoot 'bin\pwsh\pwsh.exe' }
 Check "pwsh.exe runtime present" (Test-Path $pwshExe) $pwshExe
 
 $pwshCmd = Join-Path $cfg 'pwsh.cmd'
-if (-not (Test-Path $pwshCmd)) { $pwshCmd = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\pwsh.cmd" }
-Check "pwsh.cmd launcher present" (Test-Path $pwshCmd)
+if (-not (Test-Path $pwshCmd)) { $pwshCmd = Join-Path $repoRoot 'bin\pwsh.cmd' }
+Check "pwsh.cmd launcher present" (Test-Path $pwshCmd) '' 'existence'
 if (Test-Path $pwshCmd) { Check "pwsh.cmd is pure ASCII" (((Get-Content $pwshCmd -Raw) -notmatch '[^\x00-\x7F]')) }
 
 $dshaPwshCmd = Join-Path $cfg 'dsha-pwsh.cmd'
-if (-not (Test-Path $dshaPwshCmd)) { $dshaPwshCmd = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\dsha-pwsh.cmd" }
-Check "dsha-pwsh.cmd hardened launcher present" (Test-Path $dshaPwshCmd)
+if (-not (Test-Path $dshaPwshCmd)) { $dshaPwshCmd = Join-Path $repoRoot 'bin\dsha-pwsh.cmd' }
+Check "dsha-pwsh.cmd hardened launcher present" (Test-Path $dshaPwshCmd) '' 'existence'
 if (Test-Path $dshaPwshCmd) { Check "dsha-pwsh.cmd is pure ASCII" (((Get-Content $dshaPwshCmd -Raw) -notmatch '[^\x00-\x7F]')) }
 
 if (Test-Path $pwshExe) {
@@ -142,13 +147,13 @@ Check "User PATH prioritizes DSHA dedicated tools and pwsh" ($uPath -match 'dsh|
 
 Write-Host "`n=== 10. DSHA 书记官 (The Scribe) 智能体与工具 ===" -ForegroundColor Cyan
 $scribeCmd = Join-Path $cfg 'scribe.cmd'
-if (-not (Test-Path $scribeCmd)) { $scribeCmd = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\scribe.cmd" }
-Check "scribe.cmd launcher present" (Test-Path $scribeCmd)
+if (-not (Test-Path $scribeCmd)) { $scribeCmd = Join-Path $repoRoot 'bin\scribe.cmd' }
+Check "scribe.cmd launcher present" (Test-Path $scribeCmd) '' 'existence'
 if (Test-Path $scribeCmd) { Check "scribe.cmd is pure ASCII" (((Get-Content $scribeCmd -Raw) -notmatch '[^\x00-\x7F]')) }
 
 $scribePy = Join-Path $cfg 'plugins\dsh-permissions\scripts\scribe.py'
-if (-not (Test-Path $scribePy)) { $scribePy = "c:\Users\admin\Desktop\GOOGLE\DSHA\scripts\scribe.py" }
-Check "scribe.py script present" (Test-Path $scribePy)
+if (-not (Test-Path $scribePy)) { $scribePy = Join-Path $repoRoot 'scripts\scribe.py' }
+Check "scribe.py script present" (Test-Path $scribePy) '' 'existence'
 if (Test-Path $scribePy) {
   $sSelf = & $pyExe $scribePy selftest | Select-String -Pattern 'selftest:' | Select-Object -Last 1
   $sPass = $false
@@ -158,13 +163,13 @@ if (Test-Path $scribePy) {
 
 Write-Host "`n=== 11. Cloudflare 直通引擎与智能路由层 (DHSA-TestWeb) ===" -ForegroundColor Cyan
 $cfCmd = Join-Path $cfg 'cf.cmd'
-if (-not (Test-Path $cfCmd)) { $cfCmd = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\cf.cmd" }
-Check "cf.cmd launcher present" (Test-Path $cfCmd)
+if (-not (Test-Path $cfCmd)) { $cfCmd = Join-Path $repoRoot 'bin\cf.cmd' }
+Check "cf.cmd launcher present" (Test-Path $cfCmd) '' 'existence'
 if (Test-Path $cfCmd) { Check "cf.cmd is pure ASCII" (((Get-Content $cfCmd -Raw) -notmatch '[^\x00-\x7F]')) }
 
 $cfPy = Join-Path $cfg 'plugins\dsh-permissions\scripts\dsha_cf.py'
-if (-not (Test-Path $cfPy)) { $cfPy = "c:\Users\admin\Desktop\GOOGLE\DSHA\scripts\dsha_cf.py" }
-Check "dsha_cf.py script present" (Test-Path $cfPy)
+if (-not (Test-Path $cfPy)) { $cfPy = Join-Path $repoRoot 'scripts\dsha_cf.py' }
+Check "dsha_cf.py script present" (Test-Path $cfPy) '' 'existence'
 if (Test-Path $cfPy) {
   $cfSelf = & $pyExe $cfPy selftest | Select-String -Pattern 'selftest:' | Select-Object -Last 1
   $cfPass = $false
@@ -173,13 +178,13 @@ if (Test-Path $cfPy) {
 }
 
 $dshaCmd = Join-Path $cfg 'dsha.cmd'
-if (-not (Test-Path $dshaCmd)) { $dshaCmd = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\dsha.cmd" }
-Check "dsha.cmd router launcher present" (Test-Path $dshaCmd)
+if (-not (Test-Path $dshaCmd)) { $dshaCmd = Join-Path $repoRoot 'bin\dsha.cmd' }
+Check "dsha.cmd router launcher present" (Test-Path $dshaCmd) '' 'existence'
 if (Test-Path $dshaCmd) { Check "dsha.cmd is pure ASCII" (((Get-Content $dshaCmd -Raw) -notmatch '[^\x00-\x7F]')) }
 
 $routerPy = Join-Path $cfg 'plugins\dsh-permissions\scripts\router.py'
-if (-not (Test-Path $routerPy)) { $routerPy = "c:\Users\admin\Desktop\GOOGLE\DSHA\scripts\router.py" }
-Check "router.py script present" (Test-Path $routerPy)
+if (-not (Test-Path $routerPy)) { $routerPy = Join-Path $repoRoot 'scripts\router.py' }
+Check "router.py script present" (Test-Path $routerPy) '' 'existence'
 if (Test-Path $routerPy) {
   $rSelf = & $pyExe $routerPy selftest | Select-String -Pattern 'selftest:' | Select-Object -Last 1
   $rPass = $false
@@ -189,13 +194,13 @@ if (Test-Path $routerPy) {
 
 Write-Host "`n=== 12. DSHA-Index 顶层目录与 Call_Tools 统合拉取协议 (v1.0.0) ===" -ForegroundColor Cyan
 $indexCmd = Join-Path $cfg 'dsha-index.cmd'
-if (-not (Test-Path $indexCmd)) { $indexCmd = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\dsha-index.cmd" }
-Check "dsha-index.cmd launcher present" (Test-Path $indexCmd)
+if (-not (Test-Path $indexCmd)) { $indexCmd = Join-Path $repoRoot 'bin\dsha-index.cmd' }
+Check "dsha-index.cmd launcher present" (Test-Path $indexCmd) '' 'existence'
 if (Test-Path $indexCmd) { Check "dsha-index.cmd is pure ASCII" (((Get-Content $indexCmd -Raw) -notmatch '[^\x00-\x7F]')) }
 
 $indexPy = Join-Path $cfg 'plugins\dsh-permissions\scripts\index.py'
-if (-not (Test-Path $indexPy)) { $indexPy = "c:\Users\admin\Desktop\GOOGLE\DSHA\scripts\index.py" }
-Check "index.py script present" (Test-Path $indexPy)
+if (-not (Test-Path $indexPy)) { $indexPy = Join-Path $repoRoot 'scripts\index.py' }
+Check "index.py script present" (Test-Path $indexPy) '' 'existence'
 if (Test-Path $indexPy) {
   $iSelf = & $pyExe $indexPy selftest | Select-String -Pattern 'selftest:' | Select-Object -Last 1
   $iPass = $false
@@ -205,8 +210,8 @@ if (Test-Path $indexPy) {
 
 Write-Host "`n=== 13. DSHA 类基工具架构与 ErrBlock 宿主环境断言 (BaseTool & Anti-Privilege) ===" -ForegroundColor Cyan
 $baseToolPy = Join-Path $cfg 'plugins\dsh-permissions\scripts\base_tool.py'
-if (-not (Test-Path $baseToolPy)) { $baseToolPy = "c:\Users\admin\Desktop\GOOGLE\DSHA\scripts\base_tool.py" }
-Check "base_tool.py script present" (Test-Path $baseToolPy)
+if (-not (Test-Path $baseToolPy)) { $baseToolPy = Join-Path $repoRoot 'scripts\base_tool.py' }
+Check "base_tool.py script present" (Test-Path $baseToolPy) '' 'existence'
 if (Test-Path $baseToolPy) {
   $btSelf = & $pyExe $baseToolPy selftest | Select-String -Pattern 'selftest:' | Select-Object -Last 1
   $btPass = $false
@@ -222,8 +227,8 @@ Check "dsha-index list -c WebEdge 按类目精确取用成功" ($catOut -match '
 
 Write-Host "`n=== 14. DSHA 开源知名技能整合与排异反应测试 (Skill Graft-Reaction) ===" -ForegroundColor Cyan
 $graftPy = Join-Path $cfg 'plugins\dsh-permissions\scripts\test_skill_integration.py'
-if (-not (Test-Path $graftPy)) { $graftPy = "c:\Users\admin\Desktop\GOOGLE\DSHA\scripts\test_skill_integration.py" }
-Check "test_skill_integration.py script present" (Test-Path $graftPy)
+if (-not (Test-Path $graftPy)) { $graftPy = Join-Path $repoRoot "scripts\test_skill_integration.py" }
+Check "test_skill_integration.py script present" (Test-Path $graftPy) '' 'existence'
 if (Test-Path $graftPy) {
   $gSelf = & $pyExe $graftPy | Select-String -Pattern 'PASS\s+(\d+)\s*/\s*FAIL\s+(\d+)' | Select-Object -Last 1
   $gPass = $false
@@ -232,7 +237,45 @@ if (Test-Path $graftPy) {
 }
 
 Write-Host "`n--------------------------------------------------"
-Write-Host ("PASS {0} / FAIL {1} / WARN {2}" -f $ok, $fail, $warn) -ForegroundColor $(if ($fail -eq 0) { 'Green' } else { 'Red' })
+Write-Host "`n=== 15. 证据卫生 (Evidence Hygiene) ===" -ForegroundColor Cyan
+$repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# 重复副本：查**仓库**（安装目录里留着旧副本属正常，不能据此判失败）
+$dupIndex  = Join-Path $repoRoot 'plugins\dsh-permissions\scripts\index.py'
+$dupRouter = Join-Path $repoRoot 'plugins\dsh-permissions\scripts\router.py'
+Check "仓库内 index.py / router.py 无重复副本" ((-not (Test-Path $dupIndex)) -and (-not (Test-Path $dupRouter))) '' 'existence'
+
+Check "存在 VERSION_SCHEME.md" (Test-Path (Join-Path $repoRoot 'VERSION_SCHEME.md')) '' 'existence'
+
+# 硬编码盘符路径扫描（白名单须显式列明，不做模糊豁免）
+$allowPrefixes = @('docs\teacher_yang_corpus\', 'docs\TEACHER_YANG_DISTILLATION.md')
+$scanTargets = @()
+foreach ($rel in @('docs','chatgpt')) {
+  $sp = Join-Path $repoRoot $rel
+  if (Test-Path $sp) { $scanTargets += @(Get-ChildItem $sp -Recurse -File -ErrorAction SilentlyContinue) }
+}
+$sp = Join-Path $repoRoot 'plugins'
+if (Test-Path $sp) { $scanTargets += @(Get-ChildItem $sp -Recurse -File -Include *.json,*.ps1,*.cmd -ErrorAction SilentlyContinue) }
+$sp = Join-Path $repoRoot 'scripts'
+if (Test-Path $sp) {
+  $scanTargets += @(Get-ChildItem $sp -File -Filter *.py -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'gate.py' })
+}
+# bin\ 只扫本层，避开随附的 bin\pwsh 运行时
+$sp = Join-Path $repoRoot 'bin'
+if (Test-Path $sp) { $scanTargets += @(Get-ChildItem $sp -File -Include *.cmd,*.ps1 -ErrorAction SilentlyContinue) }
+$badPaths = @($scanTargets | Where-Object {
+  if (-not $_) { return $false }
+  $rel = $_.FullName.Substring($repoRoot.Length).TrimStart('\')
+  foreach ($a in $allowPrefixes) { if ($rel.StartsWith($a)) { return $false } }
+  (Select-String -Path $_.FullName -Pattern 'C:\\Users\\|[A-Za-z]:\\' -Quiet)
+})
+Check "第一方文件无硬编码盘符路径" ($badPaths.Count -eq 0) ("命中 {0} 个文件（白名单：OCR 语料 / 资料出处）" -f $badPaths.Count) 'contract'
+
+$claimFiles = @((Join-Path $repoRoot 'README.md'), (Join-Path $repoRoot 'CHANGELOG.md'))
+$badClaims = @($claimFiles | Where-Object { (Test-Path $_) -and (Select-String -Path $_ -Pattern '准确率\s*100%|零缺陷' -Quiet) })
+Check "发布文案无无样本量的准确率断言" ($badClaims.Count -eq 0) ("命中 {0} 个文件" -f $badClaims.Count) 'contract'
+
+Write-Host ("PASS {0} / FAIL {1} / WARN {2}   (behavior {3} / contract {4} / existence {5})" -f $ok, $fail, $warn, $catBehavior, $catContract, $catExistence) -ForegroundColor $(if ($fail -eq 0) { 'Green' } else { 'Red' })
 if ($fail -eq 0) { Write-Host "DSHA 体检通过。" -ForegroundColor Green } else { Write-Host "存在失败项，请按上方 [FAIL] 逐条处理。" -ForegroundColor Red }
 exit $(if ($fail -eq 0) { 0 } else { 1 })
 

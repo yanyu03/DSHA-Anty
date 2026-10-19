@@ -4,7 +4,7 @@
       "command": "cmd.exe",
       "args": [
         "/c",
-        "c:\\Users\\admin\\Desktop\\GOOGLE\\DSHA\\bin\\rea.cmd",
+        "%USERPROFILE%\\.gemini\\config\\bin\\rea.cmd",
         "mcp"
       ],
       "env": {

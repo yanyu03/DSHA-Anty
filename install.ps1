@@ -1,4 +1,4 @@
-# DSHA 安装器（幂等 · 带备份 · 可回滚）
+﻿# DSHA 安装器（幂等 · 带备份 · 可回滚）
 #
 #   pwsh -File install.ps1                      # 安装（权限档位 + 工程锁，钩子保持关闭）
 #   pwsh -File install.ps1 -EnableHook          # 同时启用工程锁钩子（写类工具机械校验）
@@ -126,6 +126,15 @@ Say "已备份到 $bak"
 Step "2/6 安装插件（权限档位 + 工程锁 + 额度监视器）"
 New-Item -ItemType Directory -Force -Path "$cfg\plugins","$cfg\skills" | Out-Null
 robocopy (Join-Path $root 'plugins\dsh-permissions') "$cfg\plugins\dsh-permissions" /E /XD logs __pycache__ /NFL /NDL /NJH /NJS /NP | Out-Null
+
+# D1/D41H 修复：保持 scripts\ 为单一事实源，安装时闭包分发所有运行时依赖脚本
+foreach ($pyFile in @('base_tool.py','index.py','router.py','dsha_cf.py','scribe.py','test_skill_integration.py')) {
+  $from = Join-Path $root "scripts\$pyFile"
+  if (Test-Path $from) {
+    Copy-Item $from "$cfg\plugins\dsh-permissions\scripts\$pyFile" -Force
+    Say "scripts\$pyFile → plugins\dsh-permissions\scripts\"
+  }
+}
 Say "插件已就位：$cfg\plugins\dsh-permissions"
 if (Test-Path (Join-Path $root 'plugins\dsha-meter')) {
   robocopy (Join-Path $root 'plugins\dsha-meter') "$cfg\plugins\dsha-meter" /E /XD __pycache__ /NFL /NDL /NJH /NJS /NP | Out-Null

@@ -33,7 +33,7 @@ graph TD
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -WhatIfOnly   # 1) 只读预演（检查环境）
 powershell -ExecutionPolicy Bypass -File .\install.ps1               # 2) 一键安装（自动探测 Python 与包装器）
-powershell -ExecutionPolicy Bypass -File .\verify.ps1                # 3) 完整体检（期望 29 项通过，0 FAIL）
+powershell -ExecutionPolicy Bypass -File .\verify.ps1                # 3) 完整体检（FAIL 必须为 0；总数以脚本自身打印为准）
 ```
 
 ### 2. 权限切换与 UI 面板

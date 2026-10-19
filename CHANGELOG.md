@@ -1,20 +1,27 @@
 # CHANGELOG
 
+> ## 版本线重置说明
+> 本仓库存在两条版本线，**两者不比较大小**：
+> - **实验线** `2.x`（`2.0.0` → `2.4.0-testweb`）：Antigravity 侧的功能论证分支。
+> - **正式线** `1.x`（`1.0.0` 起）：面向开源分发的主线首发，自 2026-10-19 起。
+>
+> 因此阅读顺序请**以本文件从上到下为准**，不要按版本号大小推断新旧。详见 `VERSION_SCHEME.md`。
+
 ## v1.0.0 — 2026-10-19
 **DSHA-SharBoy 1.0 正式版全景发布 (Official Release v1.0.0 · 全开源 Public 启动)**
 - **DSHA-Index 顶层能力目录与元数据事实源 (`bin\dsha-index.cmd` / `scripts/index.py`)**：正式确立全系统 7 大平行工具（CF、REA、Scribe、Pwsh、Sh、Tier、Meter）的顶层索引与契约规范。
 - **`Call_Tools` 统合拉取协议**：建立统一函数调用管道，实现底层二进制自动寻址、UTF-8 字符沙箱、网络代理环境注入与执行结果标准化结构回收。
-- **DSHA-Router 核心意图路由**：多因子智能评分引擎（覆盖 8 大跨域场景，准确率 100%），支持直接穿透调用 `Call_Tools`。
+- **DSHA-Router 核心意图路由**：多因子智能评分引擎（内置 8 条路由自检用例，8/8 通过；n=8，不构成准确率），支持直接穿透调用 `Call_Tools`。
 - **Cloudflare 全系 CLI 生态直通 (`bin\cf.cmd`)**：全面接通新一代 Cloudflare Forge OpenAPI CLI (2900+ API、`cf mcp`、Agent search) 与 Wrangler/Workerd 本地运行栈。
 - **专职档案官 DSHA Scribe (`bin\scribe.cmd`)**：6 段式问题研究简报生成器，为多 Agent 协同提供毫秒级诊断支持。
 - **防括号撕裂 Shell 矩阵**：专用 PowerShell 7 独立运行时、加固 `dsha-pwsh` 与 GNU Bash 统一环境。
-- **全系 55 项自动化体验套件 (`verify.ps1`)**：55/55 PASS，实现零缺陷、全机械化自检交付。
+- **全系自动化体验套件 (`verify.ps1`)**：以 `FAIL = 0` 为通过条件；检查项按 behavior / contract / existence 三类分别计数，总数以脚本自身打印为准。
 
 ## v2.4.0-testweb — 2026-10-19
 **Cloudflare 直通引擎并入与 DSHA 智能情境路由层 (DHSA-TestWeb 论证分支)**
 - **Cloudflare CLI 工具直通引擎 (`bin\cf.cmd`)**：全面整合本地已就绪的 Wrangler (v4.151.1) 与 Cloudflare Tunnels，支持 `status`、`whoami`、`dev`、`deploy`、`pages`、`tunnel`，解决 Windows GBK 编码崩溃与代理自适应。
 - **DSHA 智能情境路由层 (`bin\dsha.cmd` / `scripts/router.py`)**：根据开发者意图、目标文件后缀与关键特征，基于 7 大子系统（CF、REA、Scribe、Pwsh、Sh、Tier、Meter）实施多因子加权评分并输出决策依据与推荐命令。
-- **8 大场景测试矩阵全通过**：内置路由自检算法（涵盖逆向、边缘部署、日志提纯、系统管理、权限与额度）准确率达到 100%。
+- **8 大场景测试矩阵全通过**：内置路由自检算法（涵盖逆向、边缘部署、日志提纯、系统管理、权限与额度），8/8 用例通过（n=8，不构成准确率）。
 - **自动化测试扩充**：新增 Section 11，测试套件扩充至 51 项 (`verify.ps1` 51/51 PASS)。
 - **新建实验论证分支**：独立签出 `DHSA-TestWeb` 分支用于前沿 Web 工具链集成论证。
 

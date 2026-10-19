@@ -20,7 +20,9 @@ def load(path, name):
 class RuntimeContracts(unittest.TestCase):
     def copies(self, filename):
         for folder in (ROOT / 'scripts', ROOT / 'plugins/dsh-permissions/scripts'):
-            yield load(folder / filename, 'regression_' + str(folder.name) + filename[:-3])
+            path = folder / filename
+            if path.exists():
+                yield load(path, 'regression_' + str(folder.name) + filename[:-3])
 
     def test_failed_version_probe_is_not_ready(self):
         for m in self.copies('base_tool.py'):
@@ -30,7 +32,7 @@ class RuntimeContracts(unittest.TestCase):
     def test_context_cannot_elevate_actual_read_only(self):
         for m in self.copies('base_tool.py'):
             tool = m.PwshTool()
-            with self.subTest(module=m.__file__), patch.object(m, 'get_active_tier', return_value='read-only'), patch.object(tool, 'assert_environment', return_value=(True, None)), patch.object(tool, 'resolve_executable', return_value=sys.executable), patch.object(m.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0, stdout='', stderr='')) as run:
+            with self.subTest(module=m.__file__), patch.object(m, 'get_active_tier', return_value='read-only'), patch.object(tool, 'assert_environment', return_value=(True, None)), patch.object(tool, 'resolve_executable', return_value=sys.executable), patch.object(tool, 'assert_target_contained', return_value=(True, None)), patch.object(m.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0, stdout='', stderr='')) as run:
                 result = tool.execute(['--version'], {'tier': 'danger-full-access'})
                 self.assertEqual(result['exit_code'], 126)
                 run.assert_not_called()
@@ -48,7 +50,7 @@ class RuntimeContracts(unittest.TestCase):
     def test_explicit_proxy_is_preserved(self):
         for m in self.copies('base_tool.py'):
             tool = m.ScribeTool()
-            with self.subTest(module=m.__file__), patch.object(m, 'get_active_tier', return_value='auto'), patch.object(tool, 'assert_environment', return_value=(True, None)), patch.object(tool, 'resolve_executable', return_value=sys.executable), patch.object(m.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0, stdout='', stderr='')) as run:
+            with self.subTest(module=m.__file__), patch.object(m, 'get_active_tier', return_value='auto'), patch.object(tool, 'assert_environment', return_value=(True, None)), patch.object(tool, 'resolve_executable', return_value=sys.executable), patch.object(tool, 'assert_target_contained', return_value=(True, None)), patch.object(m.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0, stdout='', stderr='')) as run:
                 self.assertTrue(tool.execute(context={'proxy': 'http://127.0.0.1:9999'})['success'])
                 self.assertEqual(run.call_args.kwargs['env']['HTTPS_PROXY'], 'http://127.0.0.1:9999')
 
@@ -60,7 +62,7 @@ class RuntimeContracts(unittest.TestCase):
     def test_proxy_is_not_invented(self):
         for m in self.copies('base_tool.py'):
             tool = m.ScribeTool()
-            with self.subTest(module=m.__file__), patch.dict(os.environ, {}, clear=True), patch.object(m, 'get_active_tier', return_value='auto'), patch.object(tool, 'assert_environment', return_value=(True, None)), patch.object(tool, 'resolve_executable', return_value=sys.executable), patch.object(m.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0, stdout='', stderr='')) as run:
+            with self.subTest(module=m.__file__), patch.dict(os.environ, {}, clear=True), patch.object(m, 'get_active_tier', return_value='auto'), patch.object(tool, 'assert_environment', return_value=(True, None)), patch.object(tool, 'resolve_executable', return_value=sys.executable), patch.object(tool, 'assert_target_contained', return_value=(True, None)), patch.object(m.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0, stdout='', stderr='')) as run:
                 self.assertTrue(tool.execute()['success'])
                 self.assertNotIn('ALL_PROXY', run.call_args.kwargs['env'])
 
