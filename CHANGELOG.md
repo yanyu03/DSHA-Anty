@@ -9,13 +9,16 @@
 
 ## v1.0.0 — 2026-10-19
 **DSHA-SharBoy 1.0 正式版全景发布 (Official Release v1.0.0 · 全开源 Public 启动)**
+- **宿主环境自感知与穿透引擎 (`HostEnvPerceiver`)**：移除硬编码盘符路径，动态感知系统盘、Program Files、AppData、Scoop、Chocolatey、Pyenv 等包管理器运行时并自动注入 PATH，过滤 0 字节 WindowsApps 别名陷阱，确保跨机器与跨盘迁移即插即用。
+- **单向传参与受限执行包络 (`ExecutionEnvelope`)**：阻断父进程敏感 Secret/Token 污染泄露，仅向下传递经过白名单净化的受控环境变量、安全工作区与超时约束。
+- **感知宿主环境后动态激活路由 (`router.py`)**：意图分析联动前置依赖自检，命中候选工具依据本地就绪状态打标 `ACTIVATED`（🟢 已就绪激活）或 `PREREQ_REQUIRED`（🟡 待激活需补齐依赖），并在决策报告中即时给出修复指引（自检 8/8 通过，n=8）。
 - **DSHA-Index 顶层能力目录与元数据事实源 (`bin\dsha-index.cmd` / `scripts/index.py`)**：正式确立全系统 7 大平行工具（CF、REA、Scribe、Pwsh、Sh、Tier、Meter）的顶层索引与契约规范。
 - **`Call_Tools` 统合拉取协议**：建立统一函数调用管道，实现底层二进制自动寻址、UTF-8 字符沙箱、网络代理环境注入与执行结果标准化结构回收。
 - **DSHA-Router 核心意图路由**：多因子智能评分引擎（内置 8 条路由自检用例，8/8 通过；n=8，不构成准确率），支持直接穿透调用 `Call_Tools`。
 - **Cloudflare 全系 CLI 生态直通 (`bin\cf.cmd`)**：全面接通新一代 Cloudflare Forge OpenAPI CLI (2900+ API、`cf mcp`、Agent search) 与 Wrangler/Workerd 本地运行栈。
 - **专职档案官 DSHA Scribe (`bin\scribe.cmd`)**：6 段式问题研究简报生成器，为多 Agent 协同提供毫秒级诊断支持。
 - **防括号撕裂 Shell 矩阵**：专用 PowerShell 7 独立运行时、加固 `dsha-pwsh` 与 GNU Bash 统一环境。
-- **全系自动化体验套件 (`verify.ps1`)**：以 `FAIL = 0` 为通过条件；检查项按 behavior / contract / existence 三类分别计数，总数以脚本自身打印为准。
+- **全系自动化体检套件 (`verify.ps1`)**：以 `FAIL = 0` 为通过条件；检查项按 behavior / contract / existence 三类分别计数，总数以脚本自身打印为准。
 
 ## v2.4.0-testweb — 2026-10-19
 **Cloudflare 直通引擎并入与 DSHA 智能情境路由层 (DHSA-TestWeb 论证分支)**

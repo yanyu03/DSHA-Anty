@@ -86,6 +86,267 @@ def get_active_tier():
     return "auto"
 
 
+class HostEnvPerceiver:
+    """
+    Dynamic Host Environment Perception & Penetration Engine.
+    Discovers installed runtimes (Python, Node, Wrangler, Pwsh, Bash, Git)
+    dynamically from host environment variables, system directories, and standard package managers.
+    Eliminates hardcoded drive letters and usernames to ensure portable execution across migrations.
+    """
+
+    @staticmethod
+    def get_system_roots():
+        """Resolve system roots dynamically without hardcoded drive letters, even in stripped environments."""
+        try:
+            raw_home = os.environ.get("USERPROFILE") or os.environ.get("HOME")
+            if not raw_home:
+                raw_home = str(Path.home())
+        except Exception:
+            raw_home = "."
+        user_home = Path(raw_home or ".")
+
+        try:
+            sys_drive = os.environ.get("SystemDrive") or (Path(sys.executable).drive if hasattr(Path(sys.executable), "drive") and Path(sys.executable).drive else "C:")
+        except Exception:
+            sys_drive = "C:"
+
+        sys_root = os.environ.get("SystemRoot") or str(Path(sys_drive) / "Windows")
+        prog_files = os.environ.get("ProgramFiles") or str(Path(sys_drive) / "Program Files")
+        prog_files_x86 = os.environ.get("ProgramFiles(x86)") or str(Path(sys_drive) / "Program Files (x86)")
+        local_data = os.environ.get("LOCALAPPDATA") or str(user_home / "AppData" / "Local")
+        roam_data = os.environ.get("APPDATA") or str(user_home / "AppData" / "Roaming")
+        prog_data = os.environ.get("ProgramData") or str(Path(sys_drive) / "ProgramData")
+
+        return {
+            "sys_drive": Path(sys_drive),
+            "sys_root": Path(sys_root),
+            "user_home": Path(user_home),
+            "prog_files": Path(prog_files),
+            "prog_files_x86": Path(prog_files_x86),
+            "local_data": Path(local_data),
+            "roam_data": Path(roam_data),
+            "prog_data": Path(prog_data),
+        }
+
+    @classmethod
+    def get_candidate_locations(cls, binary_name):
+        """Generate dynamic probe paths for a given runtime without hardcoding."""
+        roots = cls.get_system_roots()
+        candidates = []
+
+        # Package manager roots (Scoop, Chocolatey, NVM, FNM, Pyenv)
+        scoop_shims = roots["user_home"] / "scoop" / "shims"
+        choco_bin = roots["prog_data"] / "chocolatey" / "bin"
+        pyenv_shims = roots["user_home"] / ".pyenv" / "pyenv-win" / "shims"
+
+        script_dir = Path(__file__).resolve().parent
+        repo_root = script_dir.parent if script_dir.name in ("scripts", "bin") else script_dir
+
+        b = binary_name.lower()
+        if b in ("python", "python3", "py"):
+            candidates.append(Path(sys.executable))
+            # Scan LocalAppData Python installations dynamically (Python310, Python311, Python312, etc.)
+            py_local = roots["local_data"] / "Programs" / "Python"
+            if py_local.is_dir():
+                try:
+                    for d in sorted(py_local.iterdir(), reverse=True):
+                        if d.is_dir() and d.name.lower().startswith("python"):
+                            candidates.append(d / "python.exe")
+                except Exception:
+                    pass
+            # Scan ProgramFiles Python installations
+            for pf in (roots["prog_files"], roots["prog_files_x86"]):
+                if pf.is_dir():
+                    try:
+                        for d in sorted(pf.iterdir(), reverse=True):
+                            if d.is_dir() and d.name.lower().startswith("python"):
+                                candidates.append(d / "python.exe")
+                    except Exception:
+                        pass
+            # Python launcher and package manager shims
+            candidates.append(roots["sys_root"] / "py.exe")
+            candidates.append(roots["local_data"] / "Programs" / "Python" / "Launcher" / "py.exe")
+            candidates.append(pyenv_shims / "python.exe")
+            candidates.append(scoop_shims / "python.exe")
+
+        elif b in ("node", "nodejs"):
+            candidates.append(roots["prog_files"] / "nodejs" / "node.exe")
+            candidates.append(roots["prog_files_x86"] / "nodejs" / "node.exe")
+            candidates.append(roots["local_data"] / "Programs" / "nodejs" / "node.exe")
+            candidates.append(roots["roam_data"] / "npm" / "node.exe")
+            candidates.append(scoop_shims / "node.exe")
+
+        elif b == "wrangler":
+            candidates.append(roots["roam_data"] / "npm" / "wrangler.cmd")
+            candidates.append(roots["local_data"] / "Programs" / "nodejs" / "wrangler.cmd")
+            candidates.append(roots["roam_data"] / "npm" / "wrangler")
+            candidates.append(scoop_shims / "wrangler.cmd")
+
+        elif b in ("pwsh", "powershell7"):
+            candidates.append(roots["user_home"] / ".gemini" / "config" / "pwsh" / "pwsh.exe")
+            candidates.append(repo_root / "bin" / "pwsh" / "pwsh.exe")
+            for pf in (roots["prog_files"], roots["prog_files_x86"]):
+                pwsh_dir = pf / "PowerShell"
+                if pwsh_dir.is_dir():
+                    try:
+                        for v in sorted(pwsh_dir.iterdir(), reverse=True):
+                            if (v / "pwsh.exe").is_file():
+                                candidates.append(v / "pwsh.exe")
+                    except Exception:
+                        pass
+            candidates.append(scoop_shims / "pwsh.exe")
+            candidates.append(choco_bin / "pwsh.exe")
+
+        elif b in ("bash", "sh"):
+            candidates.append(roots["prog_files"] / "Git" / "bin" / "bash.exe")
+            candidates.append(roots["prog_files"] / "Git" / "usr" / "bin" / "bash.exe")
+            candidates.append(roots["prog_files"] / "Git" / "cmd" / "bash.exe")
+            candidates.append(roots["prog_files_x86"] / "Git" / "bin" / "bash.exe")
+            candidates.append(roots["local_data"] / "Programs" / "Git" / "bin" / "bash.exe")
+            candidates.append(scoop_shims / "bash.exe")
+
+        elif b == "git":
+            candidates.append(roots["prog_files"] / "Git" / "cmd" / "git.exe")
+            candidates.append(roots["prog_files"] / "Git" / "bin" / "git.exe")
+            candidates.append(roots["prog_files_x86"] / "Git" / "cmd" / "git.exe")
+            candidates.append(roots["local_data"] / "Programs" / "Git" / "cmd" / "git.exe")
+            candidates.append(scoop_shims / "git.exe")
+
+        return candidates
+
+    @classmethod
+    def locate(cls, binary_name, custom_paths=None):
+        """Locate binary, filtering out 0-byte WindowsApps execution alias stubs."""
+        if custom_paths:
+            for p in custom_paths:
+                po = Path(os.path.expandvars(str(p)))
+                if po.is_file() and cls._is_valid_executable(po):
+                    return str(po)
+
+        # 1. Search PATH (filtering out 0-byte WindowsApps stubs)
+        which_p = shutil.which(binary_name)
+        if which_p and cls._is_valid_executable(Path(which_p)):
+            return which_p
+
+        # 2. Search dynamic candidate locations
+        for cand in cls.get_candidate_locations(binary_name):
+            if cand.is_file() and cls._is_valid_executable(cand):
+                return str(cand)
+
+        return None
+
+    @staticmethod
+    def _is_valid_executable(path_obj):
+        """Reject 0-byte WindowsApps execution alias stubs."""
+        p_str = str(path_obj).lower()
+        if "windowsapps" in p_str:
+            try:
+                if path_obj.stat().st_size == 0:
+                    return False
+            except Exception:
+                return False
+        return True
+
+    @classmethod
+    def get_penetrated_path(cls):
+        """Build penetrated PATH string by injecting discovered runtime directories."""
+        current_path = os.environ.get("PATH", "")
+        existing_dirs = [os.path.normcase(os.path.abspath(d)) for d in current_path.split(os.pathsep) if d]
+
+        injected_dirs = []
+        for b in ("python", "node", "wrangler", "pwsh", "git", "bash"):
+            loc = cls.locate(b)
+            if loc:
+                parent_dir = os.path.dirname(loc)
+                norm_parent = os.path.normcase(os.path.abspath(parent_dir))
+                if norm_parent not in existing_dirs and norm_parent not in [os.path.normcase(d) for d in injected_dirs]:
+                    injected_dirs.append(parent_dir)
+
+        if injected_dirs:
+            return os.pathsep.join(injected_dirs + [current_path])
+        return current_path
+
+    @classmethod
+    def probe_all(cls):
+        """Returns diagnostic map of host runtimes with locations and status."""
+        runtimes = ["python", "node", "wrangler", "pwsh", "bash", "git"]
+        status = {}
+        for r in runtimes:
+            loc = cls.locate(r)
+            status[r] = {
+                "located": loc is not None,
+                "path": loc,
+            }
+        return status
+
+
+class ExecutionEnvelope:
+    """
+    Unidirectional Execution Parameter Envelope.
+    Sanitizes caller parameters and builds a strictly whitelisted minimal environment,
+    preventing session secret leakage and unintended parent context inheritance.
+    """
+    ALLOWED_CONTEXT_KEYS = {"tier", "timeout", "cwd", "proxy", "capture", "custom_env"}
+    ALLOWED_TIERS = {"read-only", "workspace-write", "danger-full-access", "auto"}
+    WHITELIST_ENV_VARS = {
+        "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT",
+        "TEMP", "TMP", "USERPROFILE", "USERNAME", "LOCALAPPDATA", "APPDATA",
+        "PROGRAMFILES", "PROGRAMFILES(X86)", "PROGRAMDATA", "ALLUSERSPROFILE",
+        "HOMEDRIVE", "HOMEPATH", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE",
+        "LANG", "LC_ALL",
+    }
+
+    def __init__(self, tier=None, timeout=180, cwd=None, proxy=None, capture=True, custom_env=None):
+        self.tier = str(tier).lower().strip() if tier else None
+        try:
+            self.timeout = max(1, min(int(timeout), 3600))
+        except (ValueError, TypeError):
+            self.timeout = 180
+        self.cwd = str(Path(cwd).resolve()) if cwd and Path(cwd).is_dir() else str(Path.cwd())
+        self.proxy = proxy.strip() if proxy and isinstance(proxy, str) else None
+        self.capture = bool(capture)
+        self.custom_env = custom_env if isinstance(custom_env, dict) else {}
+
+    @classmethod
+    def from_context(cls, context=None):
+        if not context:
+            return cls()
+        return cls(
+            tier=context.get("tier"),
+            timeout=context.get("timeout", 180),
+            cwd=context.get("cwd"),
+            proxy=context.get("proxy"),
+            capture=context.get("capture", True),
+            custom_env=context.get("custom_env"),
+        )
+
+    def build_subprocess_env(self):
+        """Construct sanitized minimal environment via unidirectional whitelisting and env penetration."""
+        clean_env = {}
+        for var_name, var_val in os.environ.items():
+            if var_name.upper() in self.WHITELIST_ENV_VARS:
+                clean_env[var_name] = var_val
+
+        # Inject penetrated PATH ensuring host runtimes are reachable
+        clean_env["PATH"] = HostEnvPerceiver.get_penetrated_path()
+
+        # Enforce UTF-8 consistency
+        clean_env["PYTHONUTF8"] = "1"
+        clean_env["PYTHONIOENCODING"] = "utf-8"
+
+        # Apply unidirectional proxy if configured
+        if self.proxy:
+            clean_env["ALL_PROXY"] = self.proxy
+            clean_env["HTTPS_PROXY"] = self.proxy
+            clean_env["HTTP_PROXY"] = self.proxy
+
+        # Apply caller's explicitly whitelisted custom environment variables
+        for k, v in self.custom_env.items():
+            clean_env[str(k)] = str(v)
+
+        return clean_env
+
+
 class PrerequisiteEnv:
     """Declares a host runtime dependency required by a tool."""
 
@@ -98,62 +359,7 @@ class PrerequisiteEnv:
         self.custom_paths = custom_paths or []
 
     def locate_binary(self):
-        # 1. Check custom known paths first
-        for p in self.custom_paths:
-            path_obj = Path(os.path.expandvars(str(p)))
-            if path_obj.is_file():
-                return str(path_obj)
-
-        # 2. Check PATH (filtering out WindowsApps 0-byte execution alias stubs)
-        which_p = shutil.which(self.binary)
-        if which_p and "windowsapps" not in which_p.lower():
-            return which_p
-
-        # 3. Check common AppData / Program Files paths on Windows
-        user_home = Path(os.environ.get("USERPROFILE") or ".")
-        app_data = Path(os.environ.get("APPDATA") or str(user_home / "AppData" / "Roaming"))
-        local_data = Path(os.environ.get("LOCALAPPDATA") or str(user_home / "AppData" / "Local"))
-        script_dir = Path(__file__).resolve().parent
-        repo_root = script_dir.parent if script_dir.name in ("scripts", "bin") else script_dir
-
-        fallbacks = {
-            "python": [
-                sys.executable,
-                local_data / "Programs" / "Python" / "Python312" / "python.exe",
-                local_data / "Programs" / "Python" / "Python311" / "python.exe",
-                local_data / "Programs" / "Python" / "Python310" / "python.exe",
-                Path("C:/Program Files/Python312/python.exe"),
-                Path("C:/Python312/python.exe"),
-            ],
-            "node": [
-                Path("C:/Program Files/nodejs/node.exe"),
-                local_data / "Programs" / "nodejs" / "node.exe",
-                app_data / "npm" / "node.exe",
-            ],
-            "wrangler": [
-                app_data / "npm" / "wrangler.cmd",
-                local_data / "Programs" / "nodejs" / "wrangler.cmd",
-                app_data / "npm" / "wrangler",
-            ],
-            "pwsh": [
-                user_home / ".gemini" / "config" / "pwsh" / "pwsh.exe",
-                repo_root / "bin" / "pwsh" / "pwsh.exe",
-                Path("C:/Program Files/PowerShell/7/pwsh.exe"),
-            ],
-            "bash": [
-                Path("C:/Program Files/Git/bin/bash.exe"),
-                Path("C:/Program Files/Git/usr/bin/bash.exe"),
-                Path("C:/Program Files/Git/cmd/bash.exe"),
-                local_data / "Programs" / "Git" / "bin" / "bash.exe",
-            ],
-        }
-
-        for candidate in fallbacks.get(self.binary, []):
-            candidate_path = Path(candidate)
-            if candidate_path.is_file():
-                return str(candidate_path)
-
-        return None
+        return HostEnvPerceiver.locate(self.binary, self.custom_paths)
 
     def verify(self):
         loc = self.locate_binary()
@@ -448,6 +654,9 @@ class BaseTool(ABC):
         if context is None:
             context = {}
 
+        # 0. Convert context into unidirectional ExecutionEnvelope
+        envelope = ExecutionEnvelope.from_context(context)
+
         # 1. Environment Assertion (No bundled runtime principle)
         ok_env, err_env = self.assert_environment()
         if not ok_env:
@@ -464,7 +673,7 @@ class BaseTool(ABC):
             }
 
         # 2. Authorization Assertion (Anti-privilege escalation principle)
-        active_tier = context.get("tier")
+        active_tier = envelope.tier
         ok_auth, err_auth = self.assert_authorization(active_tier)
         if not ok_auth:
             return {
@@ -508,16 +717,11 @@ class BaseTool(ABC):
                 "err_block": err_contained.to_dict() if err_contained is not None else {},
             }
 
-        # 4. Execute with Environment Isolation
+        # 4. Execute with Environment Isolation & Unidirectional Parameter Envelope
         start_time = time.time()
-        exec_env = os.environ.copy()
-        exec_env["PYTHONUTF8"] = "1"
-        if context.get("proxy"):
-            exec_env["ALL_PROXY"] = context["proxy"]
-            exec_env["HTTPS_PROXY"] = context["proxy"]
-
-        cwd = context.get("cwd") or str(Path.cwd())
-        timeout = context.get("timeout", 180)
+        exec_env = envelope.build_subprocess_env()
+        cwd = envelope.cwd
+        timeout = envelope.timeout
 
         if exec_path.endswith(".ps1"):
             script_dir = Path(__file__).resolve().parent
@@ -526,7 +730,7 @@ class BaseTool(ABC):
         else:
             cmd_list = [exec_path] + args
 
-        capture = context.get("capture", True)
+        capture = envelope.capture
 
         try:
             if capture:
@@ -999,13 +1203,50 @@ def run_selftest():
 
     # Test 11: Containment refuses a target outside the sandbox
     _probe = TOOL_REGISTRY.get("scribe")
-    _ok_out, _ = _probe.assert_target_contained("C:/Windows/System32/cmd.exe")
+    outside_target = str(Path(os.environ.get("SystemRoot") or "/outside_sandbox").resolve() / "System32" / "cmd.exe")
+    _ok_out, _ = _probe.assert_target_contained(outside_target)
     tests.append(("containment_refuses_outside", not _ok_out))
 
     # Test 12: Containment allows the declared launcher
     _declared = _probe.resolve_executable()
     _ok_in, _ = _probe.assert_target_contained(_declared) if _declared else (False, None)
     tests.append(("containment_allows_declared", bool(_ok_in)))
+
+    # Test 13: HostEnvPerceiver probes all 6 runtimes dynamically without hardcoded paths
+    probe_map = HostEnvPerceiver.probe_all()
+    tests.append((
+        "host_env_perceiver_dynamic_probe",
+        isinstance(probe_map, dict)
+        and len(probe_map) == 6
+        and probe_map["python"]["located"] is True
+    ))
+
+    # Test 14: ExecutionEnvelope strictly isolates parent secrets (unidirectional sanitization)
+    old_token = os.environ.get("SENSITIVE_LEAK_TOKEN")
+    try:
+        os.environ["SENSITIVE_LEAK_TOKEN"] = "stolen_session_secret"
+        env_envelope = ExecutionEnvelope.from_context({"tier": "auto", "custom_env": {"EXPLICIT_SAFE": "1"}})
+        sanitized_env = env_envelope.build_subprocess_env()
+        tests.append((
+            "execution_envelope_secret_isolation",
+            "SENSITIVE_LEAK_TOKEN" not in sanitized_env
+            and sanitized_env.get("EXPLICIT_SAFE") == "1"
+            and sanitized_env.get("PYTHONUTF8") == "1"
+            and "PATH" in sanitized_env
+        ))
+    finally:
+        if old_token is not None:
+            os.environ["SENSITIVE_LEAK_TOKEN"] = old_token
+        else:
+            os.environ.pop("SENSITIVE_LEAK_TOKEN", None)
+
+    # Test 15: ExecutionEnvelope unidirectional parameter bounds
+    bounded_envelope = ExecutionEnvelope.from_context({"timeout": 999999, "tier": " READ-ONLY "})
+    tests.append((
+        "execution_envelope_param_bounds",
+        bounded_envelope.timeout == 3600
+        and bounded_envelope.tier == "read-only"
+    ))
 
     passed = sum(1 for _, ok in tests if ok)
     total = len(tests)

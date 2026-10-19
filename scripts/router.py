@@ -31,6 +31,16 @@ if hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
+# Import BaseTool Architecture for Environment-Activated Routing
+try:
+    from base_tool import TOOL_REGISTRY as BASE_REGISTRY, HostEnvPerceiver
+except ImportError:
+    try:
+        from scripts.base_tool import TOOL_REGISTRY as BASE_REGISTRY, HostEnvPerceiver
+    except ImportError:
+        BASE_REGISTRY = None
+        HostEnvPerceiver = None
+
 
 TOOL_REGISTRY = {
     "cf": {
@@ -126,7 +136,7 @@ TOOL_REGISTRY = {
 }
 
 
-def analyze_route(input_str):
+def analyze_route(input_str, check_env=True):
     text = input_str.strip()
     low_text = text.lower()
     words = set(re.findall(r"[\w\.\-]+", low_text))
@@ -173,6 +183,28 @@ def analyze_route(input_str):
             scores[tool_id] += pts
             match_details[tool_id].append(f"命中关键词: {', '.join(matched_kw[:4])}")
 
+    # 4. Host Environment Perception & Route Activation
+    env_status_map = {}
+    env_details_map = {}
+    env_remediations_map = {}
+
+    if check_env and BASE_REGISTRY:
+        for tool_id in TOOL_REGISTRY:
+            base_tool = BASE_REGISTRY.get(tool_id)
+            if base_tool:
+                ok_e, err_e = base_tool.assert_environment()
+                if ok_e:
+                    env_status_map[tool_id] = "ACTIVATED"
+                    # Apply environment activation readiness boost to matched candidates
+                    if scores[tool_id] > 0:
+                        scores[tool_id] = scores[tool_id] * 1.15 + 5.0
+                        match_details[tool_id].append("环境自感知激活就绪")
+                else:
+                    env_status_map[tool_id] = "PREREQ_REQUIRED"
+                    if err_e:
+                        env_details_map[tool_id] = err_e.details or []
+                        env_remediations_map[tool_id] = err_e.remediations or []
+
     # Rank tools by score
     ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     best_tool, best_score = ranked[0]
@@ -194,11 +226,23 @@ def analyze_route(input_str):
 
     suggested_cmd = f"{cmd_name} {remaining_args}".strip() if remaining_args else f"{cmd_name} status"
 
+    activation_state = env_status_map.get(best_tool, "UNKNOWN")
+    if activation_state == "ACTIVATED":
+        env_summary = "🟢 [已激活] 必需宿主运行环境均已就位"
+    elif activation_state == "PREREQ_REQUIRED":
+        missing_bins = [d.get("binary") for d in env_details_map.get(best_tool, []) if "binary" in d]
+        env_summary = f"🟡 [待激活 · 需补齐依赖] 缺少: {', '.join(missing_bins)}"
+    else:
+        env_summary = "⚪ [未检测]"
+
     result = {
         "input": input_str,
         "selected_tool": best_tool,
         "tool_name": tool_meta["name"],
         "executable": tool_meta["cmd"],
+        "env_activation": activation_state,
+        "env_status": env_summary,
+        "env_remediations": env_remediations_map.get(best_tool, []),
         "confidence": confidence,
         "score_share": score_share,
         "score": round(best_score, 1),
@@ -206,7 +250,12 @@ def analyze_route(input_str):
         "suggested_command": suggested_cmd,
         "runner": "DSHA Router v1.0 (DHSA-TestWeb)",
         "alternatives": [
-            {"tool": t, "name": TOOL_REGISTRY[t]["name"], "score": round(s, 1)}
+            {
+                "tool": t,
+                "name": TOOL_REGISTRY[t]["name"],
+                "score": round(s, 1),
+                "activation": env_status_map.get(t, "UNKNOWN"),
+            }
             for t, s in ranked[1:3] if s > 0
         ],
     }
@@ -218,11 +267,16 @@ def print_route_report(res):
     print(f"  输入意图: \"{res['input']}\"")
     print(f"  首选工具: [{res['selected_tool'].upper()}] {res['tool_name']}")
     print(f"  执行入口: {res['executable']}")
+    print(f"  环境状态: {res.get('env_status', '未知')}")
     print(f"  得分占比: {int(res['score_share'] * 100)}% (得分: {res['score']})  ← 占比，非正确概率")
     print(f"  决策依据: {'; '.join(res['reasoning'])}")
     print(f"  建议命令: `{res['suggested_command']}`")
+    if res.get("env_remediations"):
+        print("  环境修复指引:")
+        for r in res["env_remediations"]:
+            print(f"    💡 {r}")
     if res["alternatives"]:
-        alt_str = ", ".join([f"{a['tool']}({a['score']}分)" for a in res["alternatives"]])
+        alt_str = ", ".join([f"{a['tool']}({a['score']}分, {a.get('activation', '未知')})" for a in res["alternatives"]])
         print(f"  备选工具: {alt_str}")
 
 
@@ -244,10 +298,10 @@ def run_selftest():
     print(f"Running DSHA Router test matrix (n={total})...")
     for q, expected in tests:
         res = analyze_route(q)
-        ok = (res["selected_tool"] == expected)
+        ok = (res["selected_tool"] == expected) and ("env_activation" in res)
         if ok:
             passed += 1
-            print(f"  [PASS] \"{q[:25]}...\" -> {res['selected_tool']} (占比 {int(res['score_share']*100)}%)")
+            print(f"  [PASS] \"{q[:25]}...\" -> {res['selected_tool']} ({res['env_activation']}, 占比 {int(res['score_share']*100)}%)")
         else:
             print(f"  [FAIL] \"{q[:25]}...\" -> got {res['selected_tool']}, expected {expected}")
 
@@ -273,13 +327,19 @@ def main():
         sys.exit(0 if ok else 1)
 
     if cmd == "status":
-        print("=== DSHA 路由层全工具链就位状态 ===")
+        print("=== DSHA 路由层全工具链与环境激活状态 ===")
         repo_bin = Path(__file__).resolve().parent.parent / "bin"
         for t_id, meta in TOOL_REGISTRY.items():
             t_path = repo_bin / meta["cmd"]
             found = t_path.is_file()
-            status_tag = "[就绪]" if found else "[缺失]"
-            print(f"  {status_tag} {t_id.ljust(8)}: {meta['name']} -> {meta['cmd']}")
+            launcher_tag = "[已就绪]" if found else "[缺失]"
+            act_tag = "⚪ [未检测]"
+            if BASE_REGISTRY:
+                base_tool = BASE_REGISTRY.get(t_id)
+                if base_tool:
+                    ok_e, _ = base_tool.assert_environment()
+                    act_tag = "🟢 [已激活]" if ok_e else "🟡 [待激活]"
+            print(f"  {act_tag} {launcher_tag} {t_id.ljust(8)}: {meta['name']} -> {meta['cmd']}")
         return 0
 
     if cmd == "route":

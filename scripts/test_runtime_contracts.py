@@ -66,6 +66,26 @@ class RuntimeContracts(unittest.TestCase):
                 self.assertTrue(tool.execute()['success'])
                 self.assertNotIn('ALL_PROXY', run.call_args.kwargs['env'])
 
+    def test_env_penetration_blocks_secrets(self):
+        for m in self.copies('base_tool.py'):
+            tool = m.ScribeTool()
+            with self.subTest(module=m.__file__), patch.dict(os.environ, {'LEAKY_API_KEY': 'secret123', 'SYSTEMROOT': 'C:/Windows'}, clear=True), patch.object(m, 'get_active_tier', return_value='auto'), patch.object(tool, 'assert_environment', return_value=(True, None)), patch.object(tool, 'resolve_executable', return_value=sys.executable), patch.object(tool, 'assert_target_contained', return_value=(True, None)), patch.object(m.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0, stdout='', stderr='')) as run:
+                res = tool.execute(context={'custom_env': {'SAFE_CONFIG': 'abc'}})
+                self.assertTrue(res['success'])
+                called_env = run.call_args.kwargs['env']
+                self.assertNotIn('LEAKY_API_KEY', called_env)
+                self.assertEqual(called_env.get('SAFE_CONFIG'), 'abc')
+                self.assertEqual(called_env.get('PYTHONUTF8'), '1')
+
+    def test_envelope_bounds_and_tier_normalization(self):
+        for m in self.copies('base_tool.py'):
+            with self.subTest(module=m.__file__):
+                env = m.ExecutionEnvelope.from_context({'timeout': -5, 'tier': ' DANGER-FULL-ACCESS '})
+                self.assertEqual(env.timeout, 1)
+                self.assertEqual(env.tier, 'danger-full-access')
+
+                env_max = m.ExecutionEnvelope.from_context({'timeout': 999999})
+                self.assertEqual(env_max.timeout, 3600)
     def test_router_failure_does_not_fall_back_to_raw_execution(self):
         for m in self.copies('router.py'):
             def broken(*args, **kwargs):
