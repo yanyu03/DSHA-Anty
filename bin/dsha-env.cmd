@@ -8,12 +8,20 @@ if /i "%~1"=="sh" goto :SH
 exit /b 126
 :PYTHON
 if defined DSHA_PYTHON goto :CHECK_PYTHON
-for /f "delims=" %%I in ('where.exe python.exe 2^>nul') do if not defined DSHA_PYTHON set "DSHA_PYTHON=%%I"
+for /f "delims=" %%I in ('where.exe python.exe 2^>nul') do call :TRY_PYTHON "%%I"
+if not defined DSHA_PYTHON for /d %%I in ("%LOCALAPPDATA%\Programs\Python\Python*") do if exist "%%I\python.exe" set "DSHA_PYTHON=%%I\python.exe"
 :CHECK_PYTHON
 if not defined DSHA_PYTHON goto :MISSING
 if not exist "%DSHA_PYTHON%" goto :MISSING
+if exist "%DSHA_PYTHON%\*" goto :MISSING
 echo "%DSHA_PYTHON%" | findstr /i /c:"WindowsApps" >nul
 if not errorlevel 1 goto :MISSING
+exit /b 0
+:TRY_PYTHON
+if defined DSHA_PYTHON exit /b 0
+echo "%~1" | findstr /i /c:"WindowsApps" >nul
+if not errorlevel 1 exit /b 0
+if exist "%~1" set "DSHA_PYTHON=%~1"
 exit /b 0
 :PWSH
 if defined DSHA_PWSH goto :CHECK_PWSH
