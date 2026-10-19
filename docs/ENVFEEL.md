@@ -50,4 +50,24 @@ BaseTool执行管道保留原权限、最低版本及目标边界校验，并新
 
 直接调用第三方工具、外部MCP注册、原生客户端和绕开适配器的旧启动路径不因此自动受控。EnvFeel是环境门禁，不是权限沙箱，不授予额外执行授权。未知工具需要先声明和验证探测契约，而非自动下载或猜测运行方式。
 
-实现：scripts/envfeel.py，安装闭包包含envfeel.py、environment_smoke.py和dsha_env.py。受控失败与真实冒烟证据见ENVFEEL_REVIEW_2026-10-19.md。
+实现：scripts/envfeel.py，安装闭包包含envfeel.py、environment_smoke.py、dsha_env.py，以及项目探测使用的project_probe.py和frontend_probe.cjs。受控失败与真实冒烟证据见ENVFEEL_REVIEW_2026-10-19.md。
+
+## 项目能力：让实际环境回应
+
+`--require typescript|react|vue`是项目能力，不是伪造一个同名可执行文件。自动加入Node需求；必须通过`--project <绝对目录>`或`DSHA_PROJECT_ROOT`指定含package.json的项目，参数优先，无效参数不回退。显式环境文件也允许DSHA_PROJECT_ROOT，不读取包管理器的全局安装声明。不支持tsc别名或任意自定义包名；普通Node任务仍只检查Node，不能把它的READY称为框架就绪。
+
+```text
+python <skill-dir>/scripts/dsha.py envfeel --require typescript --require react --require vue --project <absolute-project> --run node -- <owned-script>
+```
+
+先做Node身份／健康检查，再使用项目上下文实际解析和加载所需库。解析结果必须位于所选项目的真实目录内；祖先node_modules、项目外symlink、全局包不算此项目证据。工作区集中提升依赖时显式选定拥有这些依赖的工作区根；目前不支持项目外链接、PnP、纯ESM专用库或全局tsc。不会自动安装、调用npm脚本或读取tsconfig插件。前端探测及后续任务子环境移除NODE_OPTIONS和NODE_PATH，不修改父环境。
+
+每次调用生成新的随机挑战及算术输入：
+
+- TypeScript 5/6：真实Compiler API对自有严格类型程序编译，要求有输出；对错误赋值必须给2322诊断并拒绝输出；运行生成的JavaScript核对算术结果。它不等于完整项目typecheck；7及以后没有此契约，明确拒绝。
+- React 18/19：检查React与react-dom版本一致，真实createElement及renderToStaticMarkup返回包含新挑战结果的HTML。只证明该SSR样本，不证明浏览器交互或生产构建。
+- Vue 3：检查Vue和其实际@vue/server-renderer依赖身份／版本，要求reactive/computed更新以及SSR HTML均正确。Vue的server-renderer包装入口不能直接冒充实际renderer包身份；初版因此出现的误拒绝已保留并修正。
+
+无包、只有依赖声明、版本号空壳、固定旧标记、错误响应或探测超时均拒绝，后续任务NOT_RUN。每能力探测上限20秒；超时不证明库自行派生的外部进程已停止。报告只公开状态、版本与检查范围，入口文件／清单哈希和位置在独占创建的私有*.local.json中。执行前重新检查，成功后在同一项目根和准备环境运行声明工具。项目依赖代码会在探测中实际执行；这是行为检查，不是权限沙箱、签名认证、恶意包鉴别或完整依赖闭包审计。已选入口／清单探测前后哈希相同也不保证检查与执行之间文件不可变。
+
+官方API依据：[TypeScript Compiler API](https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API)、[React静态SSR](https://react.dev/reference/react-dom/server/renderToStaticMarkup)、[Vue SSR](https://vuejs.org/api/ssr.html#rendertostring)。实现为独立自有挑战程序，无复制上游实现。实际新旧测试及安装结果另记ENVFEEL_PROJECT_REPLY_2026-10-19.md。

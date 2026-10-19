@@ -7,6 +7,7 @@
 | 配置 | 环境变量或参数 |
 | --- | --- |
 | Python/Node/PowerShell/Bash/Sh/Git | DSHA_PYTHON、DSHA_NODE、DSHA_PWSH、DSHA_BASH、DSHA_SH、DSHA_GIT；Python发现接口也可传explicit/custom_paths |
+| 项目能力 | EnvFeel --project优先于DSHA_PROJECT_ROOT；显式环境文件允许该键。配合--require typescript/react/vue执行真实挑战，不从package.json声明推断就绪 |
 | 其他外部工具 | DSHA_WRANGLER、DSHA_CF、DSHA_CLOUDFLARED；不自带账号、不自动登录或部署 |
 | Antigravity配置根 | DSHA_CONFIG_DIR；安装器和agy管理脚本也支持ConfigDir参数；默认从当前用户HOME派生 |
 | Codex运行配置 | CODEX_HOME、DSHA_HOST_CONFIG或dsha.py --host-config；DSHA_REA_ENTRY覆盖REA入口；JAVA_HOME、GHIDRA_INSTALL_DIR等进程环境覆盖私有host记录 |

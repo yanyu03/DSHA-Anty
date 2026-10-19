@@ -234,7 +234,7 @@ class PrivateParser(argparse.ArgumentParser):
 def apply_env_file(path, environ=None):
     """Explicit allowlisted KEY=VALUE file; no interpolation or shell evaluation."""
     env = os.environ if environ is None else environ
-    allowed = set(SDK_VARIABLES) | {'DSHA_' + name.upper() for name in TOOLS}
+    allowed = set(SDK_VARIABLES) | {'DSHA_' + name.upper() for name in TOOLS} | {'DSHA_PROJECT_ROOT'}
     values = {}
     for line in path.read_text(encoding='utf-8-sig').splitlines():
         line = line.strip()

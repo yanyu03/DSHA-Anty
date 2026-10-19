@@ -13,7 +13,7 @@ RULES = {
 def files():
     for folder in ('scripts', 'bin', 'plugins', 'chatgpt', 'codex/skill/scripts'):
         for path in (ROOT / folder).rglob('*'):
-            if path.suffix not in ('.py', '.ps1', '.cmd', '.json') or path.name.startswith('test') or path.name == 'selftest.py':
+            if path.suffix not in ('.py', '.ps1', '.cmd', '.json', '.cjs') or path.name.startswith('test') or path.name == 'selftest.py':
                 continue
             if path.name == Path(__file__).name or '__pycache__' in path.parts:
                 continue

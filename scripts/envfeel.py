@@ -8,6 +8,7 @@ import struct
 import subprocess
 
 from dsha_env import find_binary, normalize_environment, machine_environment
+from project_probe import CAPABILITIES, probe_frontend
 
 
 def detect_architecture():
@@ -68,11 +69,14 @@ def activate_environment(executables, environ=None):
 
 
 class EnvFeel:
-    def __init__(self, required, overrides=None, environ=None, env_file=None):
+    def __init__(self, required, overrides=None, environ=None, env_file=None, project=None):
         self.required = list(dict.fromkeys(required))
         self.overrides = dict(overrides or {})
         self.base_env = dict(os.environ if environ is None else environ)
         self.env_file = env_file
+        self.project = project
+        self.project_evidence = []
+        self.project_root = None
         self.executables = {}
         self.environment = {}
 
@@ -82,6 +86,8 @@ class EnvFeel:
         except (OSError, ValueError, RuntimeError) as error:
             self.executables = {}
             self.environment = {}
+            self.project_evidence = []
+            self.project_root = None
             return {'status': 'REFUSED', 'error': type(error).__name__, 'task': {'status': 'NOT_RUN'}}
 
     def _check(self):
@@ -90,17 +96,24 @@ class EnvFeel:
         report = {'status': 'REFUSED', 'context': context, 'tools': [], 'health': {}, 'task': {'status': 'NOT_RUN'}}
         self.executables = {}
         self.environment = {}
+        self.project_evidence = []
+        self.project_root = None
         if context['status'] != 'PASS':
             return report
-        if not self.required or any(name not in TOOLS for name in self.required) or any(name not in self.required for name in self.overrides):
+        capabilities = [name for name in self.required if name in CAPABILITIES]
+        tools = [name for name in self.required if name in TOOLS]
+        if capabilities and 'node' not in tools:
+            tools.append('node')
+        if not self.required or any(name not in TOOLS and name not in CAPABILITIES for name in self.required) or any(name not in tools for name in self.overrides):
             report['reason'] = 'undeclared or unsupported requirement'
             return report
         env = machine_environment(self.base_env)
         report['env_file_applied_names'] = apply_env_file(self.env_file, env) if self.env_file else []
+        selected_project = self.project if self.project is not None else env.get('DSHA_PROJECT_ROOT')
         report['visual_studio_discovery'] = discover_visual_studio(env) if set(self.required) & {'cl', 'cmake', 'msbuild', 'ninja'} else 'NOT_RUN'
-        names = list(self.required)
+        names = list(tools)
         dependencies = {'java': ('javac',), 'javac': ('java',), 'cargo': ('rustc',)}
-        for name in self.required:
+        for name in tools:
             names.extend(dep for dep in dependencies.get(name, ()) if dep not in names)
         for name in names:
             path = find_binary(name, explicit=self.overrides.get(name), environ=env)
@@ -116,6 +129,10 @@ class EnvFeel:
             report['reason'] = 'required tool location failed'
             return report
         self.environment = activate_environment(self.executables, env)
+        if capabilities:
+            for key in list(self.environment):
+                if key.upper() in ('NODE_OPTIONS', 'NODE_PATH'):
+                    del self.environment[key]
         report['activation'] = {'status': 'PREPARED', 'scope': 'child mapping only',
                                 'variable_names': ['PATH', 'PYTHONUTF8', 'PYTHONIOENCODING', *['DSHA_' + name.upper() for name in names], *(['JAVA_HOME'] if 'java' in names else [])]}
         for record in report['tools']:
@@ -147,6 +164,14 @@ class EnvFeel:
         if any(value['status'] != 'PASS' for value in report['health'].values()):
             report['reason'] = 'required health check failed'
             return report
+        if capabilities:
+            report['capabilities'], self.project_evidence = probe_frontend(
+                self.executables['node'], selected_project, capabilities, self.environment)
+            if any(item['status'] != 'PASS' for item in report['capabilities']):
+                report['reason'] = 'required project capability did not reply correctly'
+                return report
+            self.project_root = str(Path(selected_project).resolve())
+            self.environment['DSHA_PROJECT_ROOT'] = self.project_root
         report['status'] = 'READY'
         report['scope'] = 'declared requirements only; version probes plus listed owned health checks'
         return report
@@ -154,13 +179,15 @@ class EnvFeel:
     def execute(self, tool, arguments, timeout=60):
         # A saved READY report is never an execution ticket; always check again.
         report = self.check()
-        if report['status'] != 'READY' or tool not in self.required:
+        allowed = tool in self.required or (tool == 'node' and any(c in self.required for c in CAPABILITIES))
+        if report['status'] != 'READY' or not allowed or tool not in self.executables:
             report['status'] = 'REFUSED'
             report.setdefault('reason', 'execution tool not declared')
             return report, {}
         try:
             result = subprocess.run([self.executables[tool], *arguments], env=self.environment,
-                                    capture_output=True, encoding='utf-8', errors='replace', timeout=timeout)
+                                    capture_output=True, encoding='utf-8', errors='replace', timeout=timeout,
+                                    cwd=self.project_root)
             report['task'] = {'status': 'PASS' if result.returncode == 0 else 'FAIL', 'exit_code': result.returncode}
             report['status'] = 'COMPLETE' if result.returncode == 0 else 'TASK_FAILED'
             return report, {'stdout': result.stdout, 'stderr': result.stderr}
@@ -173,7 +200,8 @@ class EnvFeel:
 def main():
     from environment_smoke import TOOLS, PrivateParser
     parser = PrivateParser(description=__doc__)
-    parser.add_argument('--require', action='append', choices=tuple(TOOLS), default=[])
+    parser.add_argument('--require', action='append', choices=(*TOOLS, *CAPABILITIES), default=[])
+    parser.add_argument('--project', type=str, help='Explicit absolute project root for required frontend capabilities')
     parser.add_argument('--binary', action='append', default=[])
     parser.add_argument('--env-file', type=Path)
     parser.add_argument('--private-output', type=Path)
@@ -192,12 +220,13 @@ def main():
             raise ValueError('invalid timeout')
         if args.private_output and (not args.private_output.name.endswith('.local.json') or args.private_output.exists()):
             raise ValueError('private output must be a new ignored file')
-        gate = EnvFeel(args.require, overrides, env_file=args.env_file)
+        gate = EnvFeel(args.require, overrides, env_file=args.env_file, project=args.project)
         arguments = args.arguments[1:] if args.arguments[:1] == ['--'] else args.arguments
         report, output = gate.execute(args.run, arguments, args.timeout) if args.run else (gate.check(), {})
         if args.private_output:
             with args.private_output.open('x', encoding='utf-8') as stream:
-                json.dump({'report': report, 'resolved_executables': gate.executables, 'task_output': output}, stream, indent=2)
+                json.dump({'report': report, 'resolved_executables': gate.executables,
+                           'project_evidence': gate.project_evidence, 'task_output': output}, stream, indent=2)
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0 if report['status'] in ('READY', 'COMPLETE') else 126
     except (OSError, ValueError, RuntimeError) as error:
