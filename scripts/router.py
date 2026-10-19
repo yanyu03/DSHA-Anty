@@ -33,13 +33,16 @@ if hasattr(sys.stdout, "reconfigure"):
 
 # Import BaseTool Architecture for Environment-Activated Routing
 try:
-    from base_tool import TOOL_REGISTRY as BASE_REGISTRY, HostEnvPerceiver
+    from base_tool import TOOL_REGISTRY as BASE_REGISTRY, HostEnvPerceiver, TraceStore, retrace, dump_open_protocol_schema
 except ImportError:
     try:
-        from scripts.base_tool import TOOL_REGISTRY as BASE_REGISTRY, HostEnvPerceiver
+        from scripts.base_tool import TOOL_REGISTRY as BASE_REGISTRY, HostEnvPerceiver, TraceStore, retrace, dump_open_protocol_schema
     except ImportError:
         BASE_REGISTRY = None
         HostEnvPerceiver = None
+        TraceStore = None
+        retrace = None
+        dump_open_protocol_schema = None
 
 
 TOOL_REGISTRY = {
@@ -325,12 +328,49 @@ def main():
         print("  dsha exec \"<intent or file>\" [args...]")
         print("  dsha feel [tool] [--json]             # 宿主自感知雷达与运行时探针 HUD")
         print("  dsha envfeel [tool] [--json]          # 同上")
+        print("  dsha trace <trace_id> [--json]        # 查看执行凭据与链路记录")
+        print("  dsha retrace <target> [--json]        # 顺着接口逆向回溯根因与复现/回滚")
+        print("  dsha schema                           # 导出 DSHA 开放协议标准 JSON Schema")
         print("  dsha <cf|rea|scribe|pwsh|sh|tier|meter> [args...]")
         print("  dsha status")
         print("  dsha selftest")
         return 0
 
     cmd = sys.argv[1].lower()
+
+    if cmd == "schema":
+        if dump_open_protocol_schema:
+            print(json.dumps(dump_open_protocol_schema(), ensure_ascii=False, indent=2))
+            return 0
+        print("[DSHA-ROUTER] Error: dump_open_protocol_schema not available.", file=sys.stderr)
+        return 1
+
+    if cmd == "trace":
+        if len(sys.argv) < 3:
+            print("Usage: dsha trace <trace_id> [--json]", file=sys.stderr)
+            return 1
+        tid = sys.argv[2]
+        if TraceStore:
+            data = TraceStore.get(tid)
+            if not data:
+                print(f"Error: Trace '{tid}' not found.", file=sys.stderr)
+                return 1
+            print(json.dumps(data, ensure_ascii=False, indent=2))
+            return 0
+        print("[DSHA-ROUTER] Error: TraceStore not available.", file=sys.stderr)
+        return 1
+
+    if cmd == "retrace":
+        if len(sys.argv) < 3:
+            print("Usage: dsha retrace <target> [--json]", file=sys.stderr)
+            return 1
+        target = sys.argv[2]
+        as_json = "--json" in sys.argv
+        if retrace:
+            print(retrace(target, as_json=as_json))
+            return 0
+        print("[DSHA-ROUTER] Error: retrace not available.", file=sys.stderr)
+        return 1
 
     if cmd == "selftest":
         ok = run_selftest()
@@ -402,8 +442,11 @@ def main():
             query = sys.argv[2]
             res = analyze_route(query)
             print(f"[DSHA-ROUTER] Routing intent to [{res['selected_tool'].upper()}] {res['tool_name']} (得分占比: {int(res['score_share']*100)}%)...")
-            tool_args = sys.argv[3:] if len(sys.argv) > 3 else ["status"]
-            call_res = Call_Tools(res["selected_tool"], tool_args, {"capture": False})
+            call_res = Call_Tools(
+                res["selected_tool"],
+                tool_args,
+                {"capture": False, "route_meta": {"selected_tool": res["selected_tool"], "score_share": res["score_share"], "reasoning": res["reasoning"]}},
+            )
             if not call_res["success"] and call_res.get("stderr"):
                 print(call_res["stderr"], file=sys.stderr)
             return call_res["exit_code"]

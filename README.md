@@ -203,4 +203,62 @@ DSHA/
 - 体检是否通过反映的是**本机**状态：全新干净机器上会因缺少本地安装工具（如 node、wrangler 等）而提示依赖缺失。
 - 体检通过只说明**列出的检查项通过**，不等于第三方工具、外部 MCP、网络服务或账号可用。
 
+---
+
+## 七、 DSHA 开放协议与双向接口穿透回溯 (Open Protocol & Bidirectional Retrace)
+
+> 详细规范与 Schema 定义参见 [`DSHA_OPEN_PROTOCOL_SPEC.md`](./DSHA_OPEN_PROTOCOL_SPEC.md)。
+
+DSHA 开放协议（`v1.2.0-std`）是一套专为 AI Agent 与自动化开发者工具设计的标准化通信、受限执行与双向因果回溯规范，全面对齐 OpenRPC / JSON Schema 标准草案。
+
+### 7.1 五大设计原则
+
+1. **零外部运行时捆绑 (Zero Bundled Runtimes)**：保持仓库极简，依靠 `HostEnvPerceiver` 动态感知宿主环境。
+2. **单向不可逆传参包络 (Unidirectional Context Envelope)**：阻断父级进程 Token / Secret 泄露，向下仅传递安全工作区与净化后环境变量。
+3. **严格受控沙箱与类目寻址 (Strict Containment & Catalog Resolution)**：目标二进制必须受限于合法目录白名单，杜绝路径逃逸。
+4. **遇险即断与礼貌抱歉原则 (Fail-Closed & Polite Apology)**：前置依赖缺失或权限不足时，硬性阻断后续执行链条并返回格式化 `ErrBlock`。
+5. **双向全生命周期可观测性 (Bidirectional Retraceability)**：AI 能够顺着接口正向执行到底，遇到异常能够顺着接口逆向因果回溯到底。
+
+### 7.2 顺着接口到底：7 阶段正向生命周期流水线
+
+所有工具执行均严格按序通过以下 7 个阶段：
+
+```
+[ Stage 1: 入站校验 (Ingress) ]
+              │
+[ Stage 2: 意图路由 (Routing) ]
+              │
+[ Stage 3: 环境依赖自检 (EnvFeel) ]  ──(缺失)──> [ 阻断拦截 + ErrBlock ] (Exit: 126)
+              │ (满足)
+[ Stage 4: 权限档位断言 (Tier Auth) ] ──(越权)──> [ 阻断拦截 + ErrBlock ] (Exit: 126)
+              │ (授权)
+[ Stage 5: 目录收敛断言 (Containment)] ──(逃逸)──> [ 阻断拦截 + ErrBlock ] (Exit: 125)
+              │ (合规)
+[ Stage 6: 沙箱隔离执行 (Execution) ]
+              │
+[ Stage 7: 出站封装归档 (Egress) ]   ───> 输出 DSHAResponse + TraceReceipt
+```
+
+### 7.3 顺着接口回溯：AI 逆向因果归因引擎 (`retrace`)
+
+当执行发生故障或被策略阻断拦截时，AI 或开发者可调用 `retrace` 逆向因果遍历引擎，自 Stage 7 逆序回溯至 Stage 1，精准定位首个破坏契约的阶段与证据链条：
+
+```bash
+# 查看执行收据
+dsha trace tr_1792398025075_05516c
+
+# 逆向接口因果回溯研判
+dsha retrace tr_1792398025075_05516c
+
+# 导出 Open Protocol JSON Schema 规范
+dsha schema
+```
+
+回溯研判输出包含四大核心要素：
+1. **精确根因归因 (Root Cause Attribution)**：定性定位导致失败的流水线阶段与错误码。
+2. **现场快照取证 (Forensic Evidence)**：包含缺失依赖、越权详情或未授权访问边界。
+3. **L4 标准复现指令 (Reproducer)**：一键复现现场的精确命令行。
+4. **L4 安全回滚操作 (Rollback Procedure)**：对应的现场清理与状态还原机制。
+
+
 

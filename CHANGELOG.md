@@ -7,6 +7,22 @@
 >
 > 因此阅读顺序请**以本文件从上到下为准**，不要按版本号大小推断新旧。详见 `VERSION_SCHEME.md`。
 
+## v1.2.0-std — 2026-10-19
+**DSHA 开放协议全面标准化对齐与双向接口穿透回溯 (Open Protocol v1.2.0-std)**
+- **DSHA 开放协议标准与 JSON Schema 规范 (`DSHA_OPEN_PROTOCOL_SPEC.md`)**：正式确立 DSHA Open Protocol 工业级数据契约，严格遵循 OpenRPC / JSON Schema 标准草案。规范化定义请求包络 `DSHARequest`、响应包络 `DSHAResponse`、执行收据 `TraceReceipt`、阶段断言记录 `StageRecord` 与拒绝凭据 `ErrBlock`。
+- **顺着接口到底 (7 阶段确定性正向执行流水线)**：构建端到端不可绕过的生命周期控制面：
+  1. `ingress_validation`（入站校验与参数合法性）
+  2. `intent_routing`（意图加权路由与元数据绑定）
+  3. `envfeel_prerequisites`（宿主环境自感知与依赖探针前置阻断）
+  4. `tier_authorization`（权限档位断言与防越权拦截）
+  5. `catalog_containment`（类目寻址与防目录逃逸沙箱断言）
+  6. `sandbox_execution`（单向受限执行与轻量捕获）
+  7. `egress_packaging`（出站标准化封包与 TraceReceipt 盖戳归档）
+- **顺着接口回溯 (AI 逆向因果归因引擎 `retrace`)**：提供自 Stage 7 至 Stage 1 的逆序因果树遍历引擎。在工具拒绝或异常中断时，自动化定位根因阶段，输出取证快照、治理建议、L4 标准复现指令（`reproducer`）与受控回滚方案（`rollback`）。
+- **收据自动持久化与安全轮转 (`TraceStore`)**：自动持久化执行收据至 `logs/traces/tr_<timestamp>_<hash>.json`，内置 100 份最大保留滑动窗口与自动清理淘汰机制。
+- **统一 CLI 接口扩充 (`dsha` / `dsha-index`)**：新增 `trace <trace_id>`（检索执行收据）、`retrace <target>`（逆向因果回溯研判）以及 `schema`（导出机器可读 Open Protocol JSON Schema 规范定义）。
+- **自动化测试全景通过**：新增 4 项运行时合约测试，`verify.ps1` 扩展至 67 项体检检查全量通过（PASS 67 / FAIL 0 / WARN 2）。
+
 ## v1.0.0 — 2026-10-19
 **DSHA-SharBoy 1.0 正式版全景发布 (Official Release v1.0.0 · 全开源 Public 启动)**
 - **宿主环境自感知与穿透引擎 (`HostEnvPerceiver`)**：移除硬编码盘符路径，动态感知系统盘、Program Files、AppData、Scoop、Chocolatey、Pyenv 等包管理器运行时并自动注入 PATH，过滤 0 字节 WindowsApps 别名陷阱，确保跨机器与跨盘迁移即插即用。

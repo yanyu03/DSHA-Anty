@@ -36,6 +36,10 @@ _rollback/
 # Logging & Audit Traces (Protect user privacy)
 logs/*.log
 logs/*.log.*
+logs/traces/
+logs/*.json
+**/logs/traces/
+**/logs/*.json
 *.log
 *.log.*
 !plugins/dsh-permissions/logs/.gitkeep

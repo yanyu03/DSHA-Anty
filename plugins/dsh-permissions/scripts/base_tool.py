@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
 from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
@@ -468,7 +469,7 @@ class ExecutionEnvelope:
     Sanitizes caller parameters and builds a strictly whitelisted minimal environment,
     preventing session secret leakage and unintended parent context inheritance.
     """
-    ALLOWED_CONTEXT_KEYS = {"tier", "timeout", "cwd", "proxy", "capture", "custom_env"}
+    ALLOWED_CONTEXT_KEYS = {"tier", "timeout", "cwd", "proxy", "capture", "custom_env", "trace_id", "caller", "trace"}
     ALLOWED_TIERS = {"read-only", "workspace-write", "danger-full-access", "auto"}
     WHITELIST_ENV_VARS = {
         "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT",
@@ -478,7 +479,7 @@ class ExecutionEnvelope:
         "LANG", "LC_ALL",
     }
 
-    def __init__(self, tier=None, timeout=180, cwd=None, proxy=None, capture=True, custom_env=None):
+    def __init__(self, tier=None, timeout=180, cwd=None, proxy=None, capture=True, custom_env=None, trace_id=None, caller=None):
         self.tier = str(tier).lower().strip() if tier else None
         try:
             self.timeout = max(1, min(int(timeout), 3600))
@@ -488,6 +489,8 @@ class ExecutionEnvelope:
         self.proxy = proxy.strip() if proxy and isinstance(proxy, str) else None
         self.capture = bool(capture)
         self.custom_env = custom_env if isinstance(custom_env, dict) else {}
+        self.trace_id = str(trace_id).strip() if trace_id else None
+        self.caller = str(caller).strip() if caller else "ai-assistant"
 
     @classmethod
     def from_context(cls, context=None):
@@ -500,6 +503,8 @@ class ExecutionEnvelope:
             proxy=context.get("proxy"),
             capture=context.get("capture", True),
             custom_env=context.get("custom_env"),
+            trace_id=context.get("trace_id"),
+            caller=context.get("caller"),
         )
 
     def build_subprocess_env(self):
@@ -682,6 +687,456 @@ class ErrBlock:
         return "\n".join(lines)
 
 
+class TraceStage(str, Enum):
+    INGRESS_VALIDATION = "ingress_validation"
+    INTENT_ROUTING = "intent_routing"
+    ENVFEEL_PREREQUISITES = "envfeel_prerequisites"
+    TIER_AUTHORIZATION = "tier_authorization"
+    CATALOG_CONTAINMENT = "catalog_containment"
+    SANDBOX_EXECUTION = "sandbox_execution"
+    EGRESS_PACKAGING = "egress_packaging"
+
+
+class StageRecord:
+    """Telemetry record for a single stage in the execution lifecycle."""
+
+    def __init__(self, stage, status, latency_ms=0, message="", evidence=None):
+        self.stage = stage.value if isinstance(stage, TraceStage) else str(stage)
+        self.status = str(status).upper()  # PASS, FAIL, SKIP
+        self.latency_ms = int(latency_ms)
+        self.message = str(message)
+        self.evidence = evidence if isinstance(evidence, dict) else {}
+
+    def to_dict(self):
+        return {
+            "stage": self.stage,
+            "status": self.status,
+            "latency_ms": self.latency_ms,
+            "message": self.message,
+            "evidence": self.evidence,
+        }
+
+
+class TraceReceipt:
+    """
+    Standardized Cryptographic/Deterministic Execution Receipt.
+    Provides complete bidirectional traceability across all 7 lifecycle stages.
+    """
+
+    def __init__(self, trace_id=None, caller="ai-assistant", tool_id="", tool_name="", category="", args=None, context=None):
+        self.trace_id = trace_id or f"tr_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}"
+        self.timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        self.caller = caller or "ai-assistant"
+        self.tool_id = tool_id
+        self.tool_name = tool_name
+        self.category = category
+        self.args = list(args) if args else []
+        self.context = context if isinstance(context, dict) else {}
+        self.stages = []
+        self.status = "PENDING"
+        self.exit_code = 0
+        self.duration_ms = 0
+        self.causal_chain = None
+        self.reproducer = {}
+        self.rollback = {}
+        self.host_fingerprint = HostEnvPerceiver.get_topology()
+
+    def record_stage(self, stage, status, latency_ms=0, message="", evidence=None):
+        rec = StageRecord(stage, status, latency_ms, message, evidence)
+        self.stages.append(rec)
+        return rec
+
+    def finalize(self, status, exit_code, duration_ms, causal_chain=None, reproducer=None, rollback=None):
+        self.status = str(status).upper()
+        self.exit_code = int(exit_code)
+        self.duration_ms = int(duration_ms)
+        self.causal_chain = causal_chain
+        self.reproducer = reproducer or self._default_reproducer()
+        self.rollback = rollback or self._default_rollback()
+
+    def _default_reproducer(self):
+        cmd_args = " ".join([f'"{a}"' if " " in a else a for a in self.args])
+        cli = f"dsha {self.tool_id} {cmd_args}".strip()
+        py = f"from index import Call_Tools; res = Call_Tools('{self.tool_id}', {self.args})"
+        return {
+            "cli_command": cli,
+            "powershell_command": f"powershell -Command \"& {cli}\"",
+            "python_snippet": py,
+        }
+
+    def _default_rollback(self):
+        is_safe = self.exit_code in (0, 124, 125, 126, 127)
+        if self.tool_id in ("tier",):
+            return {
+                "action": "revert_tier",
+                "command": "powershell -File bin/agy-tier.ps1 auto",
+                "safe": True,
+            }
+        return {
+            "action": "inspect_audit_and_revert" if self.exit_code != 0 else "no_side_effects",
+            "command": "powershell -Command \"Get-Content logs/gate.log -Tail 20\"" if self.exit_code != 0 else "none",
+            "safe": is_safe,
+        }
+
+    def to_dict(self):
+        return {
+            "protocol": "dsha-1.2.0-std",
+            "trace_id": self.trace_id,
+            "timestamp": self.timestamp,
+            "status": self.status,
+            "exit_code": self.exit_code,
+            "duration_ms": self.duration_ms,
+            "caller": self.caller,
+            "tool_id": self.tool_id,
+            "tool_name": self.tool_name,
+            "category": self.category,
+            "args": self.args,
+            "host_fingerprint": self.host_fingerprint,
+            "stages": [s.to_dict() for s in self.stages],
+            "causal_chain": self.causal_chain,
+            "reproducer": self.reproducer,
+            "rollback": self.rollback,
+        }
+
+    def format_retrace(self):
+        """Format backward lifecycle trace walk for AI and developers."""
+        lines = [
+            "========================================================================",
+            "🔍 [DSHA 接口生命周期逆向回溯 · Retrace Engine v1.2.0-std]",
+            "========================================================================",
+            f"  • 追踪标识 (Trace ID): {self.trace_id}",
+            f"  • 调用发起 (Caller):   {self.caller}",
+            f"  • 目标工具 (Tool):     [{self.category}] {self.tool_name} (id: {self.tool_id})",
+            f"  • 终态裁决 (Verdict):  {self.status} (退出码: {self.exit_code}, 总耗时: {self.duration_ms}ms)",
+            f"  • 宿主拓扑 (Topology): {HostEnvPerceiver.get_topology_string()}",
+            "",
+            "⏪ 逆向调用链回溯 (Reverse Traversal: Stage 7 -> Stage 1):",
+        ]
+
+        all_stage_names = [
+            TraceStage.EGRESS_PACKAGING.value,
+            TraceStage.SANDBOX_EXECUTION.value,
+            TraceStage.CATALOG_CONTAINMENT.value,
+            TraceStage.TIER_AUTHORIZATION.value,
+            TraceStage.ENVFEEL_PREREQUISITES.value,
+            TraceStage.INTENT_ROUTING.value,
+            TraceStage.INGRESS_VALIDATION.value,
+        ]
+
+        stage_dict = {s.stage: s for s in self.stages}
+
+        stage_titles = {
+            "egress_packaging": "7/7: 响应封套封装 (Egress Packaging)",
+            "sandbox_execution": "6/7: 沙箱子进程执行 (Sandbox Execution)",
+            "catalog_containment": "5/7: 白名单根收容 (Catalog Containment)",
+            "tier_authorization": "4/7: 权限档位核验 (Tier Authorization)",
+            "envfeel_prerequisites": "3/7: 宿主环境自感知 (EnvFeel Prerequisites)",
+            "intent_routing": "2/7: 意图路由匹配 (Intent Routing)",
+            "ingress_validation": "1/7: 入口封套校验 (Ingress Validation)",
+        }
+
+        for s_name in all_stage_names:
+            s_title = stage_titles.get(s_name, s_name)
+            if s_name in stage_dict:
+                rec = stage_dict[s_name]
+                if rec.status == "PASS":
+                    badge = "✓ [PASS]"
+                elif rec.status == "FAIL":
+                    badge = "❌ [FAIL]"
+                else:
+                    badge = f"? [{rec.status}]"
+                lat_str = f"({rec.latency_ms}ms)" if rec.latency_ms > 0 else ""
+                lines.append(f"  [{s_title}] {badge} {lat_str}")
+                if rec.message:
+                    lines.append(f"      └─ 状态: {rec.message}")
+                if rec.evidence:
+                    lines.append(f"      └─ 证据: {json.dumps(rec.evidence, ensure_ascii=False)}")
+            else:
+                lines.append(f"  [{s_title}] ⊘ [SKIP] (因上游熔断拦截未下发)")
+
+        if self.causal_chain:
+            lines.append("")
+            lines.append("🎯 根因归因与证据链 (Root Cause & Forensic Evidence):")
+            lines.append(f"  • 阻断阶段: {self.causal_chain.get('failed_stage')}")
+            lines.append(f"  • 错误编码: {self.causal_chain.get('error_code')}")
+            lines.append(f"  • 阻断原因: {self.causal_chain.get('root_cause')}")
+            rems = self.causal_chain.get("remediations")
+            if rems:
+                lines.append("  • 修复建议:")
+                for r in rems:
+                    lines.append(f"      💡 {r}")
+
+        lines.append("")
+        lines.append("🔁 依契约复现命令 (L4 Reproducer):")
+        lines.append(f"  CLI:        {self.reproducer.get('cli_command', 'none')}")
+        lines.append(f"  PowerShell: {self.reproducer.get('powershell_command', 'none')}")
+
+        lines.append("")
+        lines.append("↩️ 依契约回滚操作 (L4 Rollback):")
+        lines.append(f"  动作: {self.rollback.get('action', 'none')}")
+        lines.append(f"  命令: {self.rollback.get('command', 'none')}")
+        lines.append(f"  安全: {'安全无害' if self.rollback.get('safe') else '需谨慎'}")
+        lines.append("========================================================================")
+        return "\n".join(lines)
+
+
+class TraceStore:
+    """Persists and retrieves standardized execution trace receipts with automatic rotation."""
+
+    @classmethod
+    def get_trace_dir(cls):
+        # 1. If inside repo/workspace, locate project root
+        p = Path(__file__).resolve().parent
+        repo_root = None
+        for cand in [p, p.parent, p.parent.parent, p.parent.parent.parent]:
+            if (cand / ".git").exists() or (cand / "VERSION_SCHEME.md").exists():
+                repo_root = cand
+                break
+        if repo_root:
+            primary = repo_root / "logs" / "traces"
+        else:
+            user_home = Path(os.environ.get("USERPROFILE") or os.path.expanduser("~") or ".")
+            primary = user_home / ".gemini" / "config" / "logs" / "traces"
+
+        try:
+            primary.mkdir(parents=True, exist_ok=True)
+            return primary
+        except Exception:
+            user_home = Path(os.environ.get("USERPROFILE") or os.path.expanduser("~") or ".")
+            sec = user_home / ".gemini" / "config" / "logs" / "traces"
+            sec.mkdir(parents=True, exist_ok=True)
+            return sec
+
+    @classmethod
+    def save(cls, receipt):
+        if not receipt or not receipt.trace_id:
+            return None
+        try:
+            d = cls.get_trace_dir()
+            out_file = d / f"{receipt.trace_id}.json"
+            data = receipt.to_dict()
+            with open(out_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+
+            traces = sorted(d.glob("tr_*.json"), key=lambda p: p.stat().st_mtime)
+            if len(traces) > 100:
+                for old in traces[:-100]:
+                    try:
+                        old.unlink()
+                    except Exception:
+                        pass
+            return str(out_file)
+        except Exception:
+            return None
+
+    @classmethod
+    def get(cls, trace_id):
+        if not trace_id:
+            return None
+        tid = Path(trace_id).stem
+        d = cls.get_trace_dir()
+        target = d / f"{tid}.json"
+        if not target.is_file():
+            user_home = Path(os.environ.get("USERPROFILE") or os.path.expanduser("~") or ".")
+            alt = user_home / ".gemini" / "config" / "logs" / "traces" / f"{tid}.json"
+            if alt.is_file():
+                target = alt
+            else:
+                alt_repo = Path.cwd() / "logs" / "traces" / f"{tid}.json"
+                if alt_repo.is_file():
+                    target = alt_repo
+                else:
+                    return None
+        try:
+            with open(target, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
+
+
+
+def retrace(target, as_json=False):
+    """
+    AI Reverse Traceability Engine (顺着接口回溯).
+    Accepts a trace_id string, a response envelope dict, or a trace file path.
+    Walks backwards from Stage 7 up to Stage 1 to explain execution causal factors.
+    """
+    data = None
+    if isinstance(target, dict):
+        if "trace_receipt" in target and isinstance(target["trace_receipt"], dict):
+            data = target["trace_receipt"]
+        elif "stages" in target:
+            data = target
+    elif isinstance(target, str):
+        if Path(target).is_file():
+            try:
+                with open(target, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                pass
+        if not data:
+            data = TraceStore.get(target)
+
+    if not data:
+        err_msg = f"[DSHA-RETRACE] Trace not found for target: {target}"
+        if as_json:
+            return json.dumps({"error": err_msg}, ensure_ascii=False)
+        return err_msg
+
+    receipt = TraceReceipt(
+        trace_id=data.get("trace_id"),
+        caller=data.get("caller", "ai-assistant"),
+        tool_id=data.get("tool_id", ""),
+        tool_name=data.get("tool_name", ""),
+        category=data.get("category", ""),
+        args=data.get("args", []),
+    )
+    receipt.timestamp = data.get("timestamp", receipt.timestamp)
+    receipt.status = data.get("status", "UNKNOWN")
+    receipt.exit_code = data.get("exit_code", 0)
+    receipt.duration_ms = data.get("duration_ms", 0)
+    receipt.causal_chain = data.get("causal_chain")
+    receipt.reproducer = data.get("reproducer", {})
+    receipt.rollback = data.get("rollback", {})
+    receipt.host_fingerprint = data.get("host_fingerprint", {})
+
+    for s in data.get("stages", []):
+        receipt.record_stage(
+            stage=s.get("stage"),
+            status=s.get("status"),
+            latency_ms=s.get("latency_ms", 0),
+            message=s.get("message", ""),
+            evidence=s.get("evidence", {}),
+        )
+
+    if as_json:
+        return json.dumps(receipt.to_dict(), ensure_ascii=False, indent=2)
+    return receipt.format_retrace()
+
+
+def dump_open_protocol_schema():
+    """Returns official machine-readable Open Protocol JSON Schema specification (v1.2.0-std)."""
+    return {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "DSHA Open Protocol Specification (v1.2.0-std)",
+        "description": "Standardized bidirectional execution, pre-flight assertion, and retraceability protocol for AI agents and developer tooling.",
+        "definitions": {
+            "DSHARequest": {
+                "type": "object",
+                "required": ["tool"],
+                "properties": {
+                    "trace_id": {"type": "string", "description": "Unique invocation trace ID"},
+                    "caller": {"type": "string", "description": "Originating agent or user identifier"},
+                    "tool": {"type": "string", "description": "Target tool ID (cf, rea, scribe, pwsh, sh, tier, meter)"},
+                    "args": {"type": "array", "items": {"type": "string"}, "description": "CLI argument list"},
+                    "context": {
+                        "type": "object",
+                        "properties": {
+                            "tier": {"type": "string", "enum": ["read-only", "workspace-write", "danger-full-access", "auto"]},
+                            "timeout": {"type": "integer", "minimum": 1, "maximum": 3600},
+                            "cwd": {"type": "string"},
+                            "proxy": {"type": "string"},
+                            "capture": {"type": "boolean"},
+                            "custom_env": {"type": "object"},
+                        },
+                    },
+                },
+            },
+            "DSHAResponse": {
+                "type": "object",
+                "required": ["protocol", "trace_id", "success", "exit_code", "duration_ms", "envfeel"],
+                "properties": {
+                    "protocol": {"type": "string", "const": "dsha-1.2.0-std"},
+                    "trace_id": {"type": "string"},
+                    "success": {"type": "boolean"},
+                    "tool": {"type": "string"},
+                    "tool_name": {"type": "string"},
+                    "category": {"type": "string"},
+                    "exit_code": {"type": "integer"},
+                    "stdout": {"type": "string"},
+                    "stderr": {"type": "string"},
+                    "duration_ms": {"type": "integer"},
+                    "err_block": {"$ref": "#/definitions/ErrBlock"},
+                    "envfeel": {"$ref": "#/definitions/EnvFeelTelemetry"},
+                    "trace_receipt": {"$ref": "#/definitions/TraceReceipt"},
+                },
+            },
+            "TraceReceipt": {
+                "type": "object",
+                "required": ["protocol", "trace_id", "timestamp", "status", "exit_code", "stages"],
+                "properties": {
+                    "protocol": {"type": "string", "const": "dsha-1.2.0-std"},
+                    "trace_id": {"type": "string"},
+                    "timestamp": {"type": "string", "format": "date-time"},
+                    "status": {"type": "string", "enum": ["PASS", "REFUSED", "EXECUTION_ERROR", "TIMEOUT"]},
+                    "exit_code": {"type": "integer"},
+                    "duration_ms": {"type": "integer"},
+                    "caller": {"type": "string"},
+                    "tool_id": {"type": "string"},
+                    "tool_name": {"type": "string"},
+                    "category": {"type": "string"},
+                    "args": {"type": "array", "items": {"type": "string"}},
+                    "host_fingerprint": {"type": "object"},
+                    "stages": {
+                        "type": "array",
+                        "items": {"$ref": "#/definitions/StageRecord"},
+                    },
+                    "causal_chain": {"type": ["object", "null"]},
+                    "reproducer": {"type": "object"},
+                    "rollback": {"type": "object"},
+                },
+            },
+            "StageRecord": {
+                "type": "object",
+                "required": ["stage", "status"],
+                "properties": {
+                    "stage": {
+                        "type": "string",
+                        "enum": [
+                            "ingress_validation",
+                            "intent_routing",
+                            "catalog_containment",
+                            "envfeel_prerequisites",
+                            "tier_authorization",
+                            "sandbox_execution",
+                            "egress_packaging",
+                        ],
+                    },
+                    "status": {"type": "string", "enum": ["PASS", "FAIL", "SKIP"]},
+                    "latency_ms": {"type": "integer"},
+                    "message": {"type": "string"},
+                    "evidence": {"type": "object"},
+                },
+            },
+            "ErrBlock": {
+                "type": ["object", "null"],
+                "properties": {
+                    "status": {"type": "string", "const": "REFUSED"},
+                    "error_code": {"type": "string"},
+                    "tool_id": {"type": "string"},
+                    "tool_name": {"type": "string"},
+                    "category": {"type": "string"},
+                    "refusal_statement": {"type": "string"},
+                    "details": {"type": "array"},
+                    "remediations": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+            "EnvFeelTelemetry": {
+                "type": "object",
+                "required": ["status", "platform"],
+                "properties": {
+                    "status": {"type": "string"},
+                    "platform": {"type": "string"},
+                    "reason": {"type": "string"},
+                    "tier": {"type": "string"},
+                    "cwd": {"type": "string"},
+                    "details": {"type": "array"},
+                },
+            },
+        },
+    }
+
+
 class BaseTool(ABC):
     """Abstract Base Class for all DSHA tools."""
 
@@ -857,11 +1312,74 @@ class BaseTool(ABC):
 
         # 0. Convert context into unidirectional ExecutionEnvelope
         envelope = ExecutionEnvelope.from_context(context)
+        trace_id = envelope.trace_id or f"tr_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}"
+        caller = envelope.caller
 
-        # 1. Environment Assertion (No bundled runtime principle)
+        receipt = TraceReceipt(
+            trace_id=trace_id,
+            caller=caller,
+            tool_id=self.id,
+            tool_name=self.name,
+            category=self.category.value,
+            args=args,
+            context=context,
+        )
+
+        # Stage 1: Ingress Validation
+        receipt.record_stage(
+            TraceStage.INGRESS_VALIDATION,
+            "PASS",
+            latency_ms=0,
+            message="Unidirectional execution envelope sanitized & parameter bounds enforced",
+            evidence={"cwd": envelope.cwd, "timeout": envelope.timeout, "tier": envelope.tier},
+        )
+
+        # Stage 2: Intent Routing
+        route_meta = context.get("route_meta")
+        if route_meta:
+            receipt.record_stage(
+                TraceStage.INTENT_ROUTING,
+                "PASS",
+                latency_ms=0,
+                message=f"Routed from intent with score_share {route_meta.get('score_share')}",
+                evidence=route_meta,
+            )
+        else:
+            receipt.record_stage(
+                TraceStage.INTENT_ROUTING,
+                "PASS",
+                latency_ms=0,
+                message="Direct catalog identifier dispatch (bypass router)",
+            )
+
+        # Stage 3: EnvFeel Pre-flight Prerequisite Assertion (No bundled runtime)
+        t_env0 = time.time()
         ok_env, err_env = self.assert_environment()
+        env_lat = int((time.time() - t_env0) * 1000)
         if not ok_env:
+            receipt.record_stage(
+                TraceStage.ENVFEEL_PREREQUISITES,
+                "FAIL",
+                latency_ms=env_lat,
+                message="Host runtime prerequisite assertion failed",
+                evidence={"failed_prereqs": err_env.details},
+            )
+            receipt.finalize(
+                status="REFUSED",
+                exit_code=126,
+                duration_ms=env_lat,
+                causal_chain={
+                    "failed_stage": TraceStage.ENVFEEL_PREREQUISITES.value,
+                    "error_code": "ERR_PREREQUISITE_MISSING",
+                    "root_cause": err_env.refusal_statement,
+                    "evidence": err_env.details,
+                    "remediations": err_env.remediations,
+                },
+            )
+            TraceStore.save(receipt)
             return {
+                "protocol": "dsha-1.2.0-std",
+                "trace_id": trace_id,
                 "success": False,
                 "tool": self.id,
                 "tool_name": self.name,
@@ -870,20 +1388,50 @@ class BaseTool(ABC):
                 "stdout": "",
                 "stderr": err_env.format_cli(),
                 "err_block": err_env.to_dict(),
-                "duration_ms": 0,
+                "duration_ms": env_lat,
                 "envfeel": {
                     "status": "REFUSED",
                     "platform": HostEnvPerceiver.get_topology_string(),
                     "reason": "prerequisites_missing",
                     "details": err_env.details,
                 },
+                "trace_receipt": receipt.to_dict(),
             }
 
-        # 2. Authorization Assertion (Anti-privilege escalation principle)
+        receipt.record_stage(
+            TraceStage.ENVFEEL_PREREQUISITES,
+            "PASS",
+            latency_ms=env_lat,
+            message="All declared host runtimes verified and probe satisfied",
+        )
+
+        # Stage 4: Tier Authorization Assertion (Anti-privilege escalation)
         active_tier = envelope.tier
         ok_auth, err_auth = self.assert_authorization(active_tier)
         if not ok_auth:
+            receipt.record_stage(
+                TraceStage.TIER_AUTHORIZATION,
+                "FAIL",
+                latency_ms=0,
+                message=f"Denied by permission tier '{envelope.tier or get_active_tier()}'",
+                evidence=err_auth.details[0] if err_auth and err_auth.details else {},
+            )
+            receipt.finalize(
+                status="REFUSED",
+                exit_code=126,
+                duration_ms=env_lat,
+                causal_chain={
+                    "failed_stage": TraceStage.TIER_AUTHORIZATION.value,
+                    "error_code": "ERR_PERMISSION_DENIED",
+                    "root_cause": err_auth.refusal_statement,
+                    "evidence": err_auth.details,
+                    "remediations": err_auth.remediations,
+                },
+            )
+            TraceStore.save(receipt)
             return {
+                "protocol": "dsha-1.2.0-std",
+                "trace_id": trace_id,
                 "success": False,
                 "tool": self.id,
                 "tool_name": self.name,
@@ -892,19 +1440,48 @@ class BaseTool(ABC):
                 "stdout": "",
                 "stderr": err_auth.format_cli(),
                 "err_block": err_auth.to_dict(),
-                "duration_ms": 0,
+                "duration_ms": env_lat,
                 "envfeel": {
                     "status": "REFUSED",
                     "platform": HostEnvPerceiver.get_topology_string(),
                     "reason": "authorization_denied",
                     "tier": active_tier or get_active_tier(),
                 },
+                "trace_receipt": receipt.to_dict(),
             }
 
-        # 3. Resolve Launcher
+        receipt.record_stage(
+            TraceStage.TIER_AUTHORIZATION,
+            "PASS",
+            latency_ms=0,
+            message=f"Operation authorized under tier '{active_tier or get_active_tier()}'",
+        )
+
+        # Stage 5: Catalog Resolution & Sandbox Containment Assertion
         exec_path = self.resolve_executable()
         if not exec_path:
+            receipt.record_stage(
+                TraceStage.CATALOG_CONTAINMENT,
+                "FAIL",
+                latency_ms=0,
+                message=f"Launcher '{self.cmd}' could not be resolved on disk",
+            )
+            receipt.finalize(
+                status="REFUSED",
+                exit_code=127,
+                duration_ms=0,
+                causal_chain={
+                    "failed_stage": TraceStage.CATALOG_CONTAINMENT.value,
+                    "error_code": "ERR_LAUNCHER_NOT_FOUND",
+                    "root_cause": f"Launcher '{self.cmd}' could not be resolved on disk.",
+                    "evidence": {"tool_id": self.id, "cmd": self.cmd},
+                    "remediations": ["Verify DSHA installation via `powershell -File install.ps1`"],
+                },
+            )
+            TraceStore.save(receipt)
             return {
+                "protocol": "dsha-1.2.0-std",
+                "trace_id": trace_id,
                 "success": False,
                 "tool": self.id,
                 "tool_name": self.name,
@@ -919,12 +1496,34 @@ class BaseTool(ABC):
                     "platform": HostEnvPerceiver.get_topology_string(),
                     "reason": "launcher_not_found",
                 },
+                "trace_receipt": receipt.to_dict(),
             }
 
-        # 3.5 Target Containment Assertion (目标必须在白名单根内)
         ok_contained, err_contained = self.assert_target_contained(exec_path)
         if not ok_contained:
+            receipt.record_stage(
+                TraceStage.CATALOG_CONTAINMENT,
+                "FAIL",
+                latency_ms=0,
+                message="Target executable outside allowed sandbox roots",
+                evidence={"target": exec_path},
+            )
+            receipt.finalize(
+                status="REFUSED",
+                exit_code=125,
+                duration_ms=0,
+                causal_chain={
+                    "failed_stage": TraceStage.CATALOG_CONTAINMENT.value,
+                    "error_code": "ERR_TARGET_OUTSIDE_SANDBOX",
+                    "root_cause": f"Target outside allowed roots: {exec_path}",
+                    "evidence": {"target": exec_path},
+                    "remediations": err_contained.remediations if err_contained else [],
+                },
+            )
+            TraceStore.save(receipt)
             return {
+                "protocol": "dsha-1.2.0-std",
+                "trace_id": trace_id,
                 "success": False,
                 "tool": self.id,
                 "tool_name": self.name,
@@ -939,9 +1538,18 @@ class BaseTool(ABC):
                     "platform": HostEnvPerceiver.get_topology_string(),
                     "reason": "target_outside_sandbox",
                 },
+                "trace_receipt": receipt.to_dict(),
             }
 
-        # 4. Execute with Environment Isolation & Unidirectional Parameter Envelope
+        receipt.record_stage(
+            TraceStage.CATALOG_CONTAINMENT,
+            "PASS",
+            latency_ms=0,
+            message="Target executable contained in allowed sandbox roots",
+            evidence={"target": exec_path},
+        )
+
+        # Stage 6: Isolated Subprocess Execution
         start_time = time.time()
         exec_env = envelope.build_subprocess_env()
         cwd = envelope.cwd
@@ -968,7 +1576,35 @@ class BaseTool(ABC):
                     timeout=timeout,
                 )
                 duration_ms = int((time.time() - start_time) * 1000)
+                sub_status = "PASS" if proc.returncode == 0 else "FAIL"
+                receipt.record_stage(
+                    TraceStage.SANDBOX_EXECUTION,
+                    sub_status,
+                    latency_ms=duration_ms,
+                    message=f"Subprocess finished with exit code {proc.returncode}",
+                    evidence={"exit_code": proc.returncode},
+                )
+                receipt.record_stage(
+                    TraceStage.EGRESS_PACKAGING,
+                    "PASS",
+                    latency_ms=0,
+                    message="Standard response envelope sealed with trace receipt",
+                )
+                receipt.finalize(
+                    status="PASS" if proc.returncode == 0 else "EXECUTION_ERROR",
+                    exit_code=proc.returncode,
+                    duration_ms=duration_ms,
+                    causal_chain=None if proc.returncode == 0 else {
+                        "failed_stage": TraceStage.SANDBOX_EXECUTION.value,
+                        "error_code": "ERR_SUBPROCESS_EXIT_NONZERO",
+                        "root_cause": f"Subprocess exited with status {proc.returncode}",
+                        "evidence": {"exit_code": proc.returncode, "stderr": proc.stderr[:300]},
+                    },
+                )
+                TraceStore.save(receipt)
                 return {
+                    "protocol": "dsha-1.2.0-std",
+                    "trace_id": trace_id,
                     "success": proc.returncode == 0,
                     "tool": self.id,
                     "tool_name": self.name,
@@ -985,11 +1621,39 @@ class BaseTool(ABC):
                         "tier": active_tier or get_active_tier(),
                         "cwd": cwd,
                     },
+                    "trace_receipt": receipt.to_dict(),
                 }
             else:
                 proc = subprocess.run(cmd_list, cwd=cwd, env=exec_env, timeout=timeout)
                 duration_ms = int((time.time() - start_time) * 1000)
+                sub_status = "PASS" if proc.returncode == 0 else "FAIL"
+                receipt.record_stage(
+                    TraceStage.SANDBOX_EXECUTION,
+                    sub_status,
+                    latency_ms=duration_ms,
+                    message=f"Subprocess finished with exit code {proc.returncode}",
+                )
+                receipt.record_stage(
+                    TraceStage.EGRESS_PACKAGING,
+                    "PASS",
+                    latency_ms=0,
+                    message="Standard response envelope sealed with trace receipt",
+                )
+                receipt.finalize(
+                    status="PASS" if proc.returncode == 0 else "EXECUTION_ERROR",
+                    exit_code=proc.returncode,
+                    duration_ms=duration_ms,
+                    causal_chain=None if proc.returncode == 0 else {
+                        "failed_stage": TraceStage.SANDBOX_EXECUTION.value,
+                        "error_code": "ERR_SUBPROCESS_EXIT_NONZERO",
+                        "root_cause": f"Subprocess exited with status {proc.returncode}",
+                        "evidence": {"exit_code": proc.returncode},
+                    },
+                )
+                TraceStore.save(receipt)
                 return {
+                    "protocol": "dsha-1.2.0-std",
+                    "trace_id": trace_id,
                     "success": proc.returncode == 0,
                     "tool": self.id,
                     "tool_name": self.name,
@@ -1006,10 +1670,33 @@ class BaseTool(ABC):
                         "tier": active_tier or get_active_tier(),
                         "cwd": cwd,
                     },
+                    "trace_receipt": receipt.to_dict(),
                 }
         except subprocess.TimeoutExpired:
             duration_ms = int((time.time() - start_time) * 1000)
+            receipt.record_stage(
+                TraceStage.SANDBOX_EXECUTION,
+                "FAIL",
+                latency_ms=duration_ms,
+                message=f"Execution timed out after {timeout} seconds",
+                evidence={"timeout": timeout},
+            )
+            receipt.finalize(
+                status="TIMEOUT",
+                exit_code=124,
+                duration_ms=duration_ms,
+                causal_chain={
+                    "failed_stage": TraceStage.SANDBOX_EXECUTION.value,
+                    "error_code": "ERR_EXECUTION_TIMEOUT",
+                    "root_cause": f"Execution timed out after {timeout} seconds.",
+                    "evidence": {"timeout": timeout},
+                    "remediations": ["Increase timeout in context or verify process is not deadlocked."],
+                },
+            )
+            TraceStore.save(receipt)
             return {
+                "protocol": "dsha-1.2.0-std",
+                "trace_id": trace_id,
                 "success": False,
                 "tool": self.id,
                 "tool_name": self.name,
@@ -1024,10 +1711,30 @@ class BaseTool(ABC):
                     "platform": HostEnvPerceiver.get_topology_string(),
                     "timeout_seconds": timeout,
                 },
+                "trace_receipt": receipt.to_dict(),
             }
         except Exception as e:
             duration_ms = int((time.time() - start_time) * 1000)
+            receipt.record_stage(
+                TraceStage.SANDBOX_EXECUTION,
+                "FAIL",
+                latency_ms=duration_ms,
+                message=f"Execution error: {e}",
+            )
+            receipt.finalize(
+                status="EXECUTION_ERROR",
+                exit_code=1,
+                duration_ms=duration_ms,
+                causal_chain={
+                    "failed_stage": TraceStage.SANDBOX_EXECUTION.value,
+                    "error_code": "ERR_SUBPROCESS_EXCEPTION",
+                    "root_cause": str(e),
+                },
+            )
+            TraceStore.save(receipt)
             return {
+                "protocol": "dsha-1.2.0-std",
+                "trace_id": trace_id,
                 "success": False,
                 "tool": self.id,
                 "tool_name": self.name,
@@ -1042,6 +1749,7 @@ class BaseTool(ABC):
                     "platform": HostEnvPerceiver.get_topology_string(),
                     "error": str(e),
                 },
+                "trace_receipt": receipt.to_dict(),
             }
 
 
@@ -1340,7 +2048,34 @@ def Call_Tools(tool_name, args=None, context=None):
 
     tool = TOOL_REGISTRY.get(tool_name)
     if not tool:
+        trace_id = context.get("trace_id") or f"tr_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}"
+        caller = context.get("caller", "ai-assistant")
+        receipt = TraceReceipt(
+            trace_id=trace_id,
+            caller=caller,
+            tool_id=str(tool_name),
+            tool_name="Unknown Tool",
+            category="Unknown",
+            args=args,
+            context=context,
+        )
+        receipt.record_stage(TraceStage.INGRESS_VALIDATION, "PASS")
+        receipt.record_stage(TraceStage.CATALOG_CONTAINMENT, "FAIL", message=f"Tool '{tool_name}' not registered in DSHA-Index")
+        receipt.finalize(
+            status="REFUSED",
+            exit_code=127,
+            duration_ms=0,
+            causal_chain={
+                "failed_stage": TraceStage.CATALOG_CONTAINMENT.value,
+                "error_code": "ERR_TOOL_NOT_REGISTERED",
+                "root_cause": f"Tool '{tool_name}' not registered in DSHA ToolRegistry.",
+                "remediations": ["Check tool list via `dsha-index list`"],
+            },
+        )
+        TraceStore.save(receipt)
         return {
+            "protocol": "dsha-1.2.0-std",
+            "trace_id": trace_id,
             "success": False,
             "tool": tool_name,
             "exit_code": 127,
@@ -1353,6 +2088,7 @@ def Call_Tools(tool_name, args=None, context=None):
                 "platform": HostEnvPerceiver.get_topology_string(),
                 "reason": "tool_not_registered",
             },
+            "trace_receipt": receipt.to_dict(),
         }
 
     return tool.execute(args, context)
@@ -1523,6 +2259,66 @@ def run_selftest():
         and "platform" in res_feel_check["envfeel"]
     ))
 
+    # Test 18: Forward execution generates trace_receipt with 7-stage records
+    res_trace_check = Call_Tools("scribe", ["status"], {"timeout": 10})
+    tests.append((
+        "trace_receipt_forward_success",
+        "trace_receipt" in res_trace_check
+        and res_trace_check["trace_receipt"]["status"] == "PASS"
+        and len(res_trace_check["trace_receipt"]["stages"]) >= 6
+    ))
+
+    # Test 19: Retrace engine walks backward from Stage 7 to Stage 1
+    retrace_text = retrace(res_trace_check)
+    tests.append((
+        "trace_receipt_reverse_retrace",
+        "逆向调用链回溯" in retrace_text
+        and "7/7: 响应封套封装" in retrace_text
+        and "1/7: 入口封套校验" in retrace_text
+        and "依契约复现命令" in retrace_text
+    ))
+
+    # Test 20: Retrace on prerequisite missing failure isolates Stage 3 failure
+    res_missing_trace = missing_tool.execute()
+    retrace_missing = retrace(res_missing_trace)
+    tests.append((
+        "trace_receipt_retrace_prereq_failure",
+        "ERR_PREREQUISITE_MISSING" in retrace_missing
+        and "3/7: 宿主环境自感知" in retrace_missing
+        and "❌ [FAIL]" in retrace_missing
+    ))
+
+    # Test 21: Retrace on authorization failure isolates Stage 4 failure
+    res_auth_trace = pwsh_tool.execute(context={"tier": "read-only"})
+    retrace_auth = retrace(res_auth_trace)
+    tests.append((
+        "trace_receipt_retrace_auth_failure",
+        "ERR_PERMISSION_DENIED" in retrace_auth
+        and "4/7: 权限档位核验" in retrace_auth
+        and "❌ [FAIL]" in retrace_auth
+    ))
+
+    # Test 22: TraceStore persistence and retrieval by trace_id
+    tid_sample = res_trace_check["trace_id"]
+    loaded_trace = TraceStore.get(tid_sample)
+    tests.append((
+        "trace_store_persistence",
+        loaded_trace is not None
+        and loaded_trace.get("trace_id") == tid_sample
+        and loaded_trace.get("status") == "PASS"
+    ))
+
+    # Test 23: Open Protocol Schema dump
+    schema_dump = dump_open_protocol_schema()
+    tests.append((
+        "open_protocol_schema_dump",
+        isinstance(schema_dump, dict)
+        and schema_dump.get("title") == "DSHA Open Protocol Specification (v1.2.0-std)"
+        and "DSHARequest" in schema_dump.get("definitions", {})
+        and "DSHAResponse" in schema_dump.get("definitions", {})
+        and "TraceReceipt" in schema_dump.get("definitions", {})
+    ))
+
     passed = sum(1 for _, ok in tests if ok)
     total = len(tests)
     print(f"selftest: {passed}/{total}")
@@ -1553,6 +2349,19 @@ def main():
     feel_p.add_argument("tool", nargs="?", help="Specific tool ID to inspect (optional)")
     feel_p.add_argument("--json", action="store_true", help="Output telemetry as JSON")
 
+    # trace
+    trace_p = subparsers.add_parser("trace", help="Inspect execution trace receipt by trace_id")
+    trace_p.add_argument("trace_id", help="Trace ID to inspect")
+    trace_p.add_argument("--json", action="store_true", help="Output trace in JSON format")
+
+    # retrace
+    retrace_p = subparsers.add_parser("retrace", help="Reverse causal trace walk from Stage 7 to Stage 1")
+    retrace_p.add_argument("target", help="Trace ID or JSON file path to retrace")
+    retrace_p.add_argument("--json", action="store_true", help="Output retrace analysis in JSON format")
+
+    # schema
+    subparsers.add_parser("schema", help="Output official Open Protocol JSON Schema")
+
     # selftest
     subparsers.add_parser("selftest", help="Run automated unit tests")
 
@@ -1561,6 +2370,23 @@ def main():
     if args.subcmd == "selftest":
         ok = run_selftest()
         sys.exit(0 if ok else 1)
+
+    if args.subcmd == "schema":
+        print(json.dumps(dump_open_protocol_schema(), ensure_ascii=False, indent=2))
+        return 0
+
+    if args.subcmd == "trace":
+        data = TraceStore.get(args.trace_id)
+        if not data:
+            print(f"Error: Trace '{args.trace_id}' not found.", file=sys.stderr)
+            return 1
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.subcmd == "retrace":
+        out = retrace(args.target, as_json=getattr(args, "json", False))
+        print(out)
+        return 0
 
     if args.subcmd == "feel":
         out = HostEnvPerceiver.render_radar(tool_id=getattr(args, "tool", None), as_json=getattr(args, "json", False))
@@ -1610,3 +2436,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+

@@ -46,6 +46,9 @@ try:
         TOOL_REGISTRY,
         ToolCategory,
         get_active_tier,
+        TraceStore,
+        retrace,
+        dump_open_protocol_schema,
     )
 except ImportError:
     # Handle direct script invocation from different directories
@@ -59,6 +62,9 @@ except ImportError:
         TOOL_REGISTRY,
         ToolCategory,
         get_active_tier,
+        TraceStore,
+        retrace,
+        dump_open_protocol_schema,
     )
 
 # Backward-compatible dictionary matching the previous DSHA_INDEX format
@@ -174,6 +180,32 @@ def run_selftest():
         and "platform" in res_envfeel["envfeel"]
     ))
 
+    # Test 10: Call_Tools generates TraceReceipt with stages
+    tests.append((
+        "call_tools_trace_receipt",
+        "trace_receipt" in res_envfeel
+        and res_envfeel["trace_receipt"]["status"] == "PASS"
+        and len(res_envfeel["trace_receipt"]["stages"]) >= 6
+    ))
+
+    # Test 11: retrace function analyzes trace from Call_Tools
+    retrace_out = retrace(res_envfeel)
+    tests.append((
+        "index_retrace_backward_walk",
+        "逆向调用链回溯" in retrace_out
+        and "7/7: 响应封套封装" in retrace_out
+        and "1/7: 入口封套校验" in retrace_out
+    ))
+
+    # Test 12: Open Protocol schema export
+    proto_schema = dump_open_protocol_schema()
+    tests.append((
+        "index_open_protocol_schema",
+        isinstance(proto_schema, dict)
+        and "DSHARequest" in proto_schema.get("definitions", {})
+        and "TraceReceipt" in proto_schema.get("definitions", {})
+    ))
+
     passed = sum(1 for _, ok in tests if ok)
     total = len(tests)
     print(f"selftest: {passed}/{total}")
@@ -185,18 +217,46 @@ def run_selftest():
 
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
-        print("DSHA-Index: Master Capability Catalog & Call_Tools Dispatcher (v1.0.0)")
+        print("DSHA-Index: Master Capability Catalog & Call_Tools Dispatcher (v1.2.0-std)")
         print("Usage:")
         print("  index.py list [-c|--category <cat>]   # Display master index table (optionally filtered)")
         print("  index.py categories                   # List all registered capability categories")
         print("  index.py feel [tool] [--json]         # Display Host Perception Radar HUD")
         print("  index.py check [tool]                 # Check prerequisite host environment")
+        print("  index.py trace <trace_id> [--json]    # Inspect execution trace receipt by ID")
+        print("  index.py retrace <target> [--json]    # Reverse causal trace walk from Stage 7 to Stage 1")
+        print("  index.py schema                       # Dump official Open Protocol JSON Schema")
         print("  index.py get <tool>                   # Display JSON metadata for tool")
         print("  index.py call <tool> [args...]        # Invoke tool via Call_Tools")
         print("  index.py selftest                     # Run internal unit tests")
         return 0
 
     cmd = sys.argv[1].lower()
+
+    if cmd == "schema":
+        print(json.dumps(dump_open_protocol_schema(), ensure_ascii=False, indent=2))
+        return 0
+
+    if cmd == "trace":
+        if len(sys.argv) < 3:
+            print("Usage: index.py trace <trace_id> [--json]", file=sys.stderr)
+            return 1
+        tid = sys.argv[2]
+        data = TraceStore.get(tid)
+        if not data:
+            print(f"Error: Trace '{tid}' not found.", file=sys.stderr)
+            return 1
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+        return 0
+
+    if cmd == "retrace":
+        if len(sys.argv) < 3:
+            print("Usage: index.py retrace <trace_id_or_file> [--json]", file=sys.stderr)
+            return 1
+        target = sys.argv[2]
+        as_json = "--json" in sys.argv
+        print(retrace(target, as_json=as_json))
+        return 0
 
     if cmd in ("feel", "envfeel"):
         target_tool = None

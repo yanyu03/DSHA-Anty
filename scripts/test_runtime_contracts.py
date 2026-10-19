@@ -150,8 +150,65 @@ class RuntimeContracts(unittest.TestCase):
                     self.assertIn('PROGRAMFILES', stripped)
                     self.assertTrue(Path(stripped['PROGRAMFILES']).is_dir())
 
+    def test_forward_trace_receipt_generation_and_stages(self):
+        for m in self.copies('base_tool.py'):
+            with self.subTest(module=m.__file__):
+                tool = m.TOOL_REGISTRY.get('scribe')
+                res = tool.execute(['status'], {'timeout': 10})
+                self.assertIn('trace_receipt', res)
+                receipt = res['trace_receipt']
+                self.assertEqual(receipt['protocol'], 'dsha-1.2.0-std')
+                self.assertEqual(receipt['status'], 'PASS')
+                self.assertGreaterEqual(len(receipt['stages']), 6)
+                stage_names = [s['stage'] for s in receipt['stages']]
+                self.assertIn('ingress_validation', stage_names)
+                self.assertIn('envfeel_prerequisites', stage_names)
+                self.assertIn('egress_packaging', stage_names)
+
+    def test_reverse_retrace_causal_attribution(self):
+        for m in self.copies('base_tool.py'):
+            with self.subTest(module=m.__file__):
+                # 1. Success retrace
+                tool = m.TOOL_REGISTRY.get('scribe')
+                res_pass = tool.execute(['status'], {'timeout': 10})
+                retrace_pass = m.retrace(res_pass)
+                self.assertIn('逆向调用链回溯', retrace_pass)
+                self.assertIn('7/7: 响应封套封装', retrace_pass)
+                self.assertIn('1/7: 入口封套校验', retrace_pass)
+
+                # 2. Refusal retrace on tier authorization
+                pwsh = m.TOOL_REGISTRY.get('pwsh')
+                res_deny = pwsh.execute(context={'tier': 'read-only'})
+                retrace_deny = m.retrace(res_deny)
+                self.assertIn('ERR_PERMISSION_DENIED', retrace_deny)
+                self.assertIn('4/7: 权限档位核验', retrace_deny)
+                self.assertIn('❌ [FAIL]', retrace_deny)
+
+    def test_trace_store_persistence_and_retrieval(self):
+        for m in self.copies('base_tool.py'):
+            with self.subTest(module=m.__file__):
+                tool = m.TOOL_REGISTRY.get('scribe')
+                res = tool.execute(['status'], {'timeout': 10})
+                tid = res['trace_id']
+                retrieved = m.TraceStore.get(tid)
+                self.assertIsNotNone(retrieved)
+                self.assertEqual(retrieved.get('trace_id'), tid)
+                self.assertEqual(retrieved.get('status'), 'PASS')
+
+    def test_open_protocol_schema_definitions(self):
+        for m in self.copies('base_tool.py'):
+            with self.subTest(module=m.__file__):
+                schema = m.dump_open_protocol_schema()
+                self.assertIn('definitions', schema)
+                self.assertIn('DSHARequest', schema['definitions'])
+                self.assertIn('DSHAResponse', schema['definitions'])
+                self.assertIn('TraceReceipt', schema['definitions'])
+                self.assertIn('StageRecord', schema['definitions'])
+                self.assertIn('ErrBlock', schema['definitions'])
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
+
 
 
