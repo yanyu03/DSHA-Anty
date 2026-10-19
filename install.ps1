@@ -127,7 +127,7 @@ New-Item -ItemType Directory -Force -Path "$cfg\plugins","$cfg\skills" | Out-Nul
 robocopy (Join-Path $root 'plugins\dsh-permissions') "$cfg\plugins\dsh-permissions" /E /XD logs __pycache__ /NFL /NDL /NJH /NJS /NP | Out-Null
 
 # D1/D41H 修复：保持 scripts\ 为单一事实源，安装时闭包分发所有运行时依赖脚本
-foreach ($pyFile in @('dsha_env.py', 'base_tool.py','index.py','router.py','dsha_cf.py','scribe.py','test_skill_integration.py')) {
+foreach ($pyFile in @('dsha_env.py', 'envfeel.py', 'environment_smoke.py', 'base_tool.py','index.py','router.py','dsha_cf.py','scribe.py','test_skill_integration.py')) {
   $from = Join-Path $root "scripts\$pyFile"
   if (Test-Path $from) {
     Copy-Item $from "$cfg\plugins\dsh-permissions\scripts\$pyFile" -Force

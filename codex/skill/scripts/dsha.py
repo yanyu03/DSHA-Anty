@@ -50,10 +50,20 @@ def verify_sources(config):
     return {'files': len(manifest['source_sha256']), 'mismatches': failed}
 
 
+def prepare_action_environment(config, env, include_node=False):
+    # Call only after the complete source manifest has been checked.
+    sys.path.insert(0, str(Path(config['dsha_source']) / 'scripts'))
+    from envfeel import EnvFeel
+    required = ['python', 'node'] if include_node else ['python']
+    gate = EnvFeel(required, {name: config[name] for name in required}, env)
+    report = gate.check()
+    return (gate.environment, None) if report['status'] == 'READY' else (None, report)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--host-config', type=Path, help='Private host configuration; takes precedence over DSHA_HOST_CONFIG')
-    parser.add_argument('action', choices=['status', 'selftest', 'englock', 'rea', 'verify-source', 'catalog', 'route', 'inventory'])
+    parser.add_argument('action', choices=['status', 'selftest', 'englock', 'rea', 'verify-source', 'catalog', 'route', 'inventory', 'envfeel'])
     parser.add_argument('args', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     config = host(args.host_config) if args.host_config else host()
@@ -67,6 +77,11 @@ def main():
         result = verify_sources(config)
         print(json.dumps(result, ensure_ascii=False))
         return 1 if result['mismatches'] else 0
+    if args.action not in ('status', 'envfeel'):
+        env, refusal = prepare_action_environment(config, env, include_node=args.action == 'rea')
+        if refusal is not None:
+            print(json.dumps(refusal, ensure_ascii=False))
+            return 126
     if args.action == 'status':
         checks = {name: Path(config[name]).is_file() for name in ['node', 'python', 'rea_entry']}
         checks['java'] = (Path(env['JAVA_HOME']) / 'bin/java.exe').is_file()
@@ -99,6 +114,8 @@ def main():
         return subprocess.run([config['python'], str(Path(config['dsha_source']) / 'scripts/base_tool.py'), 'list', *args.args], env=env).returncode
     if args.action == 'inventory':
         return subprocess.run([config['python'], str(Path(config['dsha_source']) / 'scripts/environment_smoke.py'), *args.args], env=env).returncode
+    if args.action == 'envfeel':
+        return subprocess.run([config['python'], str(Path(config['dsha_source']) / 'scripts/envfeel.py'), *args.args], env=env).returncode
     if args.action == 'route':
         return subprocess.run([config['python'], str(Path(config['dsha_source']) / 'scripts/router.py'), 'route', *args.args], env=env).returncode
     if args.action == 'englock':
@@ -109,7 +126,7 @@ def main():
 if __name__ == '__main__':
     try:
         sys.exit(main())
-    except (OSError, ValueError, KeyError, TypeError) as error:
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
         # Configurations are private: do not echo paths, values or tracebacks.
         print(json.dumps({'status': 'REFUSED', 'error': type(error).__name__,
                           'message': 'Check host configuration, source manifest and runtime availability.'}), file=sys.stderr)

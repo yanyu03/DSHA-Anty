@@ -41,10 +41,10 @@ def source_of(name, path, overrides):
     return 'SDK/environment-derived-location'
 
 
-def version_probe(name, executable):
+def version_probe(name, executable, environ=None):
     try:
         result = subprocess.run([executable, *TOOLS[name]], capture_output=True,
-                                encoding='utf-8', errors='replace', timeout=10)
+                                encoding='utf-8', errors='replace', timeout=10, env=environ)
     except (OSError, subprocess.TimeoutExpired) as error:
         return {'status': 'FAIL', 'error': type(error).__name__}
     # Never publish untrusted raw version output (it can contain private paths).
@@ -57,13 +57,13 @@ def version_probe(name, executable):
             'version': version.group(1) if version else None, 'exit_code': result.returncode}
 
 
-def command_ok(command, cwd, marker=False):
+def command_ok(command, cwd, marker=False, environ=None):
     result = subprocess.run(command, cwd=cwd, capture_output=True,
-                            encoding='utf-8', errors='replace', timeout=45)
+                            encoding='utf-8', errors='replace', timeout=45, env=environ)
     return result.returncode == 0 and (not marker or result.stdout.strip() == 'DSHA_SMOKE_OK')
 
 
-def fixture_probe(name, executables):
+def fixture_probe(name, executables, environ=None):
     if not executables.get(name):
         return {'status': 'NOT_RUN', 'reason': 'required executable not discovered'}
     try:
@@ -71,26 +71,30 @@ def fixture_probe(name, executables):
             root = Path(folder)
             executable = executables[name]
             if name == 'python':
-                passed = command_ok([executable, '-c', "print('DSHA_SMOKE_OK')"], root, True)
+                passed = command_ok([executable, '-c', "print('DSHA_SMOKE_OK')"], root, True, environ)
             elif name == 'node':
-                passed = command_ok([executable, '-e', "console.log('DSHA_SMOKE_OK')"], root, True)
+                passed = command_ok([executable, '-e', "console.log('DSHA_SMOKE_OK')"], root, True, environ)
             elif name == 'rustc':
                 source = root / 'main.rs'
                 source.write_text('fn main() { println!("DSHA_SMOKE_OK"); }', encoding='utf-8')
                 binary = root / ('smoke.exe' if os.name == 'nt' else 'smoke')
-                passed = command_ok([executable, str(source), '-o', str(binary)], root) and command_ok([str(binary)], root, True)
+                passed = command_ok([executable, str(source), '-o', str(binary)], root, environ=environ) and command_ok([str(binary)], root, True, environ)
             elif name == 'java':
                 if not executables.get('javac'):
                     return {'status': 'NOT_RUN', 'reason': 'javac not discovered'}
                 source = root / 'DshaSmoke.java'
                 source.write_text('class DshaSmoke { public static void main(String[] args) { System.out.println("DSHA_SMOKE_OK"); } }', encoding='utf-8')
-                passed = command_ok([executables['javac'], str(source)], root) and command_ok([executable, '-cp', str(root), 'DshaSmoke'], root, True)
+                passed = command_ok([executables['javac'], str(source)], root, environ=environ) and command_ok([executable, '-cp', str(root), 'DshaSmoke'], root, True, environ)
             elif name == 'cl':
                 source = root / 'smoke.c'
                 source.write_text('int dsha_smoke(void) { return 0; }', encoding='utf-8')
                 obj = root / 'smoke.obj'
-                passed = command_ok([executable, '/nologo', '/c', str(source), '/Fo' + str(obj)], root) and obj.is_file()
+                passed = command_ok([executable, '/nologo', '/c', str(source), '/Fo' + str(obj)], root, environ=environ) and obj.is_file()
                 return {'status': 'PASS' if passed else 'FAIL', 'sample': 'owned C file compiled to object; link NOT_RUN'}
+            elif name == 'pwsh':
+                passed = command_ok([executable, '-NoProfile', '-NonInteractive', '-Command', 'Write-Output DSHA_SMOKE_OK'], root, True, environ)
+            elif name in ('bash', 'sh'):
+                passed = command_ok([executable, '-c', "printf '%s\\n' DSHA_SMOKE_OK"], root, True, environ)
             else:
                 return {'status': 'NOT_RUN', 'reason': 'no fixture defined'}
             return {'status': 'PASS' if passed else 'FAIL', 'sample': 'owned minimal program'}
@@ -98,10 +102,11 @@ def fixture_probe(name, executables):
         return {'status': 'FAIL', 'error': type(error).__name__}
 
 
-def discover_visual_studio():
-    if os.environ.get('VSINSTALLDIR'):
+def discover_visual_studio(environ=None):
+    env = os.environ if environ is None else environ
+    if env.get('VSINSTALLDIR'):
         return 'environment'
-    program_files = os.environ.get('ProgramFiles(x86)')
+    program_files = env.get('ProgramFiles(x86)')
     if not program_files:
         return 'NOT_DISCOVERED'
     helper = Path(program_files) / 'Microsoft Visual Studio/Installer/vswhere.exe'
@@ -110,10 +115,10 @@ def discover_visual_studio():
     try:
         result = subprocess.run([str(helper), '-latest', '-products', '*', '-requires',
                                  'Microsoft.VisualStudio.Component.VC.Tools.x86.x64', '-property', 'installationPath'],
-                                capture_output=True, encoding='utf-8', errors='replace', timeout=10)
+                                capture_output=True, encoding='utf-8', errors='replace', timeout=10, env=env)
         root = result.stdout.strip()
         if result.returncode == 0 and root and Path(root).is_dir():
-            os.environ['VSINSTALLDIR'] = root
+            env['VSINSTALLDIR'] = root
             return 'vswhere'
     except (OSError, subprocess.TimeoutExpired):
         pass
@@ -159,8 +164,9 @@ class PrivateParser(argparse.ArgumentParser):
         self.exit(2, 'Invalid inventory arguments; use --help. Values omitted.\n')
 
 
-def apply_env_file(path):
+def apply_env_file(path, environ=None):
     """Explicit allowlisted KEY=VALUE file; no interpolation or shell evaluation."""
+    env = os.environ if environ is None else environ
     allowed = set(SDK_VARIABLES) | {'DSHA_' + name.upper() for name in TOOLS}
     values = {}
     for line in path.read_text(encoding='utf-8-sig').splitlines():
@@ -178,8 +184,8 @@ def apply_env_file(path):
         values[key] = value
     applied = []
     for key, value in values.items():
-        if key not in os.environ:
-            os.environ[key] = value
+        if key not in env:
+            env[key] = value
             applied.append(key)
     return applied
 

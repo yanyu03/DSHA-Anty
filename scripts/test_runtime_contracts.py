@@ -39,8 +39,13 @@ class RuntimeContracts(unittest.TestCase):
 
     def test_successful_version_probe_still_passes(self):
         for m in self.copies('base_tool.py'):
-            with self.subTest(module=m.__file__), patch.object(m.PrerequisiteEnv, 'locate_binary', return_value=sys.executable), patch.object(m.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0, stdout='24.14.1', stderr='')):
+            with self.subTest(module=m.__file__), patch.object(m.PrerequisiteEnv, 'locate_binary', return_value=sys.executable), patch.object(m.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0, stdout='v24.14.1', stderr='')):
                 self.assertTrue(m.PrerequisiteEnv('node', min_version='24.11.0').verify()['satisfied'])
+
+    def test_number_without_tool_identity_is_refused(self):
+        for m in self.copies('base_tool.py'):
+            with self.subTest(module=m.__file__), patch.object(m.PrerequisiteEnv, 'locate_binary', return_value=sys.executable), patch.object(m.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0, stdout='24.14.1', stderr='')):
+                self.assertFalse(m.PrerequisiteEnv('node', min_version='24.11.0').verify()['satisfied'])
 
     def test_context_can_restrict_actual_permissive_tier(self):
         for m in self.copies('base_tool.py'):

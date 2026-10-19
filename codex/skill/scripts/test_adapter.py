@@ -25,11 +25,16 @@ class AdapterTests(unittest.TestCase):
                        'env': {'JAVA_HOME': str(self.root)}}
 
     def test_json_catalog_uses_json_capable_cli(self):
-        with patch.object(dsha, 'SKILL', self.root), patch.object(dsha, 'host', return_value=self.config), patch.object(sys, 'argv', ['dsha.py', 'catalog', '--json']), patch.object(dsha.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0)) as run:
+        with patch.object(dsha, 'prepare_action_environment', return_value=({}, None)), patch.object(dsha, 'SKILL', self.root), patch.object(dsha, 'host', return_value=self.config), patch.object(sys, 'argv', ['dsha.py', 'catalog', '--json']), patch.object(dsha.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0)) as run:
             self.assertEqual(dsha.main(), 0)
             args = run.call_args.args[0]
             self.assertEqual(Path(args[1]).name, 'base_tool.py')
             self.assertEqual(args[2:], ['list', '--json'])
+
+    def test_failed_envfeel_does_not_launch_action(self):
+        with patch.object(dsha, 'prepare_action_environment', return_value=(None, {'status': 'REFUSED'})), patch.object(dsha, 'SKILL', self.root), patch.object(dsha, 'host', return_value=self.config), patch.object(sys, 'argv', ['dsha.py', 'catalog']), patch.object(dsha.subprocess, 'run') as run:
+            self.assertEqual(dsha.main(), 126)
+            run.assert_not_called()
 
     def test_source_drift_refuses_before_launch(self):
         (self.source / 'VERSION').write_bytes(b'changed')

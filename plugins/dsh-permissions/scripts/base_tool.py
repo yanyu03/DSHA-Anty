@@ -28,6 +28,8 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
 from dsha_env import config_dir, find_binary, proxy_environment, redact
+from envfeel import activate_environment, runtime_context
+from environment_smoke import BRANDS, fixture_probe
 
 # Ensure UTF-8 output across Windows consoles
 if hasattr(sys.stdout, "reconfigure"):
@@ -106,14 +108,14 @@ class PrerequisiteEnv:
         self.remediation = remediation or f"Please install '{binary}' and ensure it is available in PATH."
         self.custom_paths = custom_paths or []
 
-    def locate_binary(self):
+    def locate_binary(self, environ=None):
         if self.custom_paths:
             return next((value for p in self.custom_paths
-                         if (value := find_binary(self.binary, explicit=str(p)))), None)
-        return find_binary(self.binary)
+                         if (value := find_binary(self.binary, explicit=str(p), environ=environ))), None)
+        return find_binary(self.binary, environ=environ)
 
-    def verify(self):
-        loc = self.locate_binary()
+    def verify(self, environ=None):
+        loc = self.locate_binary(environ=environ)
         if not loc:
             return {
                 "satisfied": False,
@@ -125,17 +127,6 @@ class PrerequisiteEnv:
                 "remediation": self.remediation,
             }
 
-        if not self.min_version:
-            return {
-                "satisfied": True,
-                "binary": self.binary,
-                "located_path": loc,
-                "detected_version": "available",
-                "required_version": "any",
-                "message": "Binary located.",
-                "remediation": None,
-            }
-
         # Check version
         try:
             r = subprocess.run(
@@ -144,6 +135,7 @@ class PrerequisiteEnv:
                 encoding="utf-8",
                 errors="replace",
                 timeout=5,
+                env=environ,
             )
             out = r.stdout + " " + r.stderr
             if r.returncode != 0:
@@ -154,13 +146,14 @@ class PrerequisiteEnv:
             detected_ver = parse_semver(detected_ver_str)
             required_ver = parse_semver(self.min_version)
 
-            if detected_ver >= required_ver:
+            identity = self.binary not in BRANDS or bool(re.search(BRANDS[self.binary], out, re.IGNORECASE | re.MULTILINE))
+            if m and identity and detected_ver >= required_ver:
                 return {
                     "satisfied": True,
                     "binary": self.binary,
                     "located_path": loc,
                     "detected_version": detected_ver_str,
-                    "required_version": f">={self.min_version}",
+                    "required_version": f">={self.min_version}" if self.min_version else "any",
                     "message": "Version requirement satisfied.",
                     "remediation": None,
                 }
@@ -170,8 +163,8 @@ class PrerequisiteEnv:
                     "binary": self.binary,
                     "located_path": loc,
                     "detected_version": detected_ver_str,
-                    "required_version": f">={self.min_version}",
-                    "message": f"Version mismatch: found {detected_ver_str}, requires >={self.min_version}.",
+                    "required_version": f">={self.min_version}" if self.min_version else "any",
+                    "message": "Tool identity or declared version requirement not satisfied.",
                     "remediation": self.remediation,
                 }
         except Exception as e:
@@ -180,7 +173,7 @@ class PrerequisiteEnv:
                 "binary": self.binary,
                 "located_path": loc,
                 "detected_version": "probe_error",
-                "required_version": f">={self.min_version}",
+                "required_version": f">={self.min_version}" if self.min_version else "any",
                 "message": f"Failed probing binary version: {type(e).__name__}",
                 "remediation": self.remediation,
             }
@@ -265,16 +258,37 @@ class BaseTool(ABC):
         self.exact_filenames = exact_filenames or []
         self.weight = weight
 
-    def assert_environment(self):
+    def assert_environment(self, environ=None):
         """Verifies that all required host runtimes are installed."""
         failed_prereqs = []
         remediations = []
+        self._prepared_env = None
+        context = runtime_context()
+        if context['status'] != 'PASS':
+            failed_prereqs.append({'stage': 'EnvFeel', 'status': 'REFUSED', 'reason': context['reason']})
+        else:
+            base_env = dict(os.environ if environ is None else environ)
+            try:
+                selected = {req.binary: str(Path(path).resolve()) for req in self.prerequisites
+                            if (path := req.locate_binary(environ=base_env))}
+                self._prepared_env = activate_environment(selected, base_env)
+            except (OSError, ValueError, RuntimeError) as error:
+                failed_prereqs.append({'stage': 'EnvFeel activation', 'error': type(error).__name__})
         for req in self.prerequisites:
-            res = req.verify()
+            if failed_prereqs:
+                break
+            res = req.verify(environ=self._prepared_env)
             if not res["satisfied"]:
-                failed_prereqs.append(res)
+                failed_prereqs.append({**res, 'located_path': '[available]' if res.get('located_path') else None})
                 if res.get("remediation"):
                     remediations.append(res["remediation"])
+
+        if not failed_prereqs:
+            for req in self.prerequisites:
+                if req.binary in ('python', 'node', 'pwsh', 'bash', 'sh'):
+                    health = fixture_probe(req.binary, selected, self._prepared_env)
+                    if health['status'] != 'PASS':
+                        failed_prereqs.append({'stage': 'EnvFeel health', 'binary': req.binary, **health})
 
         if failed_prereqs:
             err = ErrBlock(
@@ -406,7 +420,8 @@ class BaseTool(ABC):
             context = {}
 
         # 1. Environment Assertion (No bundled runtime principle)
-        ok_env, err_env = self.assert_environment()
+        requested_env = proxy_environment(context.get('proxy'))
+        ok_env, err_env = self.assert_environment(environ=requested_env)
         if not ok_env:
             return {
                 "success": False,
@@ -467,7 +482,7 @@ class BaseTool(ABC):
 
         # 4. Execute with Environment Isolation
         start_time = time.time()
-        exec_env = proxy_environment(context.get("proxy"))
+        exec_env = getattr(self, '_prepared_env', None) or requested_env
         exec_env["PYTHONUTF8"] = "1"
         if context.get("proxy"):
             exec_env["ALL_PROXY"] = context["proxy"]
@@ -482,6 +497,10 @@ class BaseTool(ABC):
             cmd_list = [str(pwsh_bin), "-NoProfile", "-File", exec_path] + args
         else:
             cmd_list = [exec_path] + args
+
+        if os.name != 'nt' and exec_path.lower().endswith(('.cmd', '.bat', '.ps1')):
+            return {'success': False, 'tool': self.id, 'exit_code': 126,
+                    'stdout': '', 'stderr': '[EnvFeel] Windows launcher has no adapter on this OS.', 'duration_ms': 0}
 
         capture = context.get("capture", True)
 

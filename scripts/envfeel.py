@@ -1,0 +1,170 @@
+"""EnvFeel: runtime facts -> required tools -> child environment -> health -> execution."""
+import json
+import os
+from pathlib import Path
+import platform
+import struct
+import subprocess
+
+from dsha_env import find_binary
+
+
+def runtime_context():
+    system = platform.system()
+    machine = platform.machine().lower()
+    families = {'Windows': 'nt', 'Linux': 'posix', 'Darwin': 'posix'}
+    architectures = {'amd64': 'x86_64', 'x86_64': 'x86_64', 'arm64': 'arm64',
+                     'aarch64': 'arm64', 'x86': 'x86', 'i386': 'x86', 'i686': 'x86'}
+    supported = system in families and families[system] == os.name and machine in architectures
+    return {'status': 'PASS' if supported else 'REFUSED',
+            'os': system if system in families else 'unrecognized',
+            'architecture_reported': architectures.get(machine, 'unrecognized'),
+            'process_bits': struct.calcsize('P') * 8,
+            'scope': 'runtime-reported facts, not hardware attestation',
+            'reason': None if supported else 'unsupported runtime OS/architecture combination'}
+
+
+def activate_environment(executables, environ=None):
+    """Prepare a private mapping; never mutate caller/system environment."""
+    result = dict(os.environ if environ is None else environ)
+    directories = []
+    for name, executable in executables.items():
+        path = Path(executable).resolve(strict=True)
+        if not path.is_file():
+            raise ValueError('executable is not a file')
+        result['DSHA_' + name.upper()] = str(path)
+        parent = str(path.parent)
+        if parent not in directories:
+            directories.append(parent)
+        if name == 'java' and path.parent.name.lower() == 'bin':
+            result['JAVA_HOME'] = str(path.parent.parent)
+    result['PATH'] = os.pathsep.join(directories + [result.get('PATH', '')])
+    result['PYTHONUTF8'] = '1'
+    result['PYTHONIOENCODING'] = 'utf-8'
+    return result
+
+
+class EnvFeel:
+    def __init__(self, required, overrides=None, environ=None, env_file=None):
+        self.required = list(dict.fromkeys(required))
+        self.overrides = dict(overrides or {})
+        self.base_env = dict(os.environ if environ is None else environ)
+        self.env_file = env_file
+        self.executables = {}
+        self.environment = {}
+
+    def check(self):
+        try:
+            return self._check()
+        except (OSError, ValueError, RuntimeError) as error:
+            self.executables = {}
+            self.environment = {}
+            return {'status': 'REFUSED', 'error': type(error).__name__, 'task': {'status': 'NOT_RUN'}}
+
+    def _check(self):
+        from environment_smoke import TOOLS, apply_env_file, discover_visual_studio, version_probe, fixture_probe
+        context = runtime_context()
+        report = {'status': 'REFUSED', 'context': context, 'tools': [], 'health': {}, 'task': {'status': 'NOT_RUN'}}
+        self.executables = {}
+        self.environment = {}
+        if context['status'] != 'PASS':
+            return report
+        if not self.required or any(name not in TOOLS for name in self.required) or any(name not in self.required for name in self.overrides):
+            report['reason'] = 'undeclared or unsupported requirement'
+            return report
+        env = self.base_env.copy()
+        report['env_file_applied_names'] = apply_env_file(self.env_file, env) if self.env_file else []
+        report['visual_studio_discovery'] = discover_visual_studio(env) if set(self.required) & {'cl', 'cmake', 'msbuild', 'ninja'} else 'NOT_RUN'
+        names = list(self.required)
+        dependencies = {'java': ('javac',), 'javac': ('java',), 'cargo': ('rustc',)}
+        for name in self.required:
+            names.extend(dep for dep in dependencies.get(name, ()) if dep not in names)
+        for name in names:
+            path = find_binary(name, explicit=self.overrides.get(name), environ=env)
+            configured = name in self.overrides or 'DSHA_' + name.upper() in env
+            record = {'tool': name, 'located': bool(path), 'source': 'parameter' if name in self.overrides else ('environment' if 'DSHA_' + name.upper() in env else 'PATH/SDK')}
+            report['tools'].append(record)
+            if not path:
+                record['status'] = 'INVALID_OVERRIDE' if configured else 'NOT_DISCOVERED'
+            else:
+                record['status'] = 'LOCATED'
+                self.executables[name] = str(Path(path).resolve())
+        if any(record['status'] != 'LOCATED' for record in report['tools']):
+            report['reason'] = 'required tool location failed'
+            return report
+        self.environment = activate_environment(self.executables, env)
+        report['activation'] = {'status': 'PREPARED', 'scope': 'child mapping only',
+                                'variable_names': ['PATH', 'PYTHONUTF8', 'PYTHONIOENCODING', *['DSHA_' + name.upper() for name in names], *(['JAVA_HOME'] if 'java' in names else [])]}
+        for record in report['tools']:
+            record.update(version_probe(record['tool'], self.executables[record['tool']], self.environment))
+            if record['status'] == 'PASS' and record.get('identity_check') == 'version-format-only':
+                record['status'] = 'INSUFFICIENT_CONTRACT'
+        if any(record['status'] != 'PASS' for record in report['tools']):
+            report['reason'] = 'required tool launch/version/identity contract failed'
+            return report
+        for name in names:
+            if name in ('python', 'node', 'rustc', 'java', 'cl', 'pwsh', 'bash', 'sh'):
+                report['health'][name] = fixture_probe(name, self.executables, self.environment)
+        if any(value['status'] != 'PASS' for value in report['health'].values()):
+            report['reason'] = 'required health check failed'
+            return report
+        report['status'] = 'READY'
+        report['scope'] = 'declared requirements only; version probes plus listed owned health checks'
+        return report
+
+    def execute(self, tool, arguments, timeout=60):
+        # A saved READY report is never an execution ticket; always check again.
+        report = self.check()
+        if report['status'] != 'READY' or tool not in self.required:
+            report['status'] = 'REFUSED'
+            report.setdefault('reason', 'execution tool not declared')
+            return report, {}
+        try:
+            result = subprocess.run([self.executables[tool], *arguments], env=self.environment,
+                                    capture_output=True, encoding='utf-8', errors='replace', timeout=timeout)
+            report['task'] = {'status': 'PASS' if result.returncode == 0 else 'FAIL', 'exit_code': result.returncode}
+            report['status'] = 'COMPLETE' if result.returncode == 0 else 'TASK_FAILED'
+            return report, {'stdout': result.stdout, 'stderr': result.stderr}
+        except (OSError, subprocess.TimeoutExpired) as error:
+            report['task'] = {'status': 'FAIL', 'error': type(error).__name__}
+            report['status'] = 'TASK_FAILED'
+            return report, {}
+
+
+def main():
+    from environment_smoke import TOOLS, PrivateParser
+    parser = PrivateParser(description=__doc__)
+    parser.add_argument('--require', action='append', choices=tuple(TOOLS), default=[])
+    parser.add_argument('--binary', action='append', default=[])
+    parser.add_argument('--env-file', type=Path)
+    parser.add_argument('--private-output', type=Path)
+    parser.add_argument('--run', choices=tuple(TOOLS))
+    parser.add_argument('--timeout', type=int, default=60)
+    parser.add_argument('arguments', nargs=__import__('argparse').REMAINDER)
+    args = parser.parse_args()
+    try:
+        overrides = {}
+        for value in args.binary:
+            name, separator, path = value.partition('=')
+            if not separator or name not in TOOLS or not path or name in overrides:
+                raise ValueError('invalid override')
+            overrides[name] = path
+        if args.timeout <= 0:
+            raise ValueError('invalid timeout')
+        if args.private_output and (not args.private_output.name.endswith('.local.json') or args.private_output.exists()):
+            raise ValueError('private output must be a new ignored file')
+        gate = EnvFeel(args.require, overrides, env_file=args.env_file)
+        arguments = args.arguments[1:] if args.arguments[:1] == ['--'] else args.arguments
+        report, output = gate.execute(args.run, arguments, args.timeout) if args.run else (gate.check(), {})
+        if args.private_output:
+            with args.private_output.open('x', encoding='utf-8') as stream:
+                json.dump({'report': report, 'resolved_executables': gate.executables, 'task_output': output}, stream, indent=2)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report['status'] in ('READY', 'COMPLETE') else 126
+    except (OSError, ValueError, RuntimeError) as error:
+        print(json.dumps({'status': 'REFUSED', 'error': type(error).__name__, 'task': {'status': 'NOT_RUN'}}))
+        return 126
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
