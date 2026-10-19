@@ -75,6 +75,20 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(json.loads(output.read_text())['mcpServers']['dsha-rea']['args'][0], str(entry))
             second = subprocess.run(command, cwd=root, capture_output=True, timeout=10)
             self.assertNotEqual(second.returncode, 0)
+            self.assertNotIn(str(root).encode(), second.stderr)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows PowerShell preview')
+    def test_installer_preview_does_not_create_config_directory(self):
+        pwsh = env.find_binary('pwsh')
+        self.assertIsNotNone(pwsh)
+        script = Path(__file__).resolve().parents[1] / 'install.ps1'
+        with tempfile.TemporaryDirectory(prefix='dsha preview ') as directory:
+            output = Path(directory) / 'not-created'
+            proc = subprocess.run([pwsh, '-NoProfile', '-File', str(script), '-WhatIfOnly',
+                                   '-ConfigDir', str(output), '-PythonPath', sys.executable],
+                                  capture_output=True, timeout=15)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertFalse(output.exists())
 
     @unittest.skipUnless(os.name == 'nt', 'Windows cmd launcher')
     def test_cmd_launcher_with_explicit_python_and_invalid_override(self):

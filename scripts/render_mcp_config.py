@@ -18,9 +18,12 @@ def main():
         parser.error('Provide valid DSHA_NODE/--node and DSHA_REA_ENTRY/--rea-entry; values omitted')
     value = {'mcpServers': {'dsha-rea': {'command': node, 'args': [str(entry), 'mcp']}}}
     # Exclusive creation avoids replacing unrelated client configuration.
-    with args.output.open('x', encoding='utf-8', newline='\n') as output:
-        json.dump(value, output, indent=2)
-        output.write('\n')
+    try:
+        with args.output.open('x', encoding='utf-8', newline='\n') as output:
+            json.dump(value, output, indent=2)
+            output.write('\n')
+    except OSError:
+        parser.exit(2, 'Cannot create private configuration; destination exists or is inaccessible; value omitted\n')
     print('Created private configuration; keep it outside version control')
 
 

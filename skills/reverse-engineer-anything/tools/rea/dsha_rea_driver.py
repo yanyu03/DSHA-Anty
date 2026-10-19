@@ -25,16 +25,20 @@ if sys.platform == "win32":
         pass
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-REA_MJS = os.path.join(SCRIPT_DIR, "scripts", "rea.mjs")
+REA_MJS = os.environ.get('DSHA_REA_ENTRY') or os.path.join(SCRIPT_DIR, "scripts", "rea.mjs")
 PACKAGE_JSON = os.path.join(SCRIPT_DIR, "package.json")
 
 def find_node():
     """底层穿透：多候选自适应探测 Node.js 解释器"""
+    if 'DSHA_NODE' in os.environ:
+        candidate = os.environ['DSHA_NODE']
+        return candidate if os.path.isfile(candidate) else None
+    program_files = os.environ.get('ProgramFiles', '')
     candidates = [
         shutil.which("node"),
-        r"C:\Program Files\nodejs\node.exe",
+        os.path.join(program_files, 'nodejs', 'node.exe') if program_files else None,
         os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "nodejs", "node.exe"),
-        r"C:\Program Files (x86)\nodejs\node.exe"
+        os.path.join(os.environ.get('ProgramFiles(x86)', ''), 'nodejs', 'node.exe') if os.environ.get('ProgramFiles(x86)') else None
     ]
     for c in candidates:
         if c and os.path.isfile(c) and os.access(c, os.X_OK):

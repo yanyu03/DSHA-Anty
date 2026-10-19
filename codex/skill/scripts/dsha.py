@@ -26,7 +26,7 @@ def host(path=None):
 def environment(config):
     env = os.environ.copy()
     env.update({key: os.environ.get(key, value) for key, value in config['env'].items()})
-    env['DSHA_PYTHON'] = config['python']
+    env['DSHA_PYTHON'] = config.get('python') or sys.executable
     env['PYTHONUTF8'] = '1'
     env['PYTHONIOENCODING'] = 'utf-8'
     env['PATH'] = str(Path(config['env']['JAVA_HOME']) / 'bin') + os.pathsep + env.get('PATH', '')
