@@ -297,7 +297,6 @@ def run_integration_tests():
     def find_cmd(name):
         cands = [
             REPO_ROOT / "bin" / name,
-            Path(r"c:\Users\admin\Desktop\GOOGLE\DSHA\bin") / name,
             USER_HOME / ".gemini" / "config" / name,
             REPO_ROOT / name,
         ]

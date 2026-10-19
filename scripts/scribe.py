@@ -21,6 +21,7 @@ import glob
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -153,9 +154,7 @@ def get_git_state(repo_root):
         "modified": [],
         "recent_commits": [],
     }
-    git_cmd = r"C:\Program Files\Git\cmd\git.exe"
-    if not os.path.exists(git_cmd):
-        git_cmd = "git"
+    git_cmd = shutil.which("git") or "git"
 
     try:
         res = subprocess.run(

@@ -7,7 +7,7 @@ Feeds synthetic PreToolUse payloads to gate.py for every tier and checks the
 decision each one returns.  Touches only tier.json (restored afterwards) and
 logs/gate.log.  Run it after any edit:
 
-    C:\\python312\\python.exe scripts\\selftest.py
+    python scripts\\selftest.py
 """
 
 import json

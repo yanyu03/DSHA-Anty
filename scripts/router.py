@@ -178,7 +178,10 @@ def analyze_route(input_str):
     best_tool, best_score = ranked[0]
     total_score = sum(scores.values())
 
-    confidence = round(best_score / (total_score + 1e-6), 2) if total_score > 0 else 0.0
+    # 这是「得分占比」，不是「判断正确的概率」。单候选命中时它会接近 1.0，
+    # 打印成百分比容易被读成置信概率，因此另给 score_share 字段并把语义写进报告。
+    score_share = round(best_score / (total_score + 1e-6), 2) if total_score > 0 else 0.0
+    confidence = score_share  # 向后兼容别名
 
     # Build suggested command
     tool_meta = TOOL_REGISTRY[best_tool]
@@ -197,6 +200,7 @@ def analyze_route(input_str):
         "tool_name": tool_meta["name"],
         "executable": tool_meta["cmd"],
         "confidence": confidence,
+        "score_share": score_share,
         "score": round(best_score, 1),
         "reasoning": match_details[best_tool] if match_details[best_tool] else ["基于综合情境判定"],
         "suggested_command": suggested_cmd,
@@ -214,7 +218,7 @@ def print_route_report(res):
     print(f"  输入意图: \"{res['input']}\"")
     print(f"  首选工具: [{res['selected_tool'].upper()}] {res['tool_name']}")
     print(f"  执行入口: {res['executable']}")
-    print(f"  决策置信: {int(res['confidence'] * 100)}% (得分: {res['score']})")
+    print(f"  得分占比: {int(res['score_share'] * 100)}% (得分: {res['score']})  ← 占比，非正确概率")
     print(f"  决策依据: {'; '.join(res['reasoning'])}")
     print(f"  建议命令: `{res['suggested_command']}`")
     if res["alternatives"]:
@@ -243,11 +247,11 @@ def run_selftest():
         ok = (res["selected_tool"] == expected)
         if ok:
             passed += 1
-            print(f"  [PASS] \"{q[:25]}...\" -> {res['selected_tool']} ({int(res['confidence']*100)}%)")
+            print(f"  [PASS] \"{q[:25]}...\" -> {res['selected_tool']} (占比 {int(res['score_share']*100)}%)")
         else:
             print(f"  [FAIL] \"{q[:25]}...\" -> got {res['selected_tool']}, expected {expected}")
 
-    print(f"selftest: {passed}/{total}")
+    print(f"selftest: {passed}/{total}  (n={total}, miss={total - passed})")
     return passed == total
 
 
@@ -309,7 +313,7 @@ def main():
         else:
             query = sys.argv[2]
             res = analyze_route(query)
-            print(f"[DSHA-ROUTER] Routing intent to [{res['selected_tool'].upper()}] {res['tool_name']} (置信度: {int(res['confidence']*100)}%)...")
+            print(f"[DSHA-ROUTER] Routing intent to [{res['selected_tool'].upper()}] {res['tool_name']} (得分占比: {int(res['score_share']*100)}%)...")
             tool_args = sys.argv[3:] if len(sys.argv) > 3 else ["status"]
             return Call_Tools(res["selected_tool"], tool_args, {"capture": False})["exit_code"]
 

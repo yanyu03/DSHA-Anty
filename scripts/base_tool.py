@@ -394,6 +394,46 @@ class BaseTool(ABC):
             return which_path
         return None
 
+    def assert_target_contained(self, exec_path):
+        """解析出的可执行目标必须落在白名单根之内。
+
+        前置断言证明“运行时存在”；这条证明“要跑的就是索引声明的那个东西”。
+        元数据被改、或工具名被拼成相对路径时，前置断言挡不住，这条可以。
+        """
+        target = Path(exec_path).resolve()
+        script_dir = Path(__file__).resolve().parent
+        repo_root = script_dir.parent if script_dir.name in ("scripts", "bin") else script_dir
+        user_home = Path(os.environ.get("USERPROFILE") or ".")
+        allowed_roots = [
+            (repo_root / "bin").resolve(),
+            (user_home / ".gemini" / "config").resolve(),
+        ]
+        for root in allowed_roots:
+            try:
+                target.relative_to(root)
+                return True, None
+            except ValueError:
+                continue
+        which_path = shutil.which(self.cmd)
+        if which_path and Path(which_path).resolve() == target:
+            return True, None
+        err = ErrBlock(
+            error_code="ERR_TARGET_OUTSIDE_SANDBOX",
+            tool_id=self.id,
+            tool_name=self.name,
+            category=self.category.value,
+            refusal_statement=(
+                f"DSHA 拒绝执行: 解析出的目标 '{target}' 不在允许的根之内"
+                "(仓库 bin/ 与 ~/.gemini/config/)。"
+            ),
+            details=[{"binary": str(target), "reason": "target-outside-sandbox"}],
+            remediations=[
+                "确认 DSHA-Index 里该工具的 cmd 未被改写成相对路径或仓库外路径。",
+                "如确需仓库外目标，请先在白名单中显式声明它，再重试。",
+            ],
+        )
+        return False, err
+
     def execute(self, args=None, context=None):
         if args is None:
             args = []
@@ -443,6 +483,21 @@ class BaseTool(ABC):
                 "stdout": "",
                 "stderr": f"[DSHA] Error: Launcher '{self.cmd}' could not be resolved on disk.",
                 "duration_ms": 0,
+            }
+
+        # 3.5 Target Containment Assertion (目标必须在白名单根内)
+        ok_contained, err_contained = self.assert_target_contained(exec_path)
+        if not ok_contained:
+            return {
+                "success": False,
+                "tool": self.id,
+                "tool_name": self.name,
+                "category": self.category.value,
+                "exit_code": 125,
+                "stdout": "",
+                "stderr": f"[DSHA] Error: target outside allowed roots: {exec_path}",
+                "duration_ms": 0,
+                "err_block": err_contained.to_dict() if err_contained is not None else {},
             }
 
         # 4. Execute with Environment Isolation
@@ -935,6 +990,16 @@ def run_selftest():
         TOOL_REGISTRY.get("custom_telemetry") is not None
         and TOOL_REGISTRY.get("custom_telemetry").version == "2.0.0"
     ))
+
+    # Test 11: Containment refuses a target outside the sandbox
+    _probe = TOOL_REGISTRY.get("scribe")
+    _ok_out, _ = _probe.assert_target_contained("C:/Windows/System32/cmd.exe")
+    tests.append(("containment_refuses_outside", not _ok_out))
+
+    # Test 12: Containment allows the declared launcher
+    _declared = _probe.resolve_executable()
+    _ok_in, _ = _probe.assert_target_contained(_declared) if _declared else (False, None)
+    tests.append(("containment_allows_declared", bool(_ok_in)))
 
     passed = sum(1 for _, ok in tests if ok)
     total = len(tests)

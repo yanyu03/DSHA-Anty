@@ -1,4 +1,4 @@
-# DSHA 安装器（幂等 · 带备份 · 可回滚）
+﻿# DSHA 安装器（幂等 · 带备份 · 可回滚）
 #
 #   pwsh -File install.ps1                      # 安装（权限档位 + 工程锁，钩子保持关闭）
 #   pwsh -File install.ps1 -EnableHook          # 同时启用工程锁钩子（写类工具机械校验）

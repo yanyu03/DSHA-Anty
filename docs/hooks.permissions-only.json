@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "C:\\Users\\Administrator\\.gemini\\config\\plugins\\dsh-permissions\\scripts\\run-gate.cmd",
+            "command": "%USERPROFILE%\\.gemini\\config\\plugins\\dsh-permissions\\scripts\\run-gate.cmd",
             "timeout": 10
           }
         ]

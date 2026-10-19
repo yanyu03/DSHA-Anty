@@ -79,7 +79,7 @@ res = Call_Tools("rea", ["inspect-artifact", "target.exe", "--json"], {"timeout"
   "stdout": "...",
   "stderr": "",
   "duration_ms": 1420,
-  "cmd": ["C:\\...\\bin\\cf.cmd", "status"]
+  "cmd": ["<repo>\\bin\\cf.cmd", "status"]
 }
 ```
 
