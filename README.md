@@ -1,264 +1,58 @@
-# DSHA-SharBoy — Systems Engineering & Governance Suite (for Antigravity & ChatGPT)
+# DSHA-SharBoy V1.0
 
-> 把 **DeepSeek Harness** 权限体系、工程质量锁、实时额度雷达与 **Programer 系统级编程思维**全面融合，打造适用于 **Antigravity** 与 **ChatGPT** 双平台的通用高阶系统工程治理套件。  
-> **v2.2.0** ｜ Windows ｜ 依赖 Python 3.10+ ｜ 无外部网络依赖 ｜ 纯本地运行
+面向本地 AI 开发工作流的工具调度与工程记录套件。
 
----
+**发行版本：V1.0** · 机器版本：`1.0.0` · 主要验证环境：Windows x64
 
-## 一、 体系全貌 (The Five Pillars)
+[下载 V1.0](https://github.com/yanyu03/DSHA-SharBoy/releases/tag/V1.0) · [发行说明](docs/releases/V1.0.md) · [更新记录](CHANGELOG.md) · [MIT 许可证](LICENSE)
 
-```mermaid
-graph TD
-    Root["DSHA-SharBoy 核心矩阵"] --> Gate["1. 权限档位 (DSHA-Gate)<br>【能不能做】四级预设 · 本地策略引擎"]
-    Root --> Lock["2. 工程质量锁 (DSHA-EngLock)<br>【做得对不对】L1-L9 诚实规范 · 防胡言乱语"]
-    Root --> Meter["3. 额度雷达 (DSHA-Meter)<br>【还剩多少做】5H/7D 水位 · 动态回血倒计时 · 4K 高分屏常驻"]
-    Root --> TY["4. 编程思维 (Programer Mindset)<br>【怎么做得漂亮】系统底层穿透 · 防御性契约 · 启发式导师"]
-    Root --> REA["5. 逆向工具与防咬人 Shell (REA & Safe Shell)<br>【代码就地剖析】150+ 逆向指令 · POSIX Bash · 语法零咬人"]
-```
+## 提供的功能
 
-| 模块 | 核心职责 | 机制与技术实现 |
-|---|---|---|
-| **DSHA-Gate** | **能不能做** | 四级具名档位（`read-only` / `workspace-write` / `danger-full-access` / `auto`），结合 `gate.py` 本地策略引擎与 Anty 原生开关联动。 |
-| **DSHA-EngLock** | **做得对不对** | L1 出处 / L2 样本 / L3 撤回 / L4 三件套 / L5 报告头 / L6 措辞 / L7 断拍 / L8 外部审查 + **L9 语言规范锁**（基于词表 `lexicon.json` 杜绝模型胡言乱语与虚假承诺）。 |
-| **DSHA-Meter** | **还剩多少做** | 解析 Antigravity 本地 JSONL 事务日志，实时统计 5H 滚动窗口与 7D 周配额水位；提供首笔回血与完全回满倒计时预测；DWM 物理级 DPI 缩放渲染。 |
-| **Programer Mindset** | **怎么做得漂亮** | 蒸馏自系统级软件工程体系的五大支柱（系统底层穿透律、防御契约、并发选型与锁纪律、高内聚 AOP 切面、量化实证）；配套五步启发教学范式。 |
-| **REA & Safe Shell** | **代码就地剖析与防咬人** | 引入 `morluto/rea` 150+ 逆向指令就地解析 JS/ASAR/PE/APK；配置 GNU Bash 全局环境与零圆括号批处理，杜绝 Windows PowerShell 语法咬人。 |
+| 模块 | 用途与边界 |
+| --- | --- |
+| Gate | 本地权限档位及调用策略；不替代宿主权限或操作系统隔离 |
+| EngLock | 工程报告、措辞和证据记录检查；不证明结论正确 |
+| Meter | 根据可用宿主记录展示用量估计；以服务商官方额度为准 |
+| Programer | 配置边界、输入契约、资源管理和验证指导；不分发课程全文 |
+| Index / Router / BaseTool | 工具目录、依赖探测、路由、执行结果及收据；按声明条件检查 |
+| Scribe | 本地日志整理和研究简报；收录范围需要明确配置 |
+| REA 接入 | 对明确目标进行分析；工具、提供者和目标仍须单独验证 |
 
----
+开放协议保留其独立标识 `v1.2.0-std`，这是本项目的接口规范版本，不是发行版本，也不表示外部标准组织认证。见[协议说明](DSHA_OPEN_PROTOCOL_SPEC.md)。
 
-## 二、 快速开始 (Quick Start)
+## 下载与安装
 
-### 1. 安装与验证
-在 PowerShell 终端运行：
+发行页提供 `DSHA-SharBoy-V1.0-source.zip`、`DSHA-SharBoy-V1.0-source.tar`、`SHA256SUMS.txt` 和 `SOURCE_MANIFEST.json`。ZIP 与 TAR 包含同一提交的源码，根目录统一为 `DSHA-SharBoy-V1.0/`。它们是源码分发包，不是独立可执行安装包。
+
+解压后，先阅读[安装教程](安装教程.md)并预演：
+
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\install.ps1 -WhatIfOnly   # 1) 只读预演（检查环境）
-powershell -ExecutionPolicy Bypass -File .\install.ps1               # 2) 一键安装（自动探测 Python 与包装器）
-powershell -ExecutionPolicy Bypass -File .\verify.ps1                # 3) 完整体检（FAIL 必须为 0；总数以脚本自身打印为准）
+powershell -NoProfile -File .\install.ps1 -WhatIfOnly
 ```
 
-### 2. 权限切换与 UI 面板
-在 Antigravity 会话中：
-- 输入 `/DSHA` 查看或切换当前权限档位；
-- 输入 `/DSHA 面板` 在对话中内联唤起交互式卡片选择器；
-- 命令行直接查询：
-  ```powershell
-  powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.gemini\config\agy-tier.ps1" -Status
-  ```
+确认目标目录、宿主及依赖后，可手动运行安装与检查：
 
-### 3. 额度雷达悬浮窗控制
-常驻桌面或 Anty 前台：
 ```powershell
-powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.gemini\config\agy-meter.ps1" -Start    # 启动悬浮窗
-powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.gemini\config\agy-meter.ps1" -Status   # 终端快速查看遥测数据
-powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.gemini\config\agy-meter.ps1" -Stop    # 停止悬浮窗
+powershell -NoProfile -File .\install.ps1
+powershell -NoProfile -File .\verify.ps1
 ```
 
-### 4. Programer 工程导师模式与合规安全 Shell (Pwsh 7 & REA)
-在会话中参考 `skills/DSHA/programer.md` 或直接要求 Anty：
-> *“请用 Programer 风格为这段代码做系统级底层审查与防御性重构。”*  
-Anty 将遵循“痛点启发 -> 本质穿透 -> 步骤拆解 -> 避坑防线 -> 运行实证”五步闭环交付。
+运行脚本仍受本机执行策略限制。安装器、验证脚本可能写入本机配置；源码下载本身不会安装或修改环境。
 
-针对任何模型与终端执行，DSHA 提供了免受括号撕裂的专用 Shell：
-```cmd
-pwsh -NoProfile -Command "..."      # 专用 PowerShell 7 独立运行时（无原生 PS 5.1 别名与括号缺陷）
-dsha-pwsh -Command "..."            # 加固 PowerShell 7 启动器（自动 Bypass 且 -NoProfile）
-dsha-sh -c "..."                    # 防咬人 GNU Bash 5.3 启动器
-rea <command>                       # 就地调用 REA 逆向工程套件
-```
+## 环境与外部工具
 
-### 5. 分享给本机的 ChatGPT 客户端 (SharBoy 专属导师)
-DSHA-SharBoy 提供了直接适用于本机 **ChatGPT Windows 客户端** 的完整扩展：
-1. **自定义指令注入 (Custom Instructions)**：
-   - 打开 ChatGPT 客户端，进入 **Settings -> Custom Instructions**；
-   - 复制 `chatgpt/SHARBOY_PROMPT.md`（或桌面上的 `DSHA-SharBoy_ChatGPT提示词.txt`）中的指令粘贴保存；
-   - ChatGPT 客户端即刻化身 **SharBoy**，获得 Programer 底层穿透思维与 L1-L9 工程锁守护。
-2. **MCP (Model Context Protocol) 工具接入**：
-   - 使用 `chatgpt/mcp_config.json` 将 `rea mcp` 挂载为本地逆向与代码分析工具服务器。
+- 第一方 Python 工具以 Python 3.10+ 为基础；部分 Codex 适配器工作流要求 Python 3.11+，以具体入口要求为准。
+- REA 运行需要 Node.js；原生分析提供者可能另需 Java、Ghidra 等。
+- PowerShell、Bash、Cloudflare 等按实际任务安装和配置。下载依赖、更新工具及远程服务可能需要网络。
+- Codex 入口说明位于 `codex/skill/`；复制提示词或安装技能不自动授予本机工具、MCP 或更高权限。
+- 工具被发现、版本探测成功、功能样本通过是不同证据。主分支不自动包含维护分支的所有修复。
 
-### 6. DSHA 书记官智能体 (The Scribe) · 日志收录与情报提纯
-专为多 Agent 协同设计的只读档案官：
-- **快速状态查看**：`bin\scribe.cmd status`
-- **生成问题研究简报**：`bin\scribe.cmd dossier [--issue <议题>]`（输出高密度 Markdown 简报供其他 Agent 快速研判，避免消耗上万 Token 翻阅原始日志）
-- **日志缓存同步**：`bin\scribe.cmd harvest`
-- **测试自检**：`bin\scribe.cmd selftest`
-- **子智能体调度**：支持通过 Antigravity 原生 `invoke_subagent(TypeName="scribe")` 异步唤起，ChatGPT 提示词见 `chatgpt/SCRIBE_PROMPT.md`。
+## 验证与已知范围
 
-### 8. DSHA-Index 顶层全景目录、BaseTool 类基扩展与环境断言 (v1.0.0 正式版)
-全系统最高能力大纲事实源、类基扩展基类与统一环境断言管道：
-- **按类目精确取用工具**：`bin\dsha-index.cmd list -c <WebEdge|SysAdmin|Archivist|PolicyRadar|ReverseEngineering>`
-- **查询已注册类目**：`bin\dsha-index.cmd categories`
-- **宿主环境断言体检**：`bin\dsha-index.cmd check [tool]`（严格拒绝缺失运行时的越权执行，输出结构化 `ErrBlock` 与修复指引）
-- **查看指定工具 Schema**：`bin\dsha-index.cmd get <cf|rea|scribe|pwsh|sh|tier|meter>`
-- **统合拉取执行协议**：`bin\dsha.cmd call <tool> [args...]`（自动校验宿主环境、防越权阻断、代理注入与标准捕获）
-- **路由意图执行中枢**：`bin\dsha.cmd exec "<任务意图>"`
-- **套件自检验证**：`bin\dsha-index.cmd selftest`
+本次发行只执行发行说明中列出的源码和包装检查。测试项数、跳过项和未测范围分别记录，不以旧报告或文件存在代替运行结果。Windows 以外环境、全新机器安装、真实账号服务及任意第三方项目不作通用可用性承诺。
 
----
+版本与证据：[发行说明](docs/releases/V1.0.md)、[版本方案](VERSION_SCHEME.md)、[Programer 来源](docs/PROGRAMER_PROVENANCE.md)。
 
-## 三、 核心架构与代码布局
+## 许可证与第三方
 
-```
-DSHA/
-├── bin/
-│   ├── dsha-index.cmd          # DSHA-Index 顶层目录与契约管理器 (纯 ASCII)
-│   ├── dsha.cmd                # DSHA 智能路由层与 Call_Tools 调度入口 (纯 ASCII)
-│   ├── cf.cmd                  # Cloudflare 工具链直通启动器 (纯 ASCII)
-│   ├── rea.cmd                 # REA 逆向工具集全局调用器
-│   ├── scribe.cmd              # DSHA 书记官全局调用器 (纯 ASCII)
-│   ├── pwsh.cmd                # DSHA 专用 PowerShell 7 零括号启动器
-│   ├── dsha-pwsh.cmd           # DSHA 加固 PowerShell 7 启动器
-│   ├── dsha-sh.cmd             # 防咬人 GNU Bash 启动器（规避 Win 括号咬人）
-│   ├── bash.cmd / sh.cmd       # GNU Bash 便携代理
-│   ├── agy-tier.ps1            # 权限档位切换器（唯一事实源）
-│   ├── agy-meter.ps1           # 额度悬浮窗控制器（启动/停止/状态）
-│   ├── agy-audit.ps1           # 门禁决策审计与统计
-│   └── agy-verify.ps1          # 自动化环境体检
-├── docs/
-│   ├── PROGRAMER_DISTILLATION.md # 原语蒸馏与教学认知脚手架报告
-│   ├── PROGRAMER_MINDSET.md      # 系统级编程思维五大支柱架构规范
-│   ├── ENGINEERING_LOCK.md          # L1-L8 工程锁技术规范
-│   ├── LANGUAGE_NORM.md             # L9 语言规范锁触发与补偿机制
-│   └── 防胡言乱语效果评估.md        # 真实语料过锁测试报告
-├── plugins/
-│   ├── dsh-permissions/        # 权限门禁本体（gate.py, lexicon.json, AGENTS.md）
-│   ├── dsha-englock/           # 独立工程锁插件（与切档解耦，hooks 独立）
-│   └── dsha-meter/             # 实时额度监视器本体（meter.py, 高分屏渲染）
-├── scripts/
-│   ├── base_tool.py            # BaseTool 抽象基类、PrerequisiteEnv 环境断言与 ErrBlock 架构 (纯 Python)
-│   ├── index.py                # DSHA-Index 顶层目录与 Call_Tools 引擎 (纯 Python 标准库)
-│   ├── router.py               # 智能情境路由层决策引擎 (纯 Python 标准库)
-│   ├── dsha_cf.py              # Cloudflare 工具直通引擎 (纯 Python 标准库)
-│   ├── scribe.py               # 书记官情报与日志提纯引擎 (纯 Python 标准库)
-│   └── fetch-pwsh.ps1          # 专用 Pwsh 运行时极速自举拉取器
-├── skills/
-│   ├── DSHA/                   # DSHA 核心技能套件
-│   │   ├── SKILL.md            # Anty 技能定义入口
-│   │   ├── dsha-index.md       # DSHA-Index 顶层架构与 Call_Tools 规范
-│   │   ├── routing-layer.md    # 智能路由层决策树与规范
-│   │   ├── cloudflare.md       # Cloudflare 直通引擎手册
-│   │   ├── scribe.md           # 书记官工作规范与简报标准
-│   │   ├── widget.html         # 内联 UI 权限卡片面板
-│   │   ├── programer.md        # Programer 工程辅助快速指南
-│   │   └── reference.md        # 四档警告与运维陷阱参考
-│   └── reverse-engineer-anything/ # REA 逆向套件与本地驱动器
-├── install.ps1                 # 幂等安装器（带时间戳备份与一键卸载）
-├── verify.ps1                  # 自动化体检套件（通过与否以脚本自身打印的 PASS/FAIL 为准）
-├── CHANGELOG.md                # 版本演进历程
-├── README.md                   # 项目说明
-└── VERSION                     # 当前版本号 (1.0.0)
-```
-
----
-
-## 四、 设计哲学与工程规范
-
-1. **Fail-Open 韧性原则**：所有门禁与校验器自身异常时一律放行，永远不把辅件故障转嫁给主宿主；
-2. **数据与逻辑解耦**：L9 过滤词库完全配置化（`lexicon.json`），改词表即改行为；
-3. **提示词纯 ASCII 隔离**：`AGENTS.md` 注入文件保持严格 0 个非 ASCII 字节，彻底杜绝多环境编码冲突；
-4. **零隐私泄漏与绝对脱敏**：杜绝写死个人绝对路径，全线采用 `$env:USERPROFILE` 动态解析与自适应探测；
-5. **闭环三件套交付 (L4)**：所有工程方案必带“测试报告 + 复现指令 + 回滚/退出方式”；
-6. **不主张合并外部运行时 & 严格环境断言 (No Bundled Runtimes)**：DSHA 拒绝将庞大外部运行时塞入仓库，保持代码库纯净轻盈。各工具通过 `PrerequisiteEnv` 动态断言宿主环境，缺失时以结构化 `ErrBlock` 拒绝执行并提供修复指引；各工具按 5 大类目（`ReverseEngineering`, `WebEdge`, `Archivist`, `SysAdmin`, `PolicyRadar`）组织，全面继承 `BaseTool` 抽象基类，并严格防越权（`read-only` 档位下阻断中高危操作）。
-
----
-
-## 五、 许可证与致谢
-
-- 本项目基于 [MIT License](LICENSE) 协议开源。详细第三方组件与生态声明参见 [NOTICE.md](NOTICE.md)。
-- 灵感致敬 **DeepSeek Harness** 开源项目与 **资深工程师 Programer 系统级代码思维体系**。
-
----
-
-## 六、 授权、表述修正与 D41H 增量
-
-> 本节吸收自 `D41H`（DeepSeek Harness 4.1 Flash 模型）协同进贡成果。上文原有表述未作大幅改动；记录表述修正与效力边界。
-
-### 6.1 已修正的表述
-
-| 位置 | 原表述 | 问题 | 现表述 |
-| :--- | :--- | :--- | :--- |
-| 目录树注释 | `verify.ps1` 标注为「59 项自动化体检套件（全绿）」 | 体检项数随版本增长，写死数字会与实现漂移：`CHANGELOG` 中另有 55 / 51 / 43 / 39 等历史值，当前实测已扩展至 67 项 | 改为以脚本自身打印的 `PASS` / `FAIL` 为准 |
-
-### 6.2 许可证与版权归属
-
-`README` 此前已声明 MIT，但仓库内没有许可证文件，GitHub 也未能识别出许可证。现已补齐 [`LICENSE`](./LICENSE)（MIT 全文，含 `yanyu03` 及社区贡献者版权行）以及 [`NOTICE.md`](./NOTICE.md)（第三方生态归属及运行时防传染声明），使声明与文件一致。
-
-### 6.3 D41H 增量（已吸收进主线）
-
-| 项 | 内容 |
-| :--- | :--- |
-| D1 | 移除 `plugins/dsh-permissions/scripts/` 下与 `scripts/` 字节相同的 `index.py` / `router.py` 重复副本，改由 `install.ps1` 分发 |
-| D2 | 钩子模板、`mcp_config`、启动器、`scribe.py`、`test_skill_integration.py` 中的机器相关路径改为环境变量或 PATH 动态解析 |
-| D3 | `README` 的体检提示去掉写死项数，杜绝文档与实现漂移 |
-| D4 | 修正 `CHANGELOG` 中的绝对化断言，明确标明样本量（如「8/8 用例通过（n=8，不构成准确率）」） |
-
-| D5 | 新增 `VERSION_SCHEME.md`，说明 1.x 正式线与 2.x 实验线不可比较 |
-| D6 | `verify.ps1` 的 `Check` 增加分类计数，按 behavior / contract / existence 分栏报告 |
-| D7 | `base_tool.py` 新增 `assert_target_contained`：解析出的目标须落在仓库 `bin/` 或 `~/.gemini/config/` 内，越界返回退出码 125 |
-| D8 | `router.py` 新增 `score_share` 字段（`confidence` 保留为别名），报告注明该值为得分占比、不是正确概率 |
-| D9 | `dsha_env.py` 增补 Windows 环境变量键归一化（`normalize_environment`）与原生注册表兜底（`machine_environment`），抗环境变量剥除 |
-
-### 6.4 效力边界
-
-- 核心组件与自动化测试均在 **Windows x64** 上实测完成；非 Windows 分支已写但未全部实测，不构成跨平台结论。
-- 体检是否通过反映的是**本机**状态：全新干净机器上会因缺少本地安装工具（如 node、wrangler 等）而提示依赖缺失。
-- 体检通过只说明**列出的检查项通过**，不等于第三方工具、外部 MCP、网络服务或账号可用。
-
----
-
-## 七、 DSHA 开放协议与双向接口穿透回溯 (Open Protocol & Bidirectional Retrace)
-
-> 详细规范与 Schema 定义参见 [`DSHA_OPEN_PROTOCOL_SPEC.md`](./DSHA_OPEN_PROTOCOL_SPEC.md)。
-
-DSHA 开放协议（`v1.2.0-std`）是一套专为 AI Agent 与自动化开发者工具设计的标准化通信、受限执行与双向因果回溯规范，全面对齐 OpenRPC / JSON Schema 标准草案。
-
-### 7.1 五大设计原则
-
-1. **零外部运行时捆绑 (Zero Bundled Runtimes)**：保持仓库极简，依靠 `HostEnvPerceiver` 动态感知宿主环境。
-2. **单向不可逆传参包络 (Unidirectional Context Envelope)**：阻断父级进程 Token / Secret 泄露，向下仅传递安全工作区与净化后环境变量。
-3. **严格受控沙箱与类目寻址 (Strict Containment & Catalog Resolution)**：目标二进制必须受限于合法目录白名单，杜绝路径逃逸。
-4. **遇险即断与礼貌抱歉原则 (Fail-Closed & Polite Apology)**：前置依赖缺失或权限不足时，硬性阻断后续执行链条并返回格式化 `ErrBlock`。
-5. **双向全生命周期可观测性 (Bidirectional Retraceability)**：AI 能够顺着接口正向执行到底，遇到异常能够顺着接口逆向因果回溯到底。
-
-### 7.2 顺着接口到底：7 阶段正向生命周期流水线
-
-所有工具执行均严格按序通过以下 7 个阶段：
-
-```
-[ Stage 1: 入站校验 (Ingress) ]
-              │
-[ Stage 2: 意图路由 (Routing) ]
-              │
-[ Stage 3: 环境依赖自检 (EnvFeel) ]  ──(缺失)──> [ 阻断拦截 + ErrBlock ] (Exit: 126)
-              │ (满足)
-[ Stage 4: 权限档位断言 (Tier Auth) ] ──(越权)──> [ 阻断拦截 + ErrBlock ] (Exit: 126)
-              │ (授权)
-[ Stage 5: 目录收敛断言 (Containment)] ──(逃逸)──> [ 阻断拦截 + ErrBlock ] (Exit: 125)
-              │ (合规)
-[ Stage 6: 沙箱隔离执行 (Execution) ]
-              │
-[ Stage 7: 出站封装归档 (Egress) ]   ───> 输出 DSHAResponse + TraceReceipt
-```
-
-### 7.3 顺着接口回溯：AI 逆向因果归因引擎 (`retrace`)
-
-当执行发生故障或被策略阻断拦截时，AI 或开发者可调用 `retrace` 逆向因果遍历引擎，自 Stage 7 逆序回溯至 Stage 1，精准定位首个破坏契约的阶段与证据链条：
-
-```bash
-# 查看执行收据
-dsha trace tr_1792398025075_05516c
-
-# 逆向接口因果回溯研判
-dsha retrace tr_1792398025075_05516c
-
-# 导出 Open Protocol JSON Schema 规范
-dsha schema
-```
-
-回溯研判输出包含四大核心要素：
-1. **精确根因归因 (Root Cause Attribution)**：定性定位导致失败的流水线阶段与错误码。
-2. **现场快照取证 (Forensic Evidence)**：包含缺失依赖、越权详情或未授权访问边界。
-3. **L4 标准复现指令 (Reproducer)**：一键复现现场的精确命令行。
-4. **L4 安全回滚操作 (Rollback Procedure)**：对应的现场清理与状态还原机制。
-
-
-
+第一方代码按 [MIT](LICENSE) 提供；第三方文件保留其自身许可证。仓库含 REA 的 JavaScript 分发文件及包装器，不含本机 Node.js、Java、Ghidra、VS 或 Rust 安装环境。第三方来源、随附与外部调用的区别见 [NOTICE.md](NOTICE.md)。名称调整不授予第三方资料权利，也不删除 Git 历史。

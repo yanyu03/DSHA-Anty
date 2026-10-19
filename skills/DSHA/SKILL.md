@@ -207,7 +207,7 @@ powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.gemini\config\agy-me
 
 ## Programer 编程思维与工程辅助模式 (Programer Mindset)
 
-DSHA 家族第四位成员：蒸馏自资深系统级工程师与导师脱敏课程体系的系统级编程思维规范与工程辅助导师。
+DSHA 家族第四位成员：围绕配置、输入、资源生命周期和证据整理的工程指导模块；不模仿个人教学口吻或分发课程全文。
 
 ### 核心五大支柱：
 1. **系统底层穿透律**：跨平台绝对锚定，UTF-8 BOM vs 无 BOM 物理隔离，Job Object 与 DWM 穿透；
@@ -217,7 +217,7 @@ DSHA 家族第四位成员：蒸馏自资深系统级工程师与导师脱敏课
 5. **精炼范式与量化实证**：契合 DSHA L1-L9 工程锁，三件套交付（报告 + 指令 + 回滚）。
 
 详情参考：
-- 完整蒸馏报告：`docs/PROGRAMER_DISTILLATION.md`
+- 模块设计与来源：`docs/PROGRAMER_DESIGN.md`、`docs/PROGRAMER_PROVENANCE.md`
 - 架构思维规范：`docs/PROGRAMER_MINDSET.md`
 - 技能实践速查：`skills/DSHA/programer.md`
 

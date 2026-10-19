@@ -1,40 +1,19 @@
-# DSHA-SharBoy · 开源许可证与第三方声明 (Open Source Notices & Attributions)
+# 许可证与第三方说明
 
-本项目依据 **MIT 许可证** 开源发布。以下列出项目所引用、启发或协同工作的第三方开源组件及知识产权声明。
+第一方 DSHA 代码按根目录 LICENSE 的 MIT 条款提供。该声明不重新许可第三方内容，也不构成对所有历史文件的权属保证。
 
----
+## 随附内容
 
-## 1. 核心许可证 (Primary License)
+`skills/reverse-engineer-anything/tools/rea/` 包含 REA 6.7.0 的 JavaScript 分发文件及DSHA包装器，来源 https://github.com/morluto/rea 。包元数据声明 MIT；随附许可证见 `third_party/licenses/REA-MIT.txt`，保留上游作者署名。下载源码不代表所需运行时和分析提供者已安装。
 
-DSHA-SharBoy 核心套件（包括 `DSHA-Gate`, `DSHA-EngLock`, `DSHA-Meter`, `BaseTool`, `DSHA-Index`, `DSHA-Router`, `The Scribe` 等组件）均在 [LICENSE](LICENSE) 文件的 MIT 许可证条款下提供。
+## 按需使用的外部工具
 
----
+PowerShell、Git for Windows/Bash、Node.js、Java、Ghidra及Cloudflare工具等各自遵循其供应方条款。它们不是DSHA的第一方实现；本发行不打包本机安装目录。具体发行、依赖及其许可应以所选版本为准。通过子进程调用不自动证明许可证义务已满足，也不构成安全沙箱。
 
-## 2. 启发与致敬声明 (Inspirations & Acknowledgements)
+## Programer 与历史
 
-- **DeepSeek Harness**  
-  项目四级权限档位模型（`read-only` / `workspace-write` / `danger-full-access` / `auto`）与本地门禁策略引擎的思想发轫于 DeepSeek Harness 开源实践。
-- **Programer 系统级代码思维体系**  
-  系统底层穿透律、防御性契约设计、高内聚切面与五步启发教学范式，来源于资深系统级工程体系的脱敏与蒸馏沉淀。
+Programer 是工程指导模块名称，不代表某位教师、课程作者或机构授权。当前发行不包含旧课程蒸馏正文；规范及技能入口为维护分支独立整理的工程指导，迁移背景见 docs/PROGRAMER_PROVENANCE.md。旧标签、提交或克隆可能仍含历史内容，本次未改写历史。
 
----
+## 名称与关联
 
-## 3. 第三方组件与协同工具说明 (Third-Party Ecosystem)
-
-- **Reverse Engineer Anything (REA)**  
-  逆向分析模块与工具集来源于 `morluto/rea` 开源项目，遵循 MIT License。
-- **PowerShell 7 (pwsh)**  
-  PowerShell 跨平台自动化引擎由 Microsoft Corporation 依据 MIT License 开源。
-- **Cloudflare Wrangler CLI & Workers SDK**  
-  Cloudflare 边缘计算与部署工具链遵循 Apache-2.0 / MIT License。
-- **GNU Bash & POSIX 工具链**  
-  用于 Windows 环境防咬人终端的 GNU Bash、Git 工具由 Git for Windows 社区维护（遵循 GPLv2 / LGPL 规范）。
-
----
-
-## 4. 纯净运行时与合规边界 (Runtime Decoupling & Compliance Guarantee)
-
-DSHA 恪守 **“不臃肿合并外部运行时 (No Bundled Runtimes)”** 的工程洁癖原则：
-1. 仓库本体不打包、不随附、不分发任何第三方 GPL 二进制分发包或大型运行时；
-2. 宿主环境通过 `PrerequisiteEnv` 与 `HostEnvPerceiver` 在本地执行动态触探与安全寻径；
-3. 执行时通过单向参数包络（`ExecutionEnvelope`）实施进程级隔离调用，杜绝任何许可证传染或静态绑定风险。
+DeepSeek Harness、Antigravity、ChatGPT及其他产品名称用于说明集成背景，不表示本项目由相关厂商认可、认证或提供保障。兼容范围以具体入口和实测记录为准。

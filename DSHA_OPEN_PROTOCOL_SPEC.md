@@ -1,7 +1,7 @@
 # DSHA 开放协议规范 (DSHA Open Protocol Specification)
 
 **协议版本**: `v1.2.0-std`  
-**状态**: 正式标准 (Standardized & Open)  
+**状态**: 项目接口规范（独立于V1.0发行；非外部标准认证）
 **编目模式**: OpenRPC / JSON Schema 对齐  
 **适用对象**: AI 智能体 (Antigravity, DeepSeek Harness, Claude, Cursor 等)、自动化调度流水线、宿主开发者工具  
 
