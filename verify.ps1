@@ -249,7 +249,7 @@ Check "仓库内 index.py / router.py 无重复副本" ((-not (Test-Path $dupInd
 Check "存在 VERSION_SCHEME.md" (Test-Path (Join-Path $repoRoot 'VERSION_SCHEME.md')) '' 'existence'
 
 # 硬编码盘符路径扫描（白名单须显式列明，不做模糊豁免）
-$allowPrefixes = @('docs\teacher_yang_corpus\', 'docs\TEACHER_YANG_DISTILLATION.md')
+$allowPrefixes = @()
 $scanTargets = @()
 foreach ($rel in @('docs','chatgpt')) {
   $sp = Join-Path $repoRoot $rel

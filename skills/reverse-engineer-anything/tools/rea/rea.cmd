@@ -1,5 +1,5 @@
 @echo off
-rem DSHA-REA Local Tool Launcher - TeacherYang Mindset
+rem DSHA-REA Local Tool Launcher - Programer Mindset
 setlocal
 set "PY="
 if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" set "PY=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"

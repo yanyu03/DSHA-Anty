@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-DSHA-REA Driver (杨老师风味系统级逆向工具驱动器)
-贯彻 TeacherYang 五大支柱：
+DSHA-REA Driver (Programer风味系统级逆向工具驱动器)
+贯彻 Programer 五大支柱：
  1. 系统底层穿透律：自动探测 Node.js、规范化跨平台路径、解决 Windows 编码与引号转义。
  2. 防御性契约与生命周期：入参前置校验、目标存在性检查、缺少 Native 引擎时安全降级不崩溃。
  3. 并发安全与超时纪律：带超时保护的隔离子进程，杜绝反编译死循环锁死终端。
@@ -94,7 +94,7 @@ def main():
 
     node_bin = find_node()
     if not node_bin:
-        print("[杨老师系统底层穿透] ❌ 找不到可用的 Node.js 解释器。", file=sys.stderr)
+        print("[Programer系统底层穿透] ❌ 找不到可用的 Node.js 解释器。", file=sys.stderr)
         print("建议安装 Node.js LTS (https://nodejs.org) 并加入系统 PATH。", file=sys.stderr)
         sys.exit(1)
 
@@ -116,7 +116,7 @@ def main():
         )
         sys.exit(proc.returncode)
     except subprocess.TimeoutExpired:
-        print(f"\n[杨老师超时断开] 任务执行超过 {timeout_sec} 秒，已安全截断以防终端假死。", file=sys.stderr)
+        print(f"\n[Programer超时断开] 任务执行超过 {timeout_sec} 秒，已安全截断以防终端假死。", file=sys.stderr)
         sys.exit(124)
     except KeyboardInterrupt:
         print("\n[用户中断] 任务已平稳退出。", file=sys.stderr)

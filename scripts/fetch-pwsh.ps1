@@ -2,7 +2,7 @@
 .SYNOPSIS
     DSHA Dedicated Pwsh Bootstrap & Runtime Fetcher
 .DESCRIPTION
-    TeacherYang Defensive Distillation:
+    Programer Defensive Distillation:
     - Pillar 1: Penetration (High-speed fast mirror with graceful fallback)
     - Pillar 2: Defensive Contracting (Pre-flight checks, SHA-256 integrity, safe extraction)
     - Pillar 3: Concurrency & Isolation (Zero pollution of global OS PowerShell 5.1)

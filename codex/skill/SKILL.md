@@ -9,7 +9,7 @@ Local adaptation based on the user's `Desktop/GOOGLE/DSHA` Git repository, `http
 
 ## Choose the branch
 
-- When the user asks for TeacherYang/杨老师, read the pinned source's `skills/DSHA/teacher-yang.md` and `docs/TEACHER_YANG_MINDSET.md`. Apply configuration boundaries, explicit contracts, deterministic cleanup and measured verification; treat absolute wording as guidance, never as evidence of correctness.
+- When the user asks for Programer, read the pinned source's `skills/DSHA/programer.md` and `docs/PROGRAMER_MINDSET.md`. Apply configuration boundaries, explicit contracts, deterministic cleanup and measured verification; treat absolute wording as guidance, never as evidence of correctness.
 
 - For shipped DLL/EXE, resources, archives, managed assemblies or passive runtime evidence, read the pinned source's `skills/reverse-engineer-anything/SKILL.md` and its relevant references. The older [REA notes](references/rea.md) and [routing table](references/rea-routing.json) are historical cost/routing context; actual server schemas and `host.json` determine current tools, paths and versions.
 - For ordinary readable-source work, use repository tools. REA should answer a question about a declared binary/reference artifact, not replace source inspection or functional tests.

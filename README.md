@@ -1,6 +1,6 @@
 # DSHA-SharBoy — Systems Engineering & Governance Suite (for Antigravity & ChatGPT)
 
-> 把 **DeepSeek Harness** 权限体系、工程质量锁、实时额度雷达与**杨老师系统级编程思维**全面融合，打造适用于 **Antigravity** 与 **ChatGPT** 双平台的通用高阶系统工程治理套件。  
+> 把 **DeepSeek Harness** 权限体系、工程质量锁、实时额度雷达与**Programer系统级编程思维**全面融合，打造适用于 **Antigravity** 与 **ChatGPT** 双平台的通用高阶系统工程治理套件。
 > **v2.2.0** ｜ Windows ｜ 依赖 Python 3.10+ ｜ 无外部网络依赖 ｜ 纯本地运行
 
 ---
@@ -12,7 +12,7 @@ graph TD
     Root["DSHA-SharBoy 核心矩阵"] --> Gate["1. 权限档位 (DSHA-Gate)<br>【能不能做】四级预设 · 本地策略引擎"]
     Root --> Lock["2. 工程质量锁 (DSHA-EngLock)<br>【做得对不对】L1-L9 诚实规范 · 防胡言乱语"]
     Root --> Meter["3. 额度雷达 (DSHA-Meter)<br>【还剩多少做】5H/7D 水位 · 动态回血倒计时 · 4K 高分屏常驻"]
-    Root --> TY["4. 编程思维 (TeacherYang Mindset)<br>【怎么做得漂亮】系统底层穿透 · 防御性契约 · 启发式导师"]
+    Root --> TY["4. 编程思维 (Programer Mindset)<br>【怎么做得漂亮】系统底层穿透 · 防御性契约 · 启发式导师"]
     Root --> REA["5. 逆向工具与防咬人 Shell (REA & Safe Shell)<br>【代码就地剖析】150+ 逆向指令 · POSIX Bash · 语法零咬人"]
 ```
 
@@ -21,7 +21,7 @@ graph TD
 | **DSHA-Gate** | **能不能做** | 四级具名档位（`read-only` / `workspace-write` / `danger-full-access` / `auto`），结合 `gate.py` 本地策略引擎与 Anty 原生开关联动。 |
 | **DSHA-EngLock** | **做得对不对** | L1 出处 / L2 样本 / L3 撤回 / L4 三件套 / L5 报告头 / L6 措辞 / L7 断拍 / L8 外部审查 + **L9 语言规范锁**（基于词表 `lexicon.json` 杜绝模型胡言乱语与虚假承诺）。 |
 | **DSHA-Meter** | **还剩多少做** | 解析 Antigravity 本地 JSONL 事务日志，实时统计 5H 滚动窗口与 7D 周配额水位；提供首笔回血与完全回满倒计时预测；DWM 物理级 DPI 缩放渲染。 |
-| **TeacherYang Mindset** | **怎么做得漂亮** | 蒸馏自 14 门系统级课件的五大支柱（系统底层穿透律、防御契约、并发选型与锁纪律、高内聚 AOP 切面、量化实证）；配套五步启发教学范式。 |
+| **Programer Mindset** | **怎么做得漂亮** | 配置边界、输入契约、资源生命周期、有界执行与可复核证据；不分发课程全文。 |
 | **REA & Safe Shell** | **代码就地剖析与防咬人** | 引入 `morluto/rea` 150+ 逆向指令就地解析 JS/ASAR/PE/APK；配置 GNU Bash 全局环境与零圆括号批处理，杜绝 Windows PowerShell 语法咬人。 |
 
 ---
@@ -53,10 +53,10 @@ powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.gemini\config\agy-me
 powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.gemini\config\agy-meter.ps1" -Stop    # 停止悬浮窗
 ```
 
-### 4. 杨老师工程导师模式与合规安全 Shell (Pwsh 7 & REA)
-在会话中参考 `skills/DSHA/teacher-yang.md` 或直接要求 Anty：
-> *“请用 TeacherYang 风格为这段代码做系统级底层审查与防御性重构。”*  
-Anty 将遵循“痛点启发 -> 本质穿透 -> 步骤拆解 -> 避坑防线 -> 运行实证”五步闭环交付。
+### 4. Programer工程导师模式与合规安全 Shell (Pwsh 7 & REA)
+在会话中参考 `skills/DSHA/programer.md` 或直接要求 Anty：
+> *“请用 Programer 风格为这段代码做系统级底层审查与防御性重构。”*
+Programer围绕目标、边界和验证展开审查，不绑定个人教学口吻。
 
 针对任何模型与终端执行，DSHA 提供了免受括号撕裂的专用 Shell：
 ```cmd
@@ -71,7 +71,7 @@ DSHA-SharBoy 提供了直接适用于本机 **ChatGPT Windows 客户端** 的完
 1. **自定义指令注入 (Custom Instructions)**：
    - 打开 ChatGPT 客户端，进入 **Settings -> Custom Instructions**；
    - 复制 `chatgpt/SHARBOY_PROMPT.md`（或桌面上的 `DSHA-SharBoy_ChatGPT提示词.txt`）中的指令粘贴保存；
-   - ChatGPT 客户端即刻化身 **SharBoy**，获得杨老师 13 章底层穿透思维与 L1-L9 工程锁守护。
+   - ChatGPT 客户端即刻化身 **SharBoy**，使用Programer工程审查指导与L1-L9工程锁说明；能力以实际工具和验证为准。
 2. **MCP (Model Context Protocol) 工具接入**：
    - 使用 `chatgpt/mcp_config.json` 将 `rea mcp` 挂载为本地逆向与代码分析工具服务器。
 
@@ -114,8 +114,8 @@ DSHA/
 │   ├── agy-audit.ps1           # 门禁决策审计与统计
 │   └── agy-verify.ps1          # 自动化环境体检
 ├── docs/
-│   ├── TEACHER_YANG_DISTILLATION.md # PPT 原语蒸馏与教学认知脚手架报告
-│   ├── TEACHER_YANG_MINDSET.md      # 系统级编程思维五大支柱架构规范
+│   ├── PROGRAMER_DESIGN.md # Programer模块设计与迁移边界
+│   ├── PROGRAMER_MINDSET.md      # 系统级编程思维五大支柱架构规范
 │   ├── ENGINEERING_LOCK.md          # L1-L8 工程锁技术规范
 │   ├── LANGUAGE_NORM.md             # L9 语言规范锁触发与补偿机制
 │   └── 防胡言乱语效果评估.md        # 真实语料过锁测试报告
@@ -138,7 +138,7 @@ DSHA/
 │   │   ├── cloudflare.md       # Cloudflare 直通引擎手册
 │   │   ├── scribe.md           # 书记官工作规范与简报标准
 │   │   ├── widget.html         # 内联 UI 权限卡片面板
-│   │   ├── teacher-yang.md     # 杨老师工程辅助快速指南
+│   │   ├── programer.md     # Programer工程辅助快速指南
 │   │   └── reference.md        # 四档警告与运维陷阱参考
 │   └── reverse-engineer-anything/ # REA 逆向套件与本地驱动器
 ├── install.ps1                 # 幂等安装器（带时间戳备份与一键卸载）
@@ -164,4 +164,4 @@ DSHA/
 ## 五、 许可证与致谢
 
 - 本项目基于 **MIT License** 开源。
-- 灵感致敬 **DeepSeek Harness** 开源项目与 **杨老师代码体系**。
+- 保留 **DeepSeek Harness** 等原项目来源；Programer模块迁移边界见 `docs/PROGRAMER_PROVENANCE.md`。
