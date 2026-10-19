@@ -156,6 +156,37 @@ if (Test-Path $scribePy) {
   Check "scribe.py selftest 全通过" $sPass $sSelf.Line
 }
 
+Write-Host "`n=== 11. Cloudflare 直通引擎与智能路由层 (DHSA-TestWeb) ===" -ForegroundColor Cyan
+$cfCmd = Join-Path $cfg 'cf.cmd'
+if (-not (Test-Path $cfCmd)) { $cfCmd = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\cf.cmd" }
+Check "cf.cmd launcher present" (Test-Path $cfCmd)
+if (Test-Path $cfCmd) { Check "cf.cmd is pure ASCII" (((Get-Content $cfCmd -Raw) -notmatch '[^\x00-\x7F]')) }
+
+$cfPy = Join-Path $cfg 'plugins\dsh-permissions\scripts\dsha_cf.py'
+if (-not (Test-Path $cfPy)) { $cfPy = "c:\Users\admin\Desktop\GOOGLE\DSHA\scripts\dsha_cf.py" }
+Check "dsha_cf.py script present" (Test-Path $cfPy)
+if (Test-Path $cfPy) {
+  $cfSelf = & $pyExe $cfPy selftest | Select-String -Pattern 'selftest:' | Select-Object -Last 1
+  $cfPass = $false
+  if ($cfSelf -and $cfSelf.Line -match 'selftest:\s*(\d+)\s*/\s*(\d+)') { $cfPass = ($matches[1] -eq $matches[2]) }
+  Check "dsha_cf.py selftest 全通过" $cfPass $cfSelf.Line
+}
+
+$dshaCmd = Join-Path $cfg 'dsha.cmd'
+if (-not (Test-Path $dshaCmd)) { $dshaCmd = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\dsha.cmd" }
+Check "dsha.cmd router launcher present" (Test-Path $dshaCmd)
+if (Test-Path $dshaCmd) { Check "dsha.cmd is pure ASCII" (((Get-Content $dshaCmd -Raw) -notmatch '[^\x00-\x7F]')) }
+
+$routerPy = Join-Path $cfg 'plugins\dsh-permissions\scripts\router.py'
+if (-not (Test-Path $routerPy)) { $routerPy = "c:\Users\admin\Desktop\GOOGLE\DSHA\scripts\router.py" }
+Check "router.py script present" (Test-Path $routerPy)
+if (Test-Path $routerPy) {
+  $rSelf = & $pyExe $routerPy selftest | Select-String -Pattern 'selftest:' | Select-Object -Last 1
+  $rPass = $false
+  if ($rSelf -and $rSelf.Line -match 'selftest:\s*(\d+)\s*/\s*(\d+)') { $rPass = ($matches[1] -eq $matches[2]) }
+  Check "router.py selftest 全通过" $rPass $rSelf.Line
+}
+
 Write-Host "`n--------------------------------------------------"
 Write-Host ("PASS {0} / FAIL {1} / WARN {2}" -f $ok, $fail, $warn) -ForegroundColor $(if ($fail -eq 0) { 'Green' } else { 'Red' })
 if ($fail -eq 0) { Write-Host "DSHA 体检通过。" -ForegroundColor Green } else { Write-Host "存在失败项，请按上方 [FAIL] 逐条处理。" -ForegroundColor Red }

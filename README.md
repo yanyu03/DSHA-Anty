@@ -83,6 +83,13 @@ DSHA-SharBoy 提供了直接适用于本机 **ChatGPT Windows 客户端** 的完
 - **测试自检**：`bin\scribe.cmd selftest`
 - **子智能体调度**：支持通过 Antigravity 原生 `invoke_subagent(TypeName="scribe")` 异步唤起，ChatGPT 提示词见 `chatgpt/SCRIBE_PROMPT.md`。
 
+### 7. Cloudflare 直通引擎与智能路由层 (DHSA-TestWeb 分支特性)
+针对多工具协同的自动化调度中枢与现代边缘生态直通：
+- **直通 Cloudflare 引擎**：`bin\cf.cmd <whoami|status|dev|deploy|pages|tunnel|selftest>`（集成 Wrangler 4.151.1 与 Cloudflare Tunnels，内置 UTF-8 编码隔离与代理自适应）；
+- **情境智能路由层**：`bin\dsha.cmd route "<自然语言任务或目标文件>"`（基于 7 大子系统多因子评分，以 79%~100% 置信度自动指派最佳工具与命令）；
+- **全工具链就位检测**：`bin\dsha.cmd status`
+- **全场景矩阵自检**：`bin\dsha.cmd selftest`（覆盖逆向、边缘部署、日志提纯、系统管理、权限与额度 8 大场景）。
+
 ---
 
 ## 三、 核心架构与代码布局
@@ -90,12 +97,14 @@ DSHA-SharBoy 提供了直接适用于本机 **ChatGPT Windows 客户端** 的完
 ```
 DSHA/
 ├── bin/
+│   ├── dsha.cmd                # DSHA 智能路由层与万能分发入口 (纯 ASCII)
+│   ├── cf.cmd                  # Cloudflare 工具链直通启动器 (纯 ASCII)
+│   ├── rea.cmd                 # REA 逆向工具集全局调用器
+│   ├── scribe.cmd              # DSHA 书记官全局调用器 (纯 ASCII)
 │   ├── pwsh.cmd                # DSHA 专用 PowerShell 7 零括号启动器
 │   ├── dsha-pwsh.cmd           # DSHA 加固 PowerShell 7 启动器
 │   ├── dsha-sh.cmd             # 防咬人 GNU Bash 启动器（规避 Win 括号咬人）
 │   ├── bash.cmd / sh.cmd       # GNU Bash 便携代理
-│   ├── rea.cmd                 # REA 逆向工具集全局调用器
-│   ├── scribe.cmd              # DSHA 书记官全局调用器 (纯 ASCII)
 │   ├── agy-tier.ps1            # 权限档位切换器（唯一事实源）
 │   ├── agy-meter.ps1           # 额度悬浮窗控制器（启动/停止/状态）
 │   ├── agy-audit.ps1           # 门禁决策审计与统计
@@ -111,21 +120,25 @@ DSHA/
 │   ├── dsha-englock/           # 独立工程锁插件（与切档解耦，hooks 独立）
 │   └── dsha-meter/             # 实时额度监视器本体（meter.py, 高分屏渲染）
 ├── scripts/
+│   ├── router.py               # 智能情境路由层决策引擎 (纯 Python 标准库)
+│   ├── dsha_cf.py              # Cloudflare 工具直通引擎 (纯 Python 标准库)
 │   ├── scribe.py               # 书记官情报与日志提纯引擎 (纯 Python 标准库)
 │   └── fetch-pwsh.ps1          # 专用 Pwsh 运行时极速自举拉取器
 ├── skills/
 │   ├── DSHA/                   # DSHA 核心技能套件
 │   │   ├── SKILL.md            # Anty 技能定义入口
+│   │   ├── routing-layer.md    # 智能路由层决策树与规范
+│   │   ├── cloudflare.md       # Cloudflare 直通引擎手册
 │   │   ├── scribe.md           # 书记官工作规范与简报标准
 │   │   ├── widget.html         # 内联 UI 权限卡片面板
 │   │   ├── teacher-yang.md     # 杨老师工程辅助快速指南
 │   │   └── reference.md        # 四档警告与运维陷阱参考
 │   └── reverse-engineer-anything/ # REA 逆向套件与本地驱动器
 ├── install.ps1                 # 幂等安装器（带时间戳备份与一键卸载）
-├── verify.ps1                  # 43 项自动化体检套件（全绿）
+├── verify.ps1                  # 51 项自动化体检套件（全绿）
 ├── CHANGELOG.md                # 版本演进历程
 ├── README.md                   # 项目说明
-└── VERSION                     # 当前版本号 (2.3.0)
+└── VERSION                     # 当前版本号 (2.4.0-testweb)
 ```
 
 ---

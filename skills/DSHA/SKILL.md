@@ -286,4 +286,35 @@ DSHA 家族第六位成员：专职情报官与日志档案员。只负责收录
 
 详见：[skills/DSHA/scribe.md](file:///c:/Users/admin/Desktop/GOOGLE/DSHA/skills/DSHA/scribe.md)
 
+---
+
+## Cloudflare 直通引擎 (Cloudflare Conduit · DHSA-TestWeb)
+
+DSHA 家族第七位成员：直通 Cloudflare 现代边缘计算与 Web 体系。统一封装 Wrangler、Pages 与 Tunnel，自带编码加固与智能代理感知。
+
+### 核心能力与指令
+- **工具链状态**：`bin\cf.cmd status`
+- **账号身份鉴权**：`bin\cf.cmd whoami`
+- **本地开发调试**：`bin\cf.cmd dev`
+- **边缘服务部署**：`bin\cf.cmd deploy`
+- **静态与全栈托管**：`bin\cf.cmd pages`
+- **安全隧道穿透**：`bin\cf.cmd tunnel`
+- **单元自检测试**：`bin\cf.cmd selftest`
+
+详见：[skills/DSHA/cloudflare.md](file:///c:/Users/admin/Desktop/GOOGLE/DSHA/skills/DSHA/cloudflare.md)
+
+---
+
+## DSHA 智能路由层 (Intelligent Routing Layer)
+
+DSHA 家族总指挥枢纽：根据开发者意图、目标文件与上下文自动路由至最佳工具（CF / REA / Scribe / Pwsh / Sh / Tier / Meter）。
+
+### 核心能力与指令
+- **意图路由研判**：`bin\dsha.cmd route "<任务意图或目标文件>"`
+- **工具就位体检**：`bin\dsha.cmd status`
+- **全矩阵自检**：`bin\dsha.cmd selftest`
+- **透明穿透代理**：`bin\dsha.cmd <tool> [args...]`
+
+详见：[skills/DSHA/routing-layer.md](file:///c:/Users/admin/Desktop/GOOGLE/DSHA/skills/DSHA/routing-layer.md)
+
 

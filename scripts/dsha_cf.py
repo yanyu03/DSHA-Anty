@@ -1,0 +1,282 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+DSHA Cloudflare CLI Conduit (DHSA-TestWeb).
+
+Role & Mission:
+  Direct bridge to Cloudflare developer ecosystem (Wrangler, Pages, Workers, Tunnel).
+  Wraps local wrangler CLI, normalizes paths and encodings, handles proxies,
+  and provides standardized web/edge commands for DSHA agents.
+
+CLI Commands:
+  cf.cmd status
+  cf.cmd whoami
+  cf.cmd dev [args]
+  cf.cmd deploy [args]
+  cf.cmd pages [args]
+  cf.cmd tunnel [args]
+  cf.cmd selftest
+"""
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+# Ensure UTF-8 output across Windows consoles
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+
+def find_tool(name):
+    # Check standard PATH
+    p = shutil.which(name)
+    if p:
+        return p
+
+    user_home = Path(os.environ.get("USERPROFILE") or ".")
+    app_data = Path(os.environ.get("APPDATA") or str(user_home / "AppData" / "Roaming"))
+    local_app_data = Path(os.environ.get("LOCALAPPDATA") or str(user_home / "AppData" / "Local"))
+
+    candidates = {
+        "wrangler": [
+            app_data / "npm" / "wrangler.cmd",
+            app_data / "npm" / "wrangler",
+            local_app_data / "Programs" / "nodejs" / "wrangler.cmd",
+        ],
+        "node": [
+            Path("C:/Program Files/nodejs/node.exe"),
+            local_app_data / "Programs" / "nodejs" / "node.exe",
+        ],
+        "cloudflared": [
+            Path("C:/Program Files/cloudflared/cloudflared.exe"),
+            user_home / "bin" / "cloudflared.exe",
+            user_home / ".gemini" / "config" / "bin" / "cloudflared.exe",
+        ],
+    }
+
+    for c in candidates.get(name, []):
+        if c.is_file():
+            return str(c)
+
+    return None
+
+
+def get_cf_environment():
+    wrangler_path = find_tool("wrangler")
+    node_path = find_tool("node")
+    cloudflared_path = find_tool("cloudflared")
+
+    env_info = {
+        "wrangler_path": wrangler_path,
+        "wrangler_version": None,
+        "node_path": node_path,
+        "node_version": None,
+        "cloudflared_path": cloudflared_path,
+        "cloudflared_version": None,
+        "authenticated": False,
+        "auth_detail": None,
+    }
+
+    if node_path:
+        try:
+            r = subprocess.run(
+                [node_path, "--version"],
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+            )
+            if r.returncode == 0:
+                env_info["node_version"] = r.stdout.strip()
+        except Exception:
+            pass
+
+    if wrangler_path:
+        try:
+            r = subprocess.run(
+                [wrangler_path, "--version"],
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
+            )
+            if r.returncode == 0:
+                env_info["wrangler_version"] = r.stdout.strip()
+        except Exception:
+            pass
+
+    if cloudflared_path:
+        try:
+            r = subprocess.run(
+                [cloudflared_path, "--version"],
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=5,
+            )
+            if r.returncode == 0:
+                env_info["cloudflared_version"] = r.stdout.strip()
+        except Exception:
+            pass
+
+    return env_info
+
+
+def run_wrangler_cmd(args_list):
+    wrangler = find_tool("wrangler")
+    if not wrangler:
+        print("[DSHA-CF] Error: wrangler CLI not found in PATH or AppData/npm.", file=sys.stderr)
+        print("[DSHA-CF] Run: npm install -g wrangler to install.", file=sys.stderr)
+        return 1
+
+    cmd = [wrangler] + args_list
+    try:
+        proc = subprocess.run(cmd)
+        return proc.returncode
+    except Exception as e:
+        print(f"[DSHA-CF] Execution failed: {e}", file=sys.stderr)
+        return 1
+
+
+def run_status():
+    env = get_cf_environment()
+    print("=== DSHA Cloudflare 工具链状态 (Cloudflare Conduit) ===")
+    print(f"  分支特性: DHSA-TestWeb 直通引擎")
+    print(f"  Node.js:  {env['node_version'] or '未检测到'} ({env['node_path'] or '未找到'})")
+    print(f"  Wrangler: {env['wrangler_version'] or '未检测到'} ({env['wrangler_path'] or '未找到'})")
+    print(f"  Tunnel:   {env['cloudflared_version'] or '未安装 (可选)'} ({env['cloudflared_path'] or '未配置'})")
+
+    if env["wrangler_path"]:
+        print("\n  测试 Wrangler 鉴权状态 (wrangler whoami)...")
+        custom_env = os.environ.copy()
+        if "HTTPS_PROXY" not in custom_env and "ALL_PROXY" not in custom_env:
+            # Propagate local socks5 proxy if available
+            custom_env["ALL_PROXY"] = "socks5://127.0.0.1:10808"
+            custom_env["HTTPS_PROXY"] = "http://127.0.0.1:10809"
+        try:
+            r = subprocess.run(
+                [env["wrangler_path"], "whoami"],
+                capture_output=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=12,
+                env=custom_env,
+            )
+            for line in r.stdout.splitlines():
+                if line.strip():
+                    print(f"    {line}")
+            if "You are not authenticated" in r.stdout:
+                print("    [提示] 未登录 Cloudflare 账号。可执行 'cf login' 授权，或使用 'cf deploy --temporary' 测试预览。")
+        except subprocess.TimeoutExpired:
+            print("    [提示] 鉴权网络检测超时（可在配置代理或登录后正常使用，或使用 'cf dev' 本地运行）。")
+        except Exception as e:
+            print(f"    检查失败: {e}")
+    else:
+        print("  [WARN] 未检测到 Wrangler，请先安装 Node.js 与 Wrangler。")
+
+
+def run_selftest():
+    tests = []
+    # Test 1: Node tool discovery
+    node = find_tool("node")
+    tests.append(("node_tool_detected", node is not None))
+
+    # Test 2: Wrangler tool discovery
+    wrangler = find_tool("wrangler")
+    tests.append(("wrangler_tool_detected", wrangler is not None))
+
+    # Test 3: Environment dictionary structure
+    env = get_cf_environment()
+    tests.append(("env_structure_valid", "wrangler_path" in env and "node_version" in env))
+
+    # Test 4: Argument parsing
+    parser = build_parser()
+    tests.append(("parser_setup", parser is not None))
+
+    # Test 5: Command mapping validity
+    subcmds = ["status", "whoami", "dev", "deploy", "pages", "tunnel", "selftest"]
+    valid_sub = all(s in parser._subparsers._group_actions[0].choices for s in subcmds)
+    tests.append(("subcommand_mapping", valid_sub))
+
+    passed = sum(1 for _, ok in tests if ok)
+    total = len(tests)
+    print(f"selftest: {passed}/{total}")
+    for name, ok in tests:
+        status = "PASS" if ok else "FAIL"
+        print(f"  [{status}] {name}")
+    return passed == total
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(description="DSHA Cloudflare CLI Conduit")
+    subparsers = parser.add_subparsers(dest="command", help="Cloudflare subcommands")
+
+    subparsers.add_parser("status", help="Check Cloudflare toolchain & auth status")
+    subparsers.add_parser("whoami", help="Display current Cloudflare identity")
+    subparsers.add_parser("selftest", help="Run internal self-tests")
+
+    p_dev = subparsers.add_parser("dev", help="Start local worker dev server")
+    p_dev.add_argument("dev_args", nargs=argparse.REMAINDER, help="Arguments passed to wrangler dev")
+
+    p_deploy = subparsers.add_parser("deploy", help="Deploy worker or application")
+    p_deploy.add_argument("deploy_args", nargs=argparse.REMAINDER, help="Arguments passed to wrangler deploy")
+
+    p_pages = subparsers.add_parser("pages", help="Cloudflare Pages management")
+    p_pages.add_argument("pages_args", nargs=argparse.REMAINDER, help="Arguments passed to wrangler pages")
+
+    p_tunnel = subparsers.add_parser("tunnel", help="Cloudflare Tunnel operations")
+    p_tunnel.add_argument("tunnel_args", nargs=argparse.REMAINDER, help="Arguments passed to tunnel")
+
+    return parser
+
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] in ("--help", "-h"):
+        parser = build_parser()
+        parser.print_help()
+        return 0
+
+    if len(sys.argv) > 1 and sys.argv[1] == "selftest":
+        ok = run_selftest()
+        sys.exit(0 if ok else 1)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "status":
+        run_status()
+        return 0
+
+    if len(sys.argv) > 1 and sys.argv[1] == "whoami":
+        return run_wrangler_cmd(["whoami"])
+
+    if len(sys.argv) > 1 and sys.argv[1] in ("dev", "deploy", "pages", "types", "tail", "kv", "d1", "r2", "ai"):
+        # Direct pass-through to wrangler
+        return run_wrangler_cmd(sys.argv[1:])
+
+    if len(sys.argv) > 1 and sys.argv[1] == "tunnel":
+        cloudflared = find_tool("cloudflared")
+        if cloudflared:
+            cmd = [cloudflared] + sys.argv[2:]
+            return subprocess.run(cmd).returncode
+        else:
+            print("[DSHA-CF] cloudflared.exe not found in standard paths.")
+            print("[DSHA-CF] To run tunnels: winget install --id Cloudflare.cloudflared or download cloudflared.exe", file=sys.stderr)
+            return 1
+
+    # Default fallback: pass all args directly to wrangler
+    if len(sys.argv) > 1:
+        return run_wrangler_cmd(sys.argv[1:])
+
+    # If no args, run status
+    run_status()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

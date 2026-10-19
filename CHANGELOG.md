@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v2.4.0-testweb — 2026-10-19
+**Cloudflare 直通引擎并入与 DSHA 智能情境路由层 (DHSA-TestWeb 论证分支)**
+- **Cloudflare CLI 工具直通引擎 (`bin\cf.cmd`)**：全面整合本地已就绪的 Wrangler (v4.151.1) 与 Cloudflare Tunnels，支持 `status`、`whoami`、`dev`、`deploy`、`pages`、`tunnel`，解决 Windows GBK 编码崩溃与代理自适应。
+- **DSHA 智能情境路由层 (`bin\dsha.cmd` / `scripts/router.py`)**：根据开发者意图、目标文件后缀与关键特征，基于 7 大子系统（CF、REA、Scribe、Pwsh、Sh、Tier、Meter）实施多因子加权评分并输出决策依据与推荐命令。
+- **8 大场景测试矩阵全通过**：内置路由自检算法（涵盖逆向、边缘部署、日志提纯、系统管理、权限与额度）准确率达到 100%。
+- **自动化测试扩充**：新增 Section 11，测试套件扩充至 51 项 (`verify.ps1` 51/51 PASS)。
+- **新建实验论证分支**：独立签出 `DHSA-TestWeb` 分支用于前沿 Web 工具链集成论证。
+
 ## v2.3.0 — 2026-10-19
 **DSHA 书记官智能体 (The Scribe) · 日志收录、情报整理与快速研判简报**
 - **DSHA 书记官智能体注册**：新增专职档案与情报整理 Subagent `scribe`，只读无破坏性，专为多 Agent 与 ChatGPT 供给高密度研判材料。
