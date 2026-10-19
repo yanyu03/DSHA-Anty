@@ -189,6 +189,8 @@ class PrerequisiteEnv:
                 timeout=5,
             )
             out = r.stdout + " " + r.stderr
+            if r.returncode != 0:
+                raise RuntimeError(f"version probe exited with status {r.returncode}")
             m = re.search(self.version_pattern, out)
             detected_ver_str = m.group(1) if m else "unknown"
 
@@ -332,18 +334,24 @@ class BaseTool(ABC):
 
     def assert_authorization(self, active_tier=None):
         """Anti-privilege escalation gate: strictly blocks unauthorized operations."""
-        tier = (active_tier or get_active_tier()).lower()
+        # A caller's context may restrict, never replace the active host tier.
+        tiers = [str(get_active_tier()).strip().lower()]
+        if active_tier is not None:
+            tiers.append(str(active_tier).strip().lower())
+        valid = {"read-only", "workspace-write", "danger-full-access", "auto"}
+        invalid = next((value for value in tiers if value not in valid), None)
+        tier = "read-only" if "read-only" in tiers else tiers[0]
 
         # Strict permission tier rules:
         # read-only: blocks medium and admin tools from modifying or executing privileged operations
-        if tier == "read-only" and self.risk_level in (RiskLevel.MEDIUM, RiskLevel.ADMIN):
+        if invalid is not None or (tier == "read-only" and self.risk_level in (RiskLevel.MEDIUM, RiskLevel.ADMIN)):
             err = ErrBlock(
                 error_code="ERR_PERMISSION_DENIED",
                 tool_id=self.id,
                 tool_name=self.name,
                 category=self.category.value,
                 refusal_statement=f"DSHA 越权拦截: 当前权限处于 '{tier}' 档位，禁止调用具有修改/写操作风险等级 ({self.risk_level.value}) 的工具。",
-                details=[{"active_tier": tier, "tool_risk_level": self.risk_level.value}],
+                details=[{"active_tier": tiers[0], "requested_tier": active_tier, "invalid_tier": invalid, "tool_risk_level": self.risk_level.value}],
                 remediations=["如需执行此操作，请先确认并将权限档位切换为 workspace-write、auto 或 danger-full-access。"],
             )
             return False, err
@@ -452,8 +460,6 @@ class BaseTool(ABC):
         if context.get("proxy"):
             exec_env["ALL_PROXY"] = context["proxy"]
             exec_env["HTTPS_PROXY"] = context["proxy"]
-        elif "ALL_PROXY" not in exec_env:
-            exec_env["ALL_PROXY"] = "socks5://127.0.0.1:10808"
 
         cwd = context.get("cwd") or str(Path.cwd())
         timeout = context.get("timeout", 180)

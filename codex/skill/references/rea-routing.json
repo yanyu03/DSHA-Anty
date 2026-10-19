@@ -1,0 +1,484 @@
+{
+  "$comment": "DSHA REA 分支的机器可读路由表。给 agent 判断『要不要动逆向工具、先动哪一个』。工具名与已注册的 mcp__rea__* 一致（去掉前缀）；host 段是本机专有事实，换机器必须改。",
+  "schema": "dsha.rea-routing",
+  "version": 1,
+  "branch": "rea",
+  "skill": "DSHA",
+  "spec": "rea.md",
+  "upstream": "https://github.com/morluto/rea",
+  "tool_prefix": "mcp__rea__",
+  "enter_when": {
+    "any_of": [
+      "目标只有二进制/安装包/归档，没有可读源码",
+      "结论需要反编译、反汇编或函数引用关系",
+      "需要读打包产物内部的资源、类型库或清单",
+      "需要被动观察运行时（浏览器/Electron/Node Inspector/抓包）",
+      "需要对比两个版本的行为或接口差异"
+    ]
+  },
+  "skip_when": [
+    {
+      "condition": "有完整可读源码，做普通仓库架构分析",
+      "use_instead": "普通仓库工具",
+      "reason": "REA 不会比源码分析提供更多信息，且要付导入成本"
+    },
+    {
+      "condition": "只判断某个字符串/哈希/版本是否存在于文件",
+      "use_instead": "本地扫描（Select-String / findstr / Get-FileHash）",
+      "reason": "秒级可答，不需要 provider"
+    },
+    {
+      "condition": "用户只说『我的应用』而没有名字或路径",
+      "use_instead": "先向用户确认目标",
+      "reason": "禁止替用户挑目标；历史报告或邻近测试文件不能当目标"
+    }
+  ],
+  "routes": [
+    {
+      "id": "native-pe",
+      "target_kind": "native-executable",
+      "match": {
+        "extensions": [
+          ".exe",
+          ".dll",
+          ".sys",
+          ".ocx",
+          ".node"
+        ],
+        "formats": [
+          "pe"
+        ]
+      },
+      "first_tool": "open_binary",
+      "then": [
+        "binary_session",
+        "binary_overview",
+        "search_strings",
+        "list_procedures",
+        "analyze_function",
+        "xrefs",
+        "close_binary"
+      ],
+      "opens_target": true,
+      "provider_required": true,
+      "cost_class": "high",
+      "notes": "9MB 约 433s；36MB 约 31min。多问题必须合并进同一会话。"
+    },
+    {
+      "id": "pe-resources",
+      "target_kind": "pe-resource-tree",
+      "match": {
+        "extensions": [
+          ".exe",
+          ".dll"
+        ],
+        "asks_about": [
+          "资源",
+          "图标",
+          "类型库",
+          "TYPELIB",
+          "清单"
+        ]
+      },
+      "first_tool": "inspect_pe_resources",
+      "then": [
+        "（本地）按证据偏移提取载荷并校验 SHA256"
+      ],
+      "opens_target": false,
+      "provider_required": false,
+      "cost_class": "low",
+      "notes": "秒级返回，先做这个再决定要不要开原生会话。"
+    },
+    {
+      "id": "managed-dotnet",
+      "target_kind": "managed-pe",
+      "match": {
+        "extensions": [
+          ".dll",
+          ".exe"
+        ],
+        "hints": [
+          "CLI header",
+          ".NET"
+        ]
+      },
+      "first_tool": "inspect_managed_artifact",
+      "then": [
+        "inspect_managed_members",
+        "inspect_managed_native_boundaries",
+        "verify_managed_native_boundaries"
+      ],
+      "opens_target": false,
+      "provider_required": false,
+      "cost_class": "low"
+    },
+    {
+      "id": "archive-or-package",
+      "target_kind": "archive",
+      "match": {
+        "extensions": [
+          ".zip",
+          ".apk",
+          ".ipa",
+          ".msix",
+          ".appx",
+          ".dmg",
+          ".asar"
+        ]
+      },
+      "first_tool": "open_binary",
+      "then": [
+        "inspect_artifact",
+        "extract_artifact"
+      ],
+      "opens_target": true,
+      "provider_required": false,
+      "cost_class": "medium",
+      "notes": "extract_artifact 需要一个全新的绝对输出目录，不覆盖已有文件。"
+    },
+    {
+      "id": "android-apk",
+      "target_kind": "android-package",
+      "match": {
+        "extensions": [
+          ".apk"
+        ],
+        "asks_about": [
+          "类",
+          "方法",
+          "引用",
+          "清单"
+        ]
+      },
+      "first_tool": "inspect_android_package",
+      "then": [
+        "search_android_classes",
+        "inspect_android_class",
+        "inspect_android_method",
+        "trace_android_references"
+      ],
+      "opens_target": false,
+      "provider_required": false,
+      "cost_class": "low",
+      "notes": "需要调用方自带的 JADX MCP jar 与 JDK（BYO）。"
+    },
+    {
+      "id": "android-device",
+      "target_kind": "adb-device",
+      "match": {
+        "asks_about": [
+          "真机",
+          "模拟器",
+          "logcat",
+          "拉包",
+          "截图"
+        ]
+      },
+      "first_tool": "list_adb_devices",
+      "then": [
+        "resolve_adb_packages",
+        "pull_adb_package",
+        "read_adb_logcat",
+        "capture_adb_screen"
+      ],
+      "opens_target": false,
+      "provider_required": false,
+      "cost_class": "low",
+      "notes": "read_adb_* 只读；install/push/start/stop 会改动设备，需用户明确要求。"
+    },
+    {
+      "id": "javascript-electron",
+      "target_kind": "javascript-application",
+      "match": {
+        "extensions": [
+          ".asar",
+          ".js",
+          ".mjs",
+          ".cjs"
+        ],
+        "hints": [
+          "Electron",
+          "解包后的 JS 树"
+        ]
+      },
+      "first_tool": "analyze_javascript_application",
+      "then": [
+        "inspect_analysis_view",
+        "trace_application_feature",
+        "trace_javascript_semantics"
+      ],
+      "opens_target": false,
+      "provider_required": false,
+      "cost_class": "low",
+      "notes": "大图先用 detail=summary，再按页/按模块看；不执行 JavaScript。"
+    },
+    {
+      "id": "runtime-browser",
+      "target_kind": "browser-page",
+      "match": {
+        "hints": [
+          "已打开的页面",
+          "CDP",
+          "前端加密",
+          "接口签名"
+        ]
+      },
+      "first_tool": "list_browser_targets",
+      "then": [
+        "inspect_web_page",
+        "inspect_web_event_listeners",
+        "capture_browser_scenario",
+        "inspect_web_network_capture"
+      ],
+      "opens_target": true,
+      "provider_required": false,
+      "cost_class": "medium",
+      "notes": "inspect_web_page 是被动的；capture_browser_scenario 会真的驱动页面，只读边界要写明。"
+    },
+    {
+      "id": "runtime-electron",
+      "target_kind": "electron-page",
+      "match": {
+        "hints": [
+          "Electron file:// 页面",
+          "桌面应用内嵌页面"
+        ]
+      },
+      "first_tool": "list_electron_targets",
+      "then": [
+        "inspect_electron_page"
+      ],
+      "opens_target": true,
+      "provider_required": false,
+      "cost_class": "low"
+    },
+    {
+      "id": "runtime-node-inspector",
+      "target_kind": "javascript-runtime",
+      "match": {
+        "hints": [
+          "Node Inspector",
+          "9229",
+          "运行时脚本清单"
+        ]
+      },
+      "first_tool": "list_javascript_runtime_targets",
+      "then": [
+        "observe_javascript_runtime",
+        "reconcile_javascript_runtime"
+      ],
+      "opens_target": true,
+      "provider_required": false,
+      "cost_class": "low",
+      "notes": "被动附着：不求值、不暂停、不读源码。"
+    },
+    {
+      "id": "network-capture",
+      "target_kind": "http-capture",
+      "match": {
+        "extensions": [
+          ".har",
+          ".mitm",
+          ".dump"
+        ]
+      },
+      "first_tool": "inspect_web_network_capture",
+      "then": [],
+      "opens_target": false,
+      "provider_required": false,
+      "cost_class": "low",
+      "notes": "离线解析；不访问记录里的 URL，不声称运行时归因。"
+    },
+    {
+      "id": "firmware",
+      "target_kind": "firmware",
+      "match": {
+        "extensions": [
+          ".bin",
+          ".img",
+          ".fw"
+        ],
+        "hints": [
+          "固件",
+          "路由器",
+          "嵌入式"
+        ]
+      },
+      "first_tool": "inspect_firmware_regions",
+      "then": [
+        "extract_firmware"
+      ],
+      "opens_target": false,
+      "provider_required": false,
+      "cost_class": "medium",
+      "notes": "仅 Linux + 调用方自带 binwalk/unblob；解包后选原生文件再 open_binary。"
+    },
+    {
+      "id": "linux-elf-layout",
+      "target_kind": "elf",
+      "match": {
+        "extensions": [
+          ".so",
+          ".elf"
+        ],
+        "platform": "linux-x64"
+      },
+      "first_tool": "inspect_binary_layout",
+      "then": [
+        "inspect_analysis_view"
+      ],
+      "opens_target": false,
+      "provider_required": false,
+      "cost_class": "low",
+      "notes": "pwntools-elf provider 只支持 Linux x64；对 PE 会直接 capability_unavailable。"
+    },
+    {
+      "id": "crash-core",
+      "target_kind": "linux-core",
+      "match": {
+        "extensions": [
+          ".core"
+        ],
+        "hints": [
+          "崩溃转储"
+        ]
+      },
+      "first_tool": "inspect_recorded_crash",
+      "then": [],
+      "opens_target": false,
+      "provider_required": false,
+      "cost_class": "low"
+    }
+  ],
+  "tool_families": {
+    "session": [
+      "open_binary",
+      "binary_session",
+      "close_binary",
+      "list_documents",
+      "list_segments"
+    ],
+    "recon": [
+      "binary_overview",
+      "list_procedures",
+      "list_strings",
+      "list_names",
+      "search_procedures",
+      "search_strings"
+    ],
+    "functions": [
+      "analyze_function",
+      "procedure_pseudo_code",
+      "procedure_assembly",
+      "read_function_instructions",
+      "inspect_native_instruction",
+      "batch_decompile"
+    ],
+    "relations": [
+      "xrefs",
+      "procedure_callers",
+      "procedure_callees",
+      "trace_call_path",
+      "build_call_path",
+      "get_call_graph",
+      "find_xrefs_to_name"
+    ],
+    "aggregate": [
+      "trace_feature",
+      "trace_native_values",
+      "inspect_native_api",
+      "resolve_native_call_targets"
+    ],
+    "evidence": [
+      "export_evidence_bundle",
+      "get_evidence_bundle",
+      "inspect_analysis_view",
+      "record_unknown",
+      "verify_reconstruction",
+      "compare_functions",
+      "compare_artifacts"
+    ],
+    "compare": [
+      "compare_bundles",
+      "compare_application_versions",
+      "compare_web_captures",
+      "compare_web_screenshots",
+      "find_changed_behavior",
+      "correlate_static_and_runtime"
+    ]
+  },
+  "guardrails": {
+    "search_default_mode": "literal",
+    "search_regex_flag": "--mode regex",
+    "literal_mode_pitfall": "把 \"A|B|C\" 当整串搜索会返回 0 命中，切勿据此写『不存在』",
+    "target_execution": {
+      "read_only_by_default": [
+        "inspect_*",
+        "list_*",
+        "search_*",
+        "analyze_javascript_application",
+        "inspect_binary_layout",
+        "inspect_pe_resources",
+        "inspect_web_network_capture"
+      ],
+      "executes_target": [
+        "capture_browser_scenario",
+        "capture_electron_scenario",
+        "capture_process_scenario",
+        "capture_native_ui_scenario",
+        "observe_web_session",
+        "observe_javascript_runtime",
+        "observe_native_calls"
+      ],
+      "mutates_device": [
+        "install_adb_package",
+        "uninstall_adb_package",
+        "push_adb_file",
+        "start_adb_app",
+        "stop_adb_app",
+        "start_adb_activity"
+      ]
+    },
+    "mutation_denied_on_this_host": {
+      "tool": "annotate_native_function",
+      "reason": "Windows Ghidra P0 does not admit database mutation",
+      "impact": "只能只读分析；不能改函数名/注释"
+    },
+    "capability_unavailable": [
+      {
+        "tool": "inspect_binary_layout",
+        "reason": "pwntools-elf provider 仅支持 Linux x64，对 PE 直接拒绝",
+        "workaround": "PE 结构用 inspect_pe_resources + 本地 pefile"
+      }
+    ],
+    "timeouts": {
+      "provider_cold_import_9mb_pe_seconds": 433,
+      "full_analysis_36mb_pe_seconds": 1879.4,
+      "startup_timeout_env": "REA_GHIDRA_STARTUP_TIMEOUT_MS",
+      "startup_timeout_ms": 5400000,
+      "rule": "CLI 每次重新导入；MCP 会话复用已分析状态。大批次必须走会话。"
+    },
+    "evidence_discipline": {
+      "L1": "每条结论挂 Evidence ID 或 文件+偏移+哈希",
+      "L2": "单模块分析一遍=单次观测（n=1），不得写『已验证』",
+      "L3": "推翻旧结论要写明『撤回：<旧结论>（时间/轮次）』",
+      "L5": "报告头必含：日期/目标与版本+全量 SHA256/工具版本/样本数/是否实测/结论强度",
+      "confidence_levels": {
+        "static-declaration": "字节串、资源、类型库成员 → 只能说『静态声明存在』",
+        "located-implementation": "伪代码+引用链 → 『已定位到可疑实现，函数体 N 字节』",
+        "runtime-observation": "实际运行观测 → 『单次观测』（n=1）"
+      }
+    }
+  },
+  "host": {
+    "configuration": "C:\\Users\\admin\\.codex\\tools\\dsha\\host.json",
+    "mcp_server": "rea",
+    "mcp_config": "C:\\Users\\admin\\.codex\\config.toml",
+    "registrar": "codex mcp add",
+    "provider": "ghidra",
+    "rea_version": "6.4.0",
+    "ghidra_install_dir": "C:/Users/admin/Desktop/MYSQL/MTK8400/rea_workspace/ghidra_12.1.4_PUBLIC",
+    "java_home": "C:\\Users\\admin\\.codex\\tools\\dsha\\jdk\\jdk-21.0.12.1+1",
+    "verification": "C:\\Users\\admin\\.codex\\tools\\dsha\\verification\\INSTALLATION_REPORT.md"
+  }
+}

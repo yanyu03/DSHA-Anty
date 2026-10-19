@@ -321,22 +321,10 @@ def main():
             except ImportError:
                 from scripts.index import Call_Tools
             return Call_Tools(cmd, sys.argv[2:], {"capture": False})["exit_code"]
-        except Exception:
-            pass
-
-        tool_cmd = TOOL_REGISTRY[cmd]["cmd"]
-        repo_bin = Path(__file__).resolve().parent.parent / "bin"
-        target_path = repo_bin / tool_cmd
-        if not target_path.is_file():
-            user_cfg = Path(os.environ.get("USERPROFILE") or ".") / ".gemini" / "config"
-            target_path = user_cfg / tool_cmd
-
-        args = [str(target_path)] + sys.argv[2:]
-        if tool_cmd.endswith(".ps1"):
-            pwsh_bin = repo_bin / "pwsh.cmd"
-            args = [str(pwsh_bin), "-NoProfile", "-File", str(target_path)] + sys.argv[2:]
-
-        return subprocess.run(args).returncode
+        except Exception as error:
+            # Never bypass prerequisite/authorization checks after a dispatcher error.
+            print(f"[DSHA-ROUTER] Dispatcher failed; execution refused: {error}", file=sys.stderr)
+            return 126
 
     # Default: route the entire argument string
     full_query = " ".join(sys.argv[1:])
