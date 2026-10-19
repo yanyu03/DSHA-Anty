@@ -132,7 +132,26 @@ class RuntimeContracts(unittest.TestCase):
                 code = m.main()
                 self.assertEqual(code, 0)
 
+    def test_normalize_environment_case_insensitivity_and_collision(self):
+        for m in self.copies('dsha_env.py'):
+            with self.subTest(module=m.__file__):
+                norm = m.normalize_environment({'path': 'abc', 'PathExt': '.COM'})
+                if os.name == 'nt':
+                    self.assertEqual(norm.get('PATH'), 'abc')
+                    self.assertEqual(norm.get('PATHEXT'), '.COM')
+                    with self.assertRaises(ValueError):
+                        m.normalize_environment({'PATH': 'one', 'path': 'two'})
+
+    def test_machine_environment_registry_recovery_under_empty_env(self):
+        for m in self.copies('dsha_env.py'):
+            with self.subTest(module=m.__file__):
+                stripped = m.machine_environment({})
+                if os.name == 'nt':
+                    self.assertIn('PROGRAMFILES', stripped)
+                    self.assertTrue(Path(stripped['PROGRAMFILES']).is_dir())
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
+
 

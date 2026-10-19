@@ -142,7 +142,7 @@ DSHA/
 │   │   └── reference.md        # 四档警告与运维陷阱参考
 │   └── reverse-engineer-anything/ # REA 逆向套件与本地驱动器
 ├── install.ps1                 # 幂等安装器（带时间戳备份与一键卸载）
-├── verify.ps1                  # 59 项自动化体检套件（全绿）
+├── verify.ps1                  # 自动化体检套件（通过与否以脚本自身打印的 PASS/FAIL 为准）
 ├── CHANGELOG.md                # 版本演进历程
 ├── README.md                   # 项目说明
 └── VERSION                     # 当前版本号 (1.0.0)
@@ -165,4 +165,42 @@ DSHA/
 
 - 本项目基于 [MIT License](LICENSE) 协议开源。详细第三方组件与生态声明参见 [NOTICE.md](NOTICE.md)。
 - 灵感致敬 **DeepSeek Harness** 开源项目与 **资深工程师 Programer 系统级代码思维体系**。
+
+---
+
+## 六、 授权、表述修正与 D41H 增量
+
+> 本节吸收自 `D41H`（DeepSeek Harness 4.1 Flash 模型）协同进贡成果。上文原有表述未作大幅改动；记录表述修正与效力边界。
+
+### 6.1 已修正的表述
+
+| 位置 | 原表述 | 问题 | 现表述 |
+| :--- | :--- | :--- | :--- |
+| 目录树注释 | `verify.ps1` 标注为「59 项自动化体检套件（全绿）」 | 体检项数随版本增长，写死数字会与实现漂移：`CHANGELOG` 中另有 55 / 51 / 43 / 39 等历史值，当前实测已扩展至 67 项 | 改为以脚本自身打印的 `PASS` / `FAIL` 为准 |
+
+### 6.2 许可证与版权归属
+
+`README` 此前已声明 MIT，但仓库内没有许可证文件，GitHub 也未能识别出许可证。现已补齐 [`LICENSE`](./LICENSE)（MIT 全文，含 `yanyu03` 及社区贡献者版权行）以及 [`NOTICE.md`](./NOTICE.md)（第三方生态归属及运行时防传染声明），使声明与文件一致。
+
+### 6.3 D41H 增量（已吸收进主线）
+
+| 项 | 内容 |
+| :--- | :--- |
+| D1 | 移除 `plugins/dsh-permissions/scripts/` 下与 `scripts/` 字节相同的 `index.py` / `router.py` 重复副本，改由 `install.ps1` 分发 |
+| D2 | 钩子模板、`mcp_config`、启动器、`scribe.py`、`test_skill_integration.py` 中的机器相关路径改为环境变量或 PATH 动态解析 |
+| D3 | `README` 的体检提示去掉写死项数，杜绝文档与实现漂移 |
+| D4 | 修正 `CHANGELOG` 中的绝对化断言，明确标明样本量（如「8/8 用例通过（n=8，不构成准确率）」） |
+
+| D5 | 新增 `VERSION_SCHEME.md`，说明 1.x 正式线与 2.x 实验线不可比较 |
+| D6 | `verify.ps1` 的 `Check` 增加分类计数，按 behavior / contract / existence 分栏报告 |
+| D7 | `base_tool.py` 新增 `assert_target_contained`：解析出的目标须落在仓库 `bin/` 或 `~/.gemini/config/` 内，越界返回退出码 125 |
+| D8 | `router.py` 新增 `score_share` 字段（`confidence` 保留为别名），报告注明该值为得分占比、不是正确概率 |
+| D9 | `dsha_env.py` 增补 Windows 环境变量键归一化（`normalize_environment`）与原生注册表兜底（`machine_environment`），抗环境变量剥除 |
+
+### 6.4 效力边界
+
+- 核心组件与自动化测试均在 **Windows x64** 上实测完成；非 Windows 分支已写但未全部实测，不构成跨平台结论。
+- 体检是否通过反映的是**本机**状态：全新干净机器上会因缺少本地安装工具（如 node、wrangler 等）而提示依赖缺失。
+- 体检通过只说明**列出的检查项通过**，不等于第三方工具、外部 MCP、网络服务或账号可用。
+
 
