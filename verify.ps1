@@ -220,6 +220,17 @@ Check "dsha-index check 7大工具宿主环境断言全部满足" ($LASTEXITCODE
 $catOut = & $pyExe $indexPy list -c WebEdge 2>$null
 Check "dsha-index list -c WebEdge 按类目精确取用成功" ($catOut -match 'cf\s+\|\s+WebEdge')
 
+Write-Host "`n=== 14. DSHA 开源知名技能整合与排异反应测试 (Skill Graft-Reaction) ===" -ForegroundColor Cyan
+$graftPy = Join-Path $cfg 'plugins\dsh-permissions\scripts\test_skill_integration.py'
+if (-not (Test-Path $graftPy)) { $graftPy = "c:\Users\admin\Desktop\GOOGLE\DSHA\scripts\test_skill_integration.py" }
+Check "test_skill_integration.py script present" (Test-Path $graftPy)
+if (Test-Path $graftPy) {
+  $gSelf = & $pyExe $graftPy | Select-String -Pattern 'PASS\s+(\d+)\s*/\s*FAIL\s+(\d+)' | Select-Object -Last 1
+  $gPass = $false
+  if ($gSelf -and $gSelf.Line -match 'PASS\s+(\d+)\s*/\s*FAIL\s+0') { $gPass = ([int]$matches[1] -ge 14) }
+  Check "开源技能 5 大维度排异反应测试全通过" $gPass $gSelf.Line
+}
+
 Write-Host "`n--------------------------------------------------"
 Write-Host ("PASS {0} / FAIL {1} / WARN {2}" -f $ok, $fail, $warn) -ForegroundColor $(if ($fail -eq 0) { 'Green' } else { 'Red' })
 if ($fail -eq 0) { Write-Host "DSHA 体检通过。" -ForegroundColor Green } else { Write-Host "存在失败项，请按上方 [FAIL] 逐条处理。" -ForegroundColor Red }
