@@ -203,6 +203,23 @@ if (Test-Path $indexPy) {
   Check "index.py Call_Tools selftest 全通过" $iPass $iSelf.Line
 }
 
+Write-Host "`n=== 13. DSHA 类基工具架构与 ErrBlock 宿主环境断言 (BaseTool & Anti-Privilege) ===" -ForegroundColor Cyan
+$baseToolPy = Join-Path $cfg 'plugins\dsh-permissions\scripts\base_tool.py'
+if (-not (Test-Path $baseToolPy)) { $baseToolPy = "c:\Users\admin\Desktop\GOOGLE\DSHA\scripts\base_tool.py" }
+Check "base_tool.py script present" (Test-Path $baseToolPy)
+if (Test-Path $baseToolPy) {
+  $btSelf = & $pyExe $baseToolPy selftest | Select-String -Pattern 'selftest:' | Select-Object -Last 1
+  $btPass = $false
+  if ($btSelf -and $btSelf.Line -match 'selftest:\s*(\d+)\s*/\s*(\d+)') { $btPass = ($matches[1] -eq $matches[2]) }
+  Check "base_tool.py 类目检索与越权/环境拦截 selftest 全通过" $btPass $btSelf.Line
+}
+
+$checkOut = & $pyExe $indexPy check 2>$null
+Check "dsha-index check 7大工具宿主环境断言全部满足" ($LASTEXITCODE -eq 0 -and ($checkOut | Select-String -Pattern '\[PASS\]').Count -eq 7)
+
+$catOut = & $pyExe $indexPy list -c WebEdge 2>$null
+Check "dsha-index list -c WebEdge 按类目精确取用成功" ($catOut -match 'cf\s+\|\s+WebEdge')
+
 Write-Host "`n--------------------------------------------------"
 Write-Host ("PASS {0} / FAIL {1} / WARN {2}" -f $ok, $fail, $warn) -ForegroundColor $(if ($fail -eq 0) { 'Green' } else { 'Red' })
 if ($fail -eq 0) { Write-Host "DSHA 体检通过。" -ForegroundColor Green } else { Write-Host "存在失败项，请按上方 [FAIL] 逐条处理。" -ForegroundColor Red }

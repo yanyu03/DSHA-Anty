@@ -83,11 +83,13 @@ DSHA-SharBoy 提供了直接适用于本机 **ChatGPT Windows 客户端** 的完
 - **测试自检**：`bin\scribe.cmd selftest`
 - **子智能体调度**：支持通过 Antigravity 原生 `invoke_subagent(TypeName="scribe")` 异步唤起，ChatGPT 提示词见 `chatgpt/SCRIBE_PROMPT.md`。
 
-### 8. DSHA-Index 顶层全景目录与 Call_Tools 统合拉取协议 (v1.0.0 正式版)
-全系统最高能力大纲事实源与统合执行管道：
-- **浏览全景能力清单**：`bin\dsha-index.cmd list`
+### 8. DSHA-Index 顶层全景目录、BaseTool 类基扩展与环境断言 (v1.0.0 正式版)
+全系统最高能力大纲事实源、类基扩展基类与统一环境断言管道：
+- **按类目精确取用工具**：`bin\dsha-index.cmd list -c <WebEdge|SysAdmin|Archivist|PolicyRadar|ReverseEngineering>`
+- **查询已注册类目**：`bin\dsha-index.cmd categories`
+- **宿主环境断言体检**：`bin\dsha-index.cmd check [tool]`（严格拒绝缺失运行时的越权执行，输出结构化 `ErrBlock` 与修复指引）
 - **查看指定工具 Schema**：`bin\dsha-index.cmd get <cf|rea|scribe|pwsh|sh|tier|meter>`
-- **统合拉取执行协议**：`bin\dsha.cmd call <tool> [args...]`（支持自动化环境隔离、代理注入与标准 JSON/对象回收）
+- **统合拉取执行协议**：`bin\dsha.cmd call <tool> [args...]`（自动校验宿主环境、防越权阻断、代理注入与标准捕获）
 - **路由意图执行中枢**：`bin\dsha.cmd exec "<任务意图>"`
 - **套件自检验证**：`bin\dsha-index.cmd selftest`
 
@@ -122,6 +124,7 @@ DSHA/
 │   ├── dsha-englock/           # 独立工程锁插件（与切档解耦，hooks 独立）
 │   └── dsha-meter/             # 实时额度监视器本体（meter.py, 高分屏渲染）
 ├── scripts/
+│   ├── base_tool.py            # BaseTool 抽象基类、PrerequisiteEnv 环境断言与 ErrBlock 架构 (纯 Python)
 │   ├── index.py                # DSHA-Index 顶层目录与 Call_Tools 引擎 (纯 Python 标准库)
 │   ├── router.py               # 智能情境路由层决策引擎 (纯 Python 标准库)
 │   ├── dsha_cf.py              # Cloudflare 工具直通引擎 (纯 Python 标准库)
@@ -139,7 +142,7 @@ DSHA/
 │   │   └── reference.md        # 四档警告与运维陷阱参考
 │   └── reverse-engineer-anything/ # REA 逆向套件与本地驱动器
 ├── install.ps1                 # 幂等安装器（带时间戳备份与一键卸载）
-├── verify.ps1                  # 55 项自动化体检套件（全绿）
+├── verify.ps1                  # 59 项自动化体检套件（全绿）
 ├── CHANGELOG.md                # 版本演进历程
 ├── README.md                   # 项目说明
 └── VERSION                     # 当前版本号 (1.0.0)
@@ -153,7 +156,8 @@ DSHA/
 2. **数据与逻辑解耦**：L9 过滤词库完全配置化（`lexicon.json`），改词表即改行为；
 3. **提示词纯 ASCII 隔离**：`AGENTS.md` 注入文件保持严格 0 个非 ASCII 字节，彻底杜绝多环境编码冲突；
 4. **零隐私泄漏与绝对脱敏**：杜绝写死个人绝对路径，全线采用 `$env:USERPROFILE` 动态解析与自适应探测；
-5. **闭环三件套交付 (L4)**：所有工程方案必带“测试报告 + 复现指令 + 回滚/退出方式”。
+5. **闭环三件套交付 (L4)**：所有工程方案必带“测试报告 + 复现指令 + 回滚/退出方式”；
+6. **不主张合并外部运行时 & 严格环境断言 (No Bundled Runtimes)**：DSHA 拒绝将庞大外部运行时塞入仓库，保持代码库纯净轻盈。各工具通过 `PrerequisiteEnv` 动态断言宿主环境，缺失时以结构化 `ErrBlock` 拒绝执行并提供修复指引；各工具按 5 大类目（`ReverseEngineering`, `WebEdge`, `Archivist`, `SysAdmin`, `PolicyRadar`）组织，全面继承 `BaseTool` 抽象基类，并严格防越权（`read-only` 档位下阻断中高危操作）。
 
 ---
 
