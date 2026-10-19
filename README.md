@@ -163,5 +163,6 @@ DSHA/
 
 ## 五、 许可证与致谢
 
-- 本项目基于 **MIT License** 开源。
+- 本项目基于 [MIT License](LICENSE) 协议开源。详细第三方组件与生态声明参见 [NOTICE.md](NOTICE.md)。
 - 灵感致敬 **DeepSeek Harness** 开源项目与 **资深工程师 Programer 系统级代码思维体系**。
+

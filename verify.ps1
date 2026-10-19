@@ -246,6 +246,9 @@ $dupRouter = Join-Path $repoRoot 'plugins\dsh-permissions\scripts\router.py'
 Check "仓库内 index.py / router.py 无重复副本" ((-not (Test-Path $dupIndex)) -and (-not (Test-Path $dupRouter))) '' 'existence'
 
 Check "存在 VERSION_SCHEME.md" (Test-Path (Join-Path $repoRoot 'VERSION_SCHEME.md')) '' 'existence'
+Check "存在 LICENSE 开源许可证" (Test-Path (Join-Path $repoRoot 'LICENSE')) '' 'existence'
+Check "存在 NOTICE.md 第三方声明" (Test-Path (Join-Path $repoRoot 'NOTICE.md')) '' 'existence'
+
 
 # 硬编码盘符路径扫描（公开版本已彻底脱敏，零白名单豁免）
 $allowPrefixes = @()
