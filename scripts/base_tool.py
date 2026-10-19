@@ -27,6 +27,7 @@ import time
 from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
+from dsha_env import config_dir, find_binary, proxy_environment, redact
 
 # Ensure UTF-8 output across Windows consoles
 if hasattr(sys.stdout, "reconfigure"):
@@ -65,13 +66,21 @@ def get_active_tier():
     """Discover active DSH permission tier from tier.json."""
     script_dir = Path(__file__).resolve().parent
     repo_root = script_dir.parent if script_dir.name in ("scripts", "bin") else script_dir
-    user_home = Path(os.environ.get("USERPROFILE") or ".")
+    if "DSHA_TIER_FILE" in os.environ:
+        # An explicit configuration is authoritative, including its failures.
+        try:
+            data = json.loads(Path(os.environ["DSHA_TIER_FILE"]).expanduser().read_text(encoding="utf-8"))
+            tier = data.get("tier") if isinstance(data, dict) else None
+            return tier.lower() if isinstance(tier, str) and tier else "invalid"
+        except (OSError, ValueError):
+            return "invalid"
 
     candidates = [
+        Path(os.environ["DSHA_TIER_FILE"]) if os.environ.get("DSHA_TIER_FILE") else config_dir() / "plugins/dsh-permissions/tier.json",
         repo_root / "tier.json",
         repo_root / "plugins" / "dsh-permissions" / "tier.json",
-        user_home / ".gemini" / "config" / "plugins" / "dsh-permissions" / "tier.json",
-        user_home / ".gemini" / "config" / "tier.json",
+        config_dir() / "plugins" / "dsh-permissions" / "tier.json",
+        config_dir() / "tier.json",
     ]
     for c in candidates:
         if c.is_file():
@@ -98,62 +107,10 @@ class PrerequisiteEnv:
         self.custom_paths = custom_paths or []
 
     def locate_binary(self):
-        # 1. Check custom known paths first
-        for p in self.custom_paths:
-            path_obj = Path(os.path.expandvars(str(p)))
-            if path_obj.is_file():
-                return str(path_obj)
-
-        # 2. Check PATH (filtering out WindowsApps 0-byte execution alias stubs)
-        which_p = shutil.which(self.binary)
-        if which_p and "windowsapps" not in which_p.lower():
-            return which_p
-
-        # 3. Check common AppData / Program Files paths on Windows
-        user_home = Path(os.environ.get("USERPROFILE") or ".")
-        app_data = Path(os.environ.get("APPDATA") or str(user_home / "AppData" / "Roaming"))
-        local_data = Path(os.environ.get("LOCALAPPDATA") or str(user_home / "AppData" / "Local"))
-        script_dir = Path(__file__).resolve().parent
-        repo_root = script_dir.parent if script_dir.name in ("scripts", "bin") else script_dir
-
-        fallbacks = {
-            "python": [
-                sys.executable,
-                local_data / "Programs" / "Python" / "Python312" / "python.exe",
-                local_data / "Programs" / "Python" / "Python311" / "python.exe",
-                local_data / "Programs" / "Python" / "Python310" / "python.exe",
-                Path("C:/Program Files/Python312/python.exe"),
-                Path("C:/Python312/python.exe"),
-            ],
-            "node": [
-                Path("C:/Program Files/nodejs/node.exe"),
-                local_data / "Programs" / "nodejs" / "node.exe",
-                app_data / "npm" / "node.exe",
-            ],
-            "wrangler": [
-                app_data / "npm" / "wrangler.cmd",
-                local_data / "Programs" / "nodejs" / "wrangler.cmd",
-                app_data / "npm" / "wrangler",
-            ],
-            "pwsh": [
-                user_home / ".gemini" / "config" / "pwsh" / "pwsh.exe",
-                repo_root / "bin" / "pwsh" / "pwsh.exe",
-                Path("C:/Program Files/PowerShell/7/pwsh.exe"),
-            ],
-            "bash": [
-                Path("C:/Program Files/Git/bin/bash.exe"),
-                Path("C:/Program Files/Git/usr/bin/bash.exe"),
-                Path("C:/Program Files/Git/cmd/bash.exe"),
-                local_data / "Programs" / "Git" / "bin" / "bash.exe",
-            ],
-        }
-
-        for candidate in fallbacks.get(self.binary, []):
-            candidate_path = Path(candidate)
-            if candidate_path.is_file():
-                return str(candidate_path)
-
-        return None
+        if self.custom_paths:
+            return next((value for p in self.custom_paths
+                         if (value := find_binary(self.binary, explicit=str(p)))), None)
+        return find_binary(self.binary)
 
     def verify(self):
         loc = self.locate_binary()
@@ -224,7 +181,7 @@ class PrerequisiteEnv:
                 "located_path": loc,
                 "detected_version": "probe_error",
                 "required_version": f">={self.min_version}",
-                "message": f"Failed probing binary version: {e}",
+                "message": f"Failed probing binary version: {type(e).__name__}",
                 "remediation": self.remediation,
             }
 
@@ -390,7 +347,7 @@ class BaseTool(ABC):
 
         candidate_locations = [
             repo_root / "bin" / cmd_name,
-            user_home / ".gemini" / "config" / cmd_name,
+            config_dir() / cmd_name,
             repo_root / cmd_name,
         ]
         for p in candidate_locations:
@@ -414,7 +371,7 @@ class BaseTool(ABC):
         user_home = Path(os.environ.get("USERPROFILE") or ".")
         allowed_roots = [
             (repo_root / "bin").resolve(),
-            (user_home / ".gemini" / "config").resolve(),
+            config_dir().resolve(),
         ]
         for root in allowed_roots:
             try:
@@ -431,10 +388,10 @@ class BaseTool(ABC):
             tool_name=self.name,
             category=self.category.value,
             refusal_statement=(
-                f"DSHA 拒绝执行: 解析出的目标 '{target}' 不在允许的根之内"
+                "DSHA 拒绝执行: 目标不在配置允许的根之内"
                 "(仓库 bin/ 与 ~/.gemini/config/)。"
             ),
-            details=[{"binary": str(target), "reason": "target-outside-sandbox"}],
+            details=[{"binary": self.id, "reason": "target-outside-sandbox"}],
             remediations=[
                 "确认 DSHA-Index 里该工具的 cmd 未被改写成相对路径或仓库外路径。",
                 "如确需仓库外目标，请先在白名单中显式声明它，再重试。",
@@ -503,14 +460,14 @@ class BaseTool(ABC):
                 "category": self.category.value,
                 "exit_code": 125,
                 "stdout": "",
-                "stderr": f"[DSHA] Error: target outside allowed roots: {exec_path}",
+                "stderr": "[DSHA] Error: target outside allowed roots; value omitted",
                 "duration_ms": 0,
                 "err_block": err_contained.to_dict() if err_contained is not None else {},
             }
 
         # 4. Execute with Environment Isolation
         start_time = time.time()
-        exec_env = os.environ.copy()
+        exec_env = proxy_environment(context.get("proxy"))
         exec_env["PYTHONUTF8"] = "1"
         if context.get("proxy"):
             exec_env["ALL_PROXY"] = context["proxy"]
@@ -586,7 +543,7 @@ class BaseTool(ABC):
                 "category": self.category.value,
                 "exit_code": 1,
                 "stdout": "",
-                "stderr": f"[DSHA] Execution error: {e}",
+                "stderr": f"[DSHA] Execution error: {type(e).__name__}",
                 "duration_ms": duration_ms,
             }
 
@@ -999,7 +956,7 @@ def run_selftest():
 
     # Test 11: Containment refuses a target outside the sandbox
     _probe = TOOL_REGISTRY.get("scribe")
-    _ok_out, _ = _probe.assert_target_contained("C:/Windows/System32/cmd.exe")
+    _ok_out, _ = _probe.assert_target_contained(str(Path.home() / "outside-dsha-fixture.exe"))
     tests.append(("containment_refuses_outside", not _ok_out))
 
     # Test 12: Containment allows the declared launcher

@@ -1,10 +1,9 @@
 {
   "mcpServers": {
     "dsha-rea": {
-      "command": "cmd.exe",
+      "command": "node",
       "args": [
-        "/c",
-        "%USERPROFILE%\\.gemini\\config\\bin\\rea.cmd",
+        "${DSHA_REA_ENTRY}",
         "mcp"
       ],
       "env": {

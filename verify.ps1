@@ -3,7 +3,8 @@
 
 $ErrorActionPreference = 'Continue'
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$cfg = Join-Path $env:USERPROFILE '.gemini\config'
+. "$PSScriptRoot/bin/dsha-env.ps1"
+$cfg = Get-DshaConfigDir $env:DSHA_CONFIG_DIR
 $ok = 0; $fail = 0; $warn = 0; $catBehavior = 0; $catContract = 0; $catExistence = 0
 
 function Check($name, $cond, $detail = '', $Cat = 'behavior') {
@@ -267,7 +268,7 @@ $badPaths = @($scanTargets | Where-Object {
   if (-not $_) { return $false }
   $rel = $_.FullName.Substring($repoRoot.Length).TrimStart('\')
   foreach ($a in $allowPrefixes) { if ($rel.StartsWith($a)) { return $false } }
-  (Select-String -Path $_.FullName -Pattern 'C:\\Users\\|[A-Za-z]:\\' -Quiet)
+  (Select-String -Path $_.FullName -Pattern '(?:[A-Za-z]):[\\/]' -Quiet)
 })
 Check "第一方文件无硬编码盘符路径" ($badPaths.Count -eq 0) ("命中 {0} 个文件（白名单：OCR 语料 / 资料出处）" -f $badPaths.Count) 'contract'
 

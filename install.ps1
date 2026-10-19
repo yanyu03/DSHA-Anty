@@ -8,6 +8,8 @@
 
 [CmdletBinding()]
 param(
+    [string]$ConfigDir = $env:DSHA_CONFIG_DIR,
+    [string]$PythonPath = $env:DSHA_PYTHON,
   [string]$Tier = 'danger-full-access',   # 出厂默认：全权（见 默认全权警告.md）
   [switch]$KeepTier,                      # 保留现有档位，不覆盖
   [switch]$EnableHook,
@@ -18,7 +20,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root  = Split-Path -Parent $MyInvocation.MyCommand.Path
-$cfg   = Join-Path $env:USERPROFILE '.gemini\config'
+. "$root/bin/dsha-env.ps1"
+$cfg = Get-DshaConfigDir $ConfigDir
 $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
 $bak   = Join-Path $cfg "_rollback\DSHA_$stamp"
 
@@ -76,12 +79,7 @@ if ($Uninstall) {
 # ---------------------------------------------------------------- 0. 环境检查
 Step "0/6 环境检查"
 $pyExe = $null
-$cands = @(
-  (Get-ChildItem "$env:LOCALAPPDATA\Programs\Python\Python*\python.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName),
-  'C:\python312\python.exe',
-  (Get-Command python.exe -ErrorAction SilentlyContinue).Source,
-  (Get-Command py.exe -ErrorAction SilentlyContinue).Source
-)
+$cands = @(Get-DshaPython $PythonPath)
 foreach ($cand in $cands) {
   if ($cand -and (Test-Path $cand)) {
     try { $v = & $cand -c "import sys;print(sys.version.split()[0])" 2>$null; if ($v) { $pyExe = $cand; $pyVer = $v; break } } catch {}
@@ -92,7 +90,7 @@ Say "Python：$pyExe （$pyVer）"
 
 $agDir = Join-Path $env:LOCALAPPDATA 'Programs\antigravity'
 if (Test-Path $agDir) { Say "Antigravity：已安装（$agDir）" } else { Say "⚠ 未在默认路径找到 Antigravity；若装在别处，本插件仍可用，只是档位切换脚本的重启路径需自行确认。" }
-if (-not (Test-Path $cfg)) { New-Item -ItemType Directory -Force -Path $cfg | Out-Null }
+
 
 if ($WhatIfOnly) {
   Say "— WhatIfOnly：以下动作将被执行（本次不改动任何文件）"
@@ -105,6 +103,7 @@ if ($WhatIfOnly) {
   exit 0
 }
 
+if (-not (Test-Path -LiteralPath $cfg)) { New-Item -ItemType Directory -Force -Path $cfg | Out-Null }
 # ---------------------------------------------------------------- 1. 备份
 Step "1/6 备份现有配置"
 New-Item -ItemType Directory -Force -Path "$bak\plugins\dsh-permissions\scripts","$bak\plugins\dsh-permissions\rules","$bak\skills\DSHA" | Out-Null
@@ -128,7 +127,7 @@ New-Item -ItemType Directory -Force -Path "$cfg\plugins","$cfg\skills" | Out-Nul
 robocopy (Join-Path $root 'plugins\dsh-permissions') "$cfg\plugins\dsh-permissions" /E /XD logs __pycache__ /NFL /NDL /NJH /NJS /NP | Out-Null
 
 # D1/D41H 修复：保持 scripts\ 为单一事实源，安装时闭包分发所有运行时依赖脚本
-foreach ($pyFile in @('base_tool.py','index.py','router.py','dsha_cf.py','scribe.py','test_skill_integration.py')) {
+foreach ($pyFile in @('dsha_env.py', 'base_tool.py','index.py','router.py','dsha_cf.py','scribe.py','test_skill_integration.py')) {
   $from = Join-Path $root "scripts\$pyFile"
   if (Test-Path $from) {
     Copy-Item $from "$cfg\plugins\dsh-permissions\scripts\$pyFile" -Force
@@ -152,6 +151,7 @@ if (Test-Path (Join-Path $root 'skills\reverse-engineer-anything')) {
 
 # ---------------------------------------------------------------- 4. 档位切换器与工具链
 Step "4/6 安装档位切换器与工具链（含防咬人 Shell 与 REA 启动器）"
+Copy-Item (Join-Path $root 'bin\dsha-env.ps1') (Join-Path $cfg 'dsha-env.ps1') -Force
 Copy-Item (Join-Path $root 'bin\agy-tier.ps1')   "$cfg\agy-tier.ps1"   -Force
 Copy-Item (Join-Path $root 'bin\agy-verify.ps1') "$cfg\agy-verify.ps1" -Force
 Copy-Item (Join-Path $root 'bin\agy-audit.ps1')  "$cfg\agy-audit.ps1"  -Force

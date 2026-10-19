@@ -158,4 +158,9 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
+        print(json.dumps({'status': 'REFUSED', 'error': type(error).__name__,
+                          'message': 'MCP startup or transport failed; inspect private configuration and owned logs.'}), file=sys.stderr)
+        sys.exit(2)

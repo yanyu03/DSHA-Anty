@@ -304,7 +304,7 @@ def main():
             except ImportError:
                 from scripts.index import Call_Tools
         except Exception as e:
-            print(f"[DSHA-ROUTER] Error loading Call_Tools: {e}", file=sys.stderr)
+            print(f"[DSHA-ROUTER] Error loading Call_Tools: {type(e).__name__}", file=sys.stderr)
             return 1
 
         if cmd == "call":
@@ -327,7 +327,7 @@ def main():
             return Call_Tools(cmd, sys.argv[2:], {"capture": False})["exit_code"]
         except Exception as error:
             # Never bypass prerequisite/authorization checks after a dispatcher error.
-            print(f"[DSHA-ROUTER] Dispatcher failed; execution refused: {error}", file=sys.stderr)
+            print(f"[DSHA-ROUTER] Dispatcher failed; execution refused: {type(error).__name__}", file=sys.stderr)
             return 126
 
     # Default: route the entire argument string

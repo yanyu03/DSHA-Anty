@@ -11,19 +11,31 @@ import shutil
 import tempfile
 
 SKILL = Path(__file__).resolve().parents[1]
-HOST = Path(os.environ.get('DSHA_HOST_CONFIG', SKILL.parents[1] / 'tools/dsha/host.json'))
+CODEX_HOME = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex'))
+HOST = Path(os.environ.get('DSHA_HOST_CONFIG', CODEX_HOME / 'tools/dsha/host.json'))
 
 
-def host():
-    return json.loads(HOST.read_text(encoding='utf-8'))
+def host(path=None):
+    config = json.loads(Path(path or HOST).read_text(encoding='utf-8'))
+    if not isinstance(config, dict) or not isinstance(config.get('env'), dict):
+        raise ValueError('invalid host configuration')
+    if any(not isinstance(config.get(key), str) or not config[key] for key in ('python', 'node', 'rea_entry', 'dsha_source')):
+        raise ValueError('missing host runtime configuration')
+    if any(not isinstance(key, str) or not isinstance(value, str) for key, value in config['env'].items()):
+        raise ValueError('invalid host environment')
+    for key, variable in [('node', 'DSHA_NODE'), ('python', 'DSHA_PYTHON'), ('rea_entry', 'DSHA_REA_ENTRY')]:
+        if variable in os.environ:
+            config[key] = os.environ[variable]
+    return config
 
 
 def environment(config):
     env = os.environ.copy()
-    env.update(config['env'])
+    env.update({key: os.environ.get(key, value) for key, value in config['env'].items()})
+    env['DSHA_PYTHON'] = config.get('python') or sys.executable
     env['PYTHONUTF8'] = '1'
     env['PYTHONIOENCODING'] = 'utf-8'
-    env['PATH'] = str(Path(config['env']['JAVA_HOME']) / 'bin') + os.pathsep + env.get('PATH', '')
+    env['PATH'] = str(Path(env['JAVA_HOME']) / 'bin') + os.pathsep + env.get('PATH', '')
     return env
 
 
@@ -40,10 +52,11 @@ def verify_sources(config):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--host-config', type=Path, help='Private host configuration; takes precedence over DSHA_HOST_CONFIG')
     parser.add_argument('action', choices=['status', 'selftest', 'englock', 'rea', 'verify-source', 'catalog', 'route'])
     parser.add_argument('args', nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    config = host()
+    config = host(args.host_config) if args.host_config else host()
     env = environment(config)
     scripts = Path(config['dsha_source']) / 'plugins/dsh-permissions/scripts'
     identity = verify_sources(config)
@@ -56,8 +69,8 @@ def main():
         return 1 if result['mismatches'] else 0
     if args.action == 'status':
         checks = {name: Path(config[name]).is_file() for name in ['node', 'python', 'rea_entry']}
-        checks['java'] = (Path(config['env']['JAVA_HOME']) / 'bin/java.exe').is_file()
-        checks['ghidra'] = (Path(config['env']['GHIDRA_INSTALL_DIR']) / 'support/analyzeHeadless.bat').is_file()
+        checks['java'] = (Path(env['JAVA_HOME']) / 'bin/java.exe').is_file()
+        checks['ghidra'] = (Path(env['GHIDRA_INSTALL_DIR']) / 'support/analyzeHeadless.bat').is_file()
         result = {'dsha_version': config['dsha_version'], 'rea_version': config['rea_version'],
                   'source_commit': config.get('source_commit'), 'adapter_version': config.get('adapter_version'),
                   'checks': checks, 'source_identity': verify_sources(config),
@@ -70,7 +83,7 @@ def main():
         # The original README's gate.py --selftest is stale: gate.py ignores
         # that flag. Its real harness is selftest.py and rewrites tier.json.
         # Run that harness in an isolated owned copy, never in a live plugin.
-        test_root = HOST.parent / 'verification/selftests'
+        test_root = (args.host_config or HOST).resolve().parent / 'verification/selftests'
         test_root.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix='gate-', dir=test_root) as name:
             target = Path(name).resolve()
@@ -92,4 +105,10 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        # Configurations are private: do not echo paths, values or tracebacks.
+        print(json.dumps({'status': 'REFUSED', 'error': type(error).__name__,
+                          'message': 'Check host configuration, source manifest and runtime availability.'}), file=sys.stderr)
+        sys.exit(2)

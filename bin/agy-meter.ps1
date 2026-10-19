@@ -1,25 +1,20 @@
 ﻿# DSHA-Meter 控制脚本 (带动态环境解析 · 隐私安全 · 幂等控制)
 param(
+    [string]$ConfigDir = $env:DSHA_CONFIG_DIR,
+    [string]$PythonPath = $env:DSHA_PYTHON,
     [switch]$Start,
     [switch]$Stop,
     [switch]$Restart,
     [switch]$Status
 )
 
-$cfg = Join-Path $env:USERPROFILE '.gemini\config'
+. "$PSScriptRoot/dsha-env.ps1"
+$cfg = Get-DshaConfigDir $ConfigDir
 $meterDir = Join-Path $cfg 'plugins\dsha-meter'
 $meterPy = Join-Path $meterDir 'meter.py'
 
 # 动态解析 Python 解释器 (优先检测系统已安装环境)
-$py = $null
-foreach ($cand in @(
-    (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'),
-    'C:\python312\python.exe',
-    (Get-Command python.exe -ErrorAction SilentlyContinue).Source
-)) {
-    if ($cand -and (Test-Path $cand)) { $py = $cand; break }
-}
-if (-not $py) { $py = 'python.exe' }
+$py = Get-DshaPython $PythonPath
 
 $pyw = $null
 if (Test-Path $py) {

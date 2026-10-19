@@ -1,5 +1,6 @@
 @echo off
-rem Engineering Lock hook wrapper -- mirrors run-gate.cmd.
-rem ASCII only, no leading quote, stderr discarded, always exits 0 (fail-open).
-python "%~dp0englock.py" 2>nul
-exit /b 0
+setlocal
+if not defined DSHA_PYTHON set "DSHA_PYTHON=python.exe"
+set "PYTHONUTF8=1"
+"%DSHA_PYTHON%" "%~dp0englock.py" %*
+exit /b %ERRORLEVEL%

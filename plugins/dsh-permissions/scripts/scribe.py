@@ -25,6 +25,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from dsha_env import config_dir, find_binary, optional_path, display_path, redact
 
 # Ensure UTF-8 output across Windows consoles
 if hasattr(sys.stdout, "reconfigure"):
@@ -38,15 +39,15 @@ if hasattr(sys.stdout, "reconfigure"):
 def get_default_paths():
     script_dir = Path(__file__).resolve().parent
     repo_root = script_dir.parent if script_dir.name in ("scripts", "bin") else script_dir
-    user_home = Path(os.environ.get("USERPROFILE") or os.environ.get("HOME") or ".")
-    gemini_cfg = user_home / ".gemini" / "config"
-    brain_dir = user_home / ".gemini" / "antigravity" / "brain"
+    user_home = Path.home()
+    gemini_cfg = config_dir()
+    brain_dir = optional_path("DSHA_BRAIN_DIR", user_home / ".gemini/antigravity/brain")
 
     return {
         "repo_root": repo_root,
         "gemini_cfg": gemini_cfg,
         "brain_dir": brain_dir,
-        "scribe_cache": repo_root / ".scribe",
+        "scribe_cache": optional_path("DSHA_SCRIBE_CACHE", repo_root / ".scribe"),
     }
 
 
@@ -153,9 +154,9 @@ def get_git_state(repo_root):
         "modified": [],
         "recent_commits": [],
     }
-    git_cmd = r"C:\Program Files\Git\cmd\git.exe"
-    if not os.path.exists(git_cmd):
-        git_cmd = "git"
+    git_cmd = find_binary("git")
+    if not git_cmd:
+        return state
 
     try:
         res = subprocess.run(
@@ -253,6 +254,7 @@ def harvest(paths):
         "recent_tasks": tasks,
     }
 
+    data = redact(data)
     cache_dir = paths["scribe_cache"]
     cache_dir.mkdir(parents=True, exist_ok=True)
     out_file = cache_dir / "latest_harvest.json"
@@ -263,6 +265,8 @@ def harvest(paths):
 
 
 def generate_dossier(data, issue_query=None):
+    data = redact(data)
+    issue_query = redact(issue_query)
     now_str = data.get("harvested_at", datetime.now().isoformat())
     env = data.get("env", {})
     git = data.get("git", {})
@@ -330,7 +334,7 @@ def generate_dossier(data, issue_query=None):
         for t in tasks:
             code_str = f"退出码: {t.get('exit_code')}" if t.get('exit_code') is not None else "状态: 运行中/未知"
             dossier_lines.append(f"### 任务日志: `{t.get('name')}` ({code_str})")
-            dossier_lines.append(f"- 日志路径: `{t.get('path')}`")
+            dossier_lines.append(f"- 日志路径: `{display_path(t.get('path'))}`")
             if t.get("tail"):
                 dossier_lines.append("```text")
                 for tl in t.get("tail")[-5:]:
@@ -462,7 +466,7 @@ def main():
     if args.command == "harvest":
         data = harvest(paths)
         print(f"[SCRIBE] Ingested {data.get('gate_events_count')} gate events, {len(data.get('recent_tasks'))} task logs.")
-        print(f"[SCRIBE] Cache written to: {paths['scribe_cache'] / 'latest_harvest.json'}")
+        print(f"[SCRIBE] Cache written to: {display_path(paths['scribe_cache'] / 'latest_harvest.json')}")
         return
 
     if args.command == "status":
@@ -487,7 +491,7 @@ def main():
         out_p.parent.mkdir(parents=True, exist_ok=True)
         with open(out_p, "w", encoding="utf-8") as f:
             f.write(dossier_text)
-        print(f"[SCRIBE] Dossier exported to: {out_p}")
+        print(f"[SCRIBE] Dossier exported to: {display_path(out_p)}")
     else:
         # Default save to cache as well
         cache_dossier = paths["scribe_cache"] / "latest_dossier.md"

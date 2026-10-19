@@ -471,14 +471,12 @@
     }
   },
   "host": {
-    "configuration": "C:\\Users\\admin\\.codex\\tools\\dsha\\host.json",
+    "configuration": "${DSHA_HOST_CONFIG}",
     "mcp_server": "rea",
-    "mcp_config": "C:\\Users\\admin\\.codex\\config.toml",
-    "registrar": "codex mcp add",
-    "provider": "ghidra",
-    "rea_version": "6.4.0",
-    "ghidra_install_dir": "C:/Users/admin/Desktop/MYSQL/MTK8400/rea_workspace/ghidra_12.1.4_PUBLIC",
-    "java_home": "C:\\Users\\admin\\.codex\\tools\\dsha\\jdk\\jdk-21.0.12.1+1",
-    "verification": "C:\\Users\\admin\\.codex\\tools\\dsha\\verification\\INSTALLATION_REPORT.md"
+    "mcp_config": "${CODEX_HOME}/config.toml",
+    "provider": "${REA_ANALYSIS_PROVIDER}",
+    "ghidra_install_dir": "${GHIDRA_INSTALL_DIR}",
+    "java_home": "${JAVA_HOME}",
+    "verification": "${DSHA_VERIFICATION_DIR}"
   }
 }

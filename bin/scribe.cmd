@@ -1,26 +1,12 @@
 @echo off
-rem =========================================================================
-rem DSHA Scribe Launcher - Pure ASCII - Zero Parenthesis Blocks
-rem Dispatches to scripts\scribe.py with UTF-8 encoding enabled
-rem =========================================================================
 setlocal
-chcp 65001 >nul 2>nul
+call "%~dp0dsha-env.cmd" python
+if errorlevel 1 exit /b 126
+if defined DSHA_SCRIPT_DIR goto :SCRIPT_READY
+if not defined DSHA_SCRIPT_DIR set "DSHA_SCRIPT_DIR=%~dp0..\scripts"
+if not exist "%DSHA_SCRIPT_DIR%\scribe.py" set "DSHA_SCRIPT_DIR=%DSHA_CONFIG_DIR%\plugins\dsh-permissions\scripts"
+:SCRIPT_READY
+if not exist "%DSHA_SCRIPT_DIR%\scribe.py" exit /b 126
 set "PYTHONUTF8=1"
-
-set "SCRIBE_PY="
-if exist "%~dp0..\scripts\scribe.py" set "SCRIBE_PY=%~dp0..\scripts\scribe.py"
-if "%SCRIBE_PY%"=="" if exist "%~dp0..\plugins\dsh-permissions\scripts\scribe.py" set "SCRIBE_PY=%~dp0..\plugins\dsh-permissions\scripts\scribe.py"
-if "%SCRIBE_PY%"=="" if exist "%USERPROFILE%\.gemini\config\plugins\dsh-permissions\scripts\scribe.py" set "SCRIBE_PY=%USERPROFILE%\.gemini\config\plugins\dsh-permissions\scripts\scribe.py"
-
-if not "%SCRIBE_PY%"=="" goto :HAVE_SCRIBE
-echo [DSHA-SCRIBE] Error: scribe.py not found. 1>&2
-exit /b 1
-
-:HAVE_SCRIBE
-set "PY="
-if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" set "PY=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
-if "%PY%"=="" if exist "C:\python312\python.exe" set "PY=C:\python312\python.exe"
-if "%PY%"=="" set "PY=python"
-
-"%PY%" "%SCRIBE_PY%" %*
+"%DSHA_PYTHON%" "%DSHA_SCRIPT_DIR%\scribe.py" %*
 exit /b %ERRORLEVEL%
