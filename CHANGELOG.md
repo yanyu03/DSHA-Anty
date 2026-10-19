@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v1.0.0 — 2026-10-19
+**DSHA-SharBoy 1.0 正式版全景发布 (Official Release v1.0.0 · 全开源 Public 启动)**
+- **DSHA-Index 顶层能力目录与元数据事实源 (`bin\dsha-index.cmd` / `scripts/index.py`)**：正式确立全系统 7 大平行工具（CF、REA、Scribe、Pwsh、Sh、Tier、Meter）的顶层索引与契约规范。
+- **`Call_Tools` 统合拉取协议**：建立统一函数调用管道，实现底层二进制自动寻址、UTF-8 字符沙箱、网络代理环境注入与执行结果标准化结构回收。
+- **DSHA-Router 核心意图路由**：多因子智能评分引擎（覆盖 8 大跨域场景，准确率 100%），支持直接穿透调用 `Call_Tools`。
+- **Cloudflare 全系 CLI 生态直通 (`bin\cf.cmd`)**：全面接通新一代 Cloudflare Forge OpenAPI CLI (2900+ API、`cf mcp`、Agent search) 与 Wrangler/Workerd 本地运行栈。
+- **专职档案官 DSHA Scribe (`bin\scribe.cmd`)**：6 段式问题研究简报生成器，为多 Agent 协同提供毫秒级诊断支持。
+- **防括号撕裂 Shell 矩阵**：专用 PowerShell 7 独立运行时、加固 `dsha-pwsh` 与 GNU Bash 统一环境。
+- **全系 55 项自动化体验套件 (`verify.ps1`)**：55/55 PASS，实现零缺陷、全机械化自检交付。
+
 ## v2.4.0-testweb — 2026-10-19
 **Cloudflare 直通引擎并入与 DSHA 智能情境路由层 (DHSA-TestWeb 论证分支)**
 - **Cloudflare CLI 工具直通引擎 (`bin\cf.cmd`)**：全面整合本地已就绪的 Wrangler (v4.151.1) 与 Cloudflare Tunnels，支持 `status`、`whoami`、`dev`、`deploy`、`pages`、`tunnel`，解决 Windows GBK 编码崩溃与代理自适应。

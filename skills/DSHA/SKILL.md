@@ -317,4 +317,19 @@ DSHA 家族总指挥枢纽：根据开发者意图、目标文件与上下文自
 
 详见：[skills/DSHA/routing-layer.md](file:///c:/Users/admin/Desktop/GOOGLE/DSHA/skills/DSHA/routing-layer.md)
 
+---
+
+## DSHA-Index 顶层目录与 Call_Tools 统合拉取协议 (v1.0.0 正式版)
+
+DSHA 家族最高顶层事实源：维护 7 大平行工具全景元数据与执行契约，通过核心路由 (DSHA-Router) 与统一函数 `Call_Tools` 实现对底层工具的隔离加载与结果回收。
+
+### 核心能力与指令
+- **浏览全景能力清单**：`bin\dsha-index.cmd list`
+- **查阅指定工具契约**：`bin\dsha-index.cmd get <tool_id>`
+- **统合拉取调用协议**：`bin\dsha.cmd call <tool_id> [args...]`
+- **意图研判自动执行**：`bin\dsha.cmd exec "<任务意图>"`
+- **套件自检验证**：`bin\dsha-index.cmd selftest`
+
+详见：[skills/DSHA/dsha-index.md](file:///c:/Users/admin/Desktop/GOOGLE/DSHA/skills/DSHA/dsha-index.md)
+
 

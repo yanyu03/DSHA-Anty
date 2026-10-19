@@ -83,12 +83,13 @@ DSHA-SharBoy 提供了直接适用于本机 **ChatGPT Windows 客户端** 的完
 - **测试自检**：`bin\scribe.cmd selftest`
 - **子智能体调度**：支持通过 Antigravity 原生 `invoke_subagent(TypeName="scribe")` 异步唤起，ChatGPT 提示词见 `chatgpt/SCRIBE_PROMPT.md`。
 
-### 7. Cloudflare 直通引擎与智能路由层 (DHSA-TestWeb 分支特性)
-针对多工具协同的自动化调度中枢与现代边缘生态直通：
-- **直通 Cloudflare 引擎**：`bin\cf.cmd <whoami|status|dev|deploy|pages|tunnel|selftest>`（集成 Wrangler 4.151.1 与 Cloudflare Tunnels，内置 UTF-8 编码隔离与代理自适应）；
-- **情境智能路由层**：`bin\dsha.cmd route "<自然语言任务或目标文件>"`（基于 7 大子系统多因子评分，以 79%~100% 置信度自动指派最佳工具与命令）；
-- **全工具链就位检测**：`bin\dsha.cmd status`
-- **全场景矩阵自检**：`bin\dsha.cmd selftest`（覆盖逆向、边缘部署、日志提纯、系统管理、权限与额度 8 大场景）。
+### 8. DSHA-Index 顶层全景目录与 Call_Tools 统合拉取协议 (v1.0.0 正式版)
+全系统最高能力大纲事实源与统合执行管道：
+- **浏览全景能力清单**：`bin\dsha-index.cmd list`
+- **查看指定工具 Schema**：`bin\dsha-index.cmd get <cf|rea|scribe|pwsh|sh|tier|meter>`
+- **统合拉取执行协议**：`bin\dsha.cmd call <tool> [args...]`（支持自动化环境隔离、代理注入与标准 JSON/对象回收）
+- **路由意图执行中枢**：`bin\dsha.cmd exec "<任务意图>"`
+- **套件自检验证**：`bin\dsha-index.cmd selftest`
 
 ---
 
@@ -97,7 +98,8 @@ DSHA-SharBoy 提供了直接适用于本机 **ChatGPT Windows 客户端** 的完
 ```
 DSHA/
 ├── bin/
-│   ├── dsha.cmd                # DSHA 智能路由层与万能分发入口 (纯 ASCII)
+│   ├── dsha-index.cmd          # DSHA-Index 顶层目录与契约管理器 (纯 ASCII)
+│   ├── dsha.cmd                # DSHA 智能路由层与 Call_Tools 调度入口 (纯 ASCII)
 │   ├── cf.cmd                  # Cloudflare 工具链直通启动器 (纯 ASCII)
 │   ├── rea.cmd                 # REA 逆向工具集全局调用器
 │   ├── scribe.cmd              # DSHA 书记官全局调用器 (纯 ASCII)
@@ -120,6 +122,7 @@ DSHA/
 │   ├── dsha-englock/           # 独立工程锁插件（与切档解耦，hooks 独立）
 │   └── dsha-meter/             # 实时额度监视器本体（meter.py, 高分屏渲染）
 ├── scripts/
+│   ├── index.py                # DSHA-Index 顶层目录与 Call_Tools 引擎 (纯 Python 标准库)
 │   ├── router.py               # 智能情境路由层决策引擎 (纯 Python 标准库)
 │   ├── dsha_cf.py              # Cloudflare 工具直通引擎 (纯 Python 标准库)
 │   ├── scribe.py               # 书记官情报与日志提纯引擎 (纯 Python 标准库)
@@ -127,6 +130,7 @@ DSHA/
 ├── skills/
 │   ├── DSHA/                   # DSHA 核心技能套件
 │   │   ├── SKILL.md            # Anty 技能定义入口
+│   │   ├── dsha-index.md       # DSHA-Index 顶层架构与 Call_Tools 规范
 │   │   ├── routing-layer.md    # 智能路由层决策树与规范
 │   │   ├── cloudflare.md       # Cloudflare 直通引擎手册
 │   │   ├── scribe.md           # 书记官工作规范与简报标准
@@ -135,10 +139,10 @@ DSHA/
 │   │   └── reference.md        # 四档警告与运维陷阱参考
 │   └── reverse-engineer-anything/ # REA 逆向套件与本地驱动器
 ├── install.ps1                 # 幂等安装器（带时间戳备份与一键卸载）
-├── verify.ps1                  # 51 项自动化体检套件（全绿）
+├── verify.ps1                  # 55 项自动化体检套件（全绿）
 ├── CHANGELOG.md                # 版本演进历程
 ├── README.md                   # 项目说明
-└── VERSION                     # 当前版本号 (2.4.0-testweb)
+└── VERSION                     # 当前版本号 (1.0.0)
 ```
 
 ---

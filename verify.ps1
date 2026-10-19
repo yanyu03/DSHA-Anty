@@ -187,6 +187,22 @@ if (Test-Path $routerPy) {
   Check "router.py selftest 全通过" $rPass $rSelf.Line
 }
 
+Write-Host "`n=== 12. DSHA-Index 顶层目录与 Call_Tools 统合拉取协议 (v1.0.0) ===" -ForegroundColor Cyan
+$indexCmd = Join-Path $cfg 'dsha-index.cmd'
+if (-not (Test-Path $indexCmd)) { $indexCmd = "c:\Users\admin\Desktop\GOOGLE\DSHA\bin\dsha-index.cmd" }
+Check "dsha-index.cmd launcher present" (Test-Path $indexCmd)
+if (Test-Path $indexCmd) { Check "dsha-index.cmd is pure ASCII" (((Get-Content $indexCmd -Raw) -notmatch '[^\x00-\x7F]')) }
+
+$indexPy = Join-Path $cfg 'plugins\dsh-permissions\scripts\index.py'
+if (-not (Test-Path $indexPy)) { $indexPy = "c:\Users\admin\Desktop\GOOGLE\DSHA\scripts\index.py" }
+Check "index.py script present" (Test-Path $indexPy)
+if (Test-Path $indexPy) {
+  $iSelf = & $pyExe $indexPy selftest | Select-String -Pattern 'selftest:' | Select-Object -Last 1
+  $iPass = $false
+  if ($iSelf -and $iSelf.Line -match 'selftest:\s*(\d+)\s*/\s*(\d+)') { $iPass = ($matches[1] -eq $matches[2]) }
+  Check "index.py Call_Tools selftest 全通过" $iPass $iSelf.Line
+}
+
 Write-Host "`n--------------------------------------------------"
 Write-Host ("PASS {0} / FAIL {1} / WARN {2}" -f $ok, $fail, $warn) -ForegroundColor $(if ($fail -eq 0) { 'Green' } else { 'Red' })
 if ($fail -eq 0) { Write-Host "DSHA 体检通过。" -ForegroundColor Green } else { Write-Host "存在失败项，请按上方 [FAIL] 逐条处理。" -ForegroundColor Red }

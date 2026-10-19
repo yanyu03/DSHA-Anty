@@ -290,8 +290,40 @@ def main():
             print_route_report(res)
         return 0
 
-    # Direct tool proxy
+    if cmd in ("call", "exec"):
+        if len(sys.argv) < 3:
+            print("Usage: dsha call <tool> [args...] OR dsha exec \"<intent>\"", file=sys.stderr)
+            return 1
+        try:
+            try:
+                from index import Call_Tools
+            except ImportError:
+                from scripts.index import Call_Tools
+        except Exception as e:
+            print(f"[DSHA-ROUTER] Error loading Call_Tools: {e}", file=sys.stderr)
+            return 1
+
+        if cmd == "call":
+            tool_target = sys.argv[2]
+            return Call_Tools(tool_target, sys.argv[3:], {"capture": False})["exit_code"]
+        else:
+            query = sys.argv[2]
+            res = analyze_route(query)
+            print(f"[DSHA-ROUTER] Routing intent to [{res['selected_tool'].upper()}] {res['tool_name']} (置信度: {int(res['confidence']*100)}%)...")
+            tool_args = sys.argv[3:] if len(sys.argv) > 3 else ["status"]
+            return Call_Tools(res["selected_tool"], tool_args, {"capture": False})["exit_code"]
+
+    # Direct tool proxy via Call_Tools
     if cmd in TOOL_REGISTRY:
+        try:
+            try:
+                from index import Call_Tools
+            except ImportError:
+                from scripts.index import Call_Tools
+            return Call_Tools(cmd, sys.argv[2:], {"capture": False})["exit_code"]
+        except Exception:
+            pass
+
         tool_cmd = TOOL_REGISTRY[cmd]["cmd"]
         repo_bin = Path(__file__).resolve().parent.parent / "bin"
         target_path = repo_bin / tool_cmd
