@@ -7,6 +7,9 @@ Kaeru's authorization and receipt pipeline after Linux contract tests.
 from __future__ import annotations
 import re
 import time
+import importlib.util
+import shutil
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -27,7 +30,7 @@ EXTENSIONS = {
     "python": {"name": "Oyasmi Python policy / quota hooks (plan-only)", "keywords": ["python", "venv", "pip", "pypi", "虚拟环境", "python权限"], "extensions": [".py"], "exact_filenames": ["pyproject.toml"], "weight": 1.1},
 }
 REQUIRES = {
-    "markdown": ("python",), "office": ("python",), "wps": ("python",),
+    "markdown": ("markdown_it",), "office": ("office_io",), "wps": ("wpsrpc",),
     "cf": ("cfcli",), "wrangler": ("wrangler",), "rea": ("node",), "scribe": ("python",),
     "pwsh": ("pwsh",), "sh": ("bash",), "tier": ("python",),
     "meter": ("python",), "github": ("gh",), "kde": ("dolphin",),
@@ -69,6 +72,23 @@ class EnvSnapshot:
         return dict(result)
 
 def default_probe(name: str) -> dict:
+    if name == "markdown_it":
+        ok = importlib.util.find_spec("markdown_it") is not None
+        return {"state": "NATIVE" if ok else "UNAVAILABLE", "binary": "markdown_it" if ok else None,
+                "evidence": "local_library_detected_not_execution_proof"}
+    if name == "office_io":
+        parts = ("docx", "openpyxl", "pptx")
+        missing = [lib for lib in parts if importlib.util.find_spec(lib) is None]
+        return {"state": "NATIVE" if not missing else "UNAVAILABLE",
+                "binary": "python-docx/openpyxl/python-pptx" if not missing else None,
+                "evidence": "local_libraries_detected" if not missing else "python_dependencies_missing"}
+    if name == "wpsrpc":
+        rpc = importlib.util.find_spec("pywpsrpc") is not None
+        binary = shutil.which("wps")
+        desktop = bool(os.getenv("DISPLAY") or os.getenv("WAYLAND_DISPLAY"))
+        # Binary presence is NOT runtime/connection evidence. No automatic WPS launch.
+        return {"state": "COMPATIBLE" if rpc and binary and desktop else "UNAVAILABLE",
+                "binary": binary, "evidence": "runtime_available_but_rpc_not_verified" if rpc and binary and desktop else "wps_runtime_not_available"}
     if name == "python":
         return {"state": "NATIVE", "binary": linux.platform.python_implementation(),
                 "evidence": "current_interpreter_running"}
