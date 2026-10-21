@@ -6,8 +6,8 @@
       "category": "WebEdge",
       "files": {
         "bin/cf.cmd": "ca66a09a398a662e8b07d58684faecf52f65ce0a",
-        "scripts/dsha_cf.py": "29dafb7a5532b5ad2c09c291dd4791379dae4a1c",
-        "plugins/dsh-permissions/scripts/dsha_cf.py": "29dafb7a5532b5ad2c09c291dd4791379dae4a1c"
+        "scripts/dsha_cf.py": "479f4b1e178821a5bde35664a17e6f42778d5aaa",
+        "plugins/dsh-permissions/scripts/dsha_cf.py": "479f4b1e178821a5bde35664a17e6f42778d5aaa"
       }
     },
     "rea": {
@@ -56,8 +56,8 @@
       "files": {
         "scripts/router.py": "4c516302ae621560bbf47f124676a63fee735a0b",
         "scripts/index.py": "7b04b18916a8fd6717e37071cca65a839d54d137",
-        "scripts/base_tool.py": "c9e30639153987c90d63cf2c37f432c4743dbcf0",
-        "plugins/dsh-permissions/scripts/base_tool.py": "c9e30639153987c90d63cf2c37f432c4743dbcf0",
+        "scripts/base_tool.py": "b14d6e71c1733342d9f5f584acdecba957a1c855",
+        "plugins/dsh-permissions/scripts/base_tool.py": "b14d6e71c1733342d9f5f584acdecba957a1c855",
         "plugins/dsh-permissions/scripts/englock.py": "883708b98f91152d77cca3fe248ff6b2c0b86d7a"
       }
     },
@@ -67,7 +67,7 @@
         "scripts/hamasaki_identity.py": "2c470848b0c429b3010029121c509cca63ed0582",
         "scripts/hamasaki_sandbox.py": "207d94416d53946b13e70abdca30f3b6804d715f",
         "scripts/hamasaki_executor.py": "1237442dc4eeefef055ee866dcf9981ba7ec4c15",
-        "scripts/hamasaki_hotplug.py": "bc9a2bd044bf821d7d1a28f6c69bf647ad2f86ca",
+        "scripts/hamasaki_hotplug.py": "91261dd4504ec317a1e2c251ad72779c15d32ff2",
         "scripts/hamasaki_pipeline.py": "97f8338ea8dd049bdbd52cae35e94135e1ab68c1",
         "scripts/hamasaki_plan_cli.py": "c1de9be02e000a7dc1e2a6be9aaaa5a80e96bdb7"
       }

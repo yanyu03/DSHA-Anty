@@ -4,6 +4,8 @@ import argparse
 import hashlib
 import json
 import os
+import contextlib
+import fcntl
 from pathlib import Path
 import re
 import shutil
@@ -37,6 +39,23 @@ def approvals():
         data=json.loads(p.read_text("utf-8"))
         return data if isinstance(data,dict) else {}
     except (ValueError,OSError): return {}
+
+@contextlib.contextmanager
+def approval_transaction():
+    p=trust_file()
+    p.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+    if not isdir(p.parent) or (p.exists() and not isfile(p)):
+        raise ValueError("ERR_UNSAFE_APPROVAL_LOCATION")
+    lock=p.with_name(p.name+".lock")
+    flags=os.O_CREAT|os.O_RDWR
+    if hasattr(os,"O_NOFOLLOW"): flags |= os.O_NOFOLLOW
+    fd=os.open(lock,flags,0o600)
+    try:
+        fcntl.flock(fd,fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd,fcntl.LOCK_UN)
+        os.close(fd)
 
 def save(data):
     p=trust_file();p.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
@@ -107,8 +126,12 @@ def scan():
     root=home()
     if not root.exists():return []
     if not isdir(root):return [{"id":"[root]","status":"BLOCKED","reason":"invalid root"}]
+    paths=[p for p in sorted(root.iterdir()) if isdir(p) or p.is_symlink()]
+    if len(paths)>80:
+        return [{"id":"[capacity]","status":"BLOCKED","reason":"ERR_TOOL_CAPACITY",
+                 "executable":False}]
     known=approvals()
-    return [inspect(p,known) for p in sorted(root.iterdir())[:80] if isdir(p) or p.is_symlink()]
+    return [inspect(p,known) for p in paths]
 
 def catalog():
     return {x["id"]:{"name":x["name"],"keywords":x["keywords"],"extensions":[],
@@ -120,12 +143,18 @@ def approve(id,digest):
         return {"status":"ERR_BLOCK","error_code":"ERR_INVALID_APPROVAL"}
     result=inspect(home()/id,known={})
     if result.get("sha256")!=digest:return {"status":"ERR_BLOCK","error_code":"ERR_PACKAGE_CHANGED"}
-    data=approvals();data[id]=digest;save(data)
+    # Atomic read-modify-write. Recheck hash *under* the approval lock.
+    with approval_transaction():
+        result=inspect(home()/id,known={})
+        if result.get("sha256")!=digest:
+            return {"status":"ERR_BLOCK","error_code":"ERR_PACKAGE_CHANGED"}
+        data=approvals();data[id]=digest;save(data)
     return {"status":"APPROVED","id":id,"sha256":digest}
 
 def revoke(id):
     if not IDENT.fullmatch(id):return {"status":"ERR_BLOCK","error_code":"ERR_INVALID_TOOL"}
-    data=approvals();data.pop(id,None);save(data)
+    with approval_transaction():
+        data=approvals();data.pop(id,None);save(data)
     return {"status":"REVOKED","id":id}
 
 def issued_index():

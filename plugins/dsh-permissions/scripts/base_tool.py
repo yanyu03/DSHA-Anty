@@ -66,7 +66,7 @@ def get_active_tier():
     """Discover active DSH permission tier from tier.json."""
     script_dir = Path(__file__).resolve().parent
     repo_root = script_dir.parent if script_dir.name in ("scripts", "bin") else script_dir
-    user_home = Path(os.environ.get("USERPROFILE") or ".")
+    user_home = Path(os.environ.get("USERPROFILE") or os.environ.get("HOME") or str(Path.home()))
 
     candidates = [
         repo_root / "tier.json",
@@ -84,7 +84,7 @@ def get_active_tier():
                         return str(tier).lower()
             except Exception:
                 pass
-    return "auto"
+    return "UNKNOWN"
 
 
 class HostEnvPerceiver:
@@ -489,7 +489,9 @@ class ExecutionEnvelope:
         self.proxy = proxy.strip() if proxy and isinstance(proxy, str) else None
         self.capture = bool(capture)
         self.custom_env = custom_env if isinstance(custom_env, dict) else {}
-        self.trace_id = str(trace_id).strip() if trace_id else None
+        # Treat caller-supplied IDs as untrusted; never turn them into paths.
+        value = str(trace_id).strip() if trace_id else None
+        self.trace_id = value if value and re.fullmatch(r"[A-Za-z0-9_-]{1,96}", value) else None
         self.caller = str(caller).strip() if caller else "ai-assistant"
 
     @classmethod
@@ -527,9 +529,12 @@ class ExecutionEnvelope:
             clean_env["HTTPS_PROXY"] = self.proxy
             clean_env["HTTP_PROXY"] = self.proxy
 
-        # Apply caller's explicitly whitelisted custom environment variables
+        # No generic custom environment injection. Never permit loader hooks,
+        # cloud keys, PATH, HOME, SSL overrides or implicit proxy forwarding.
         for k, v in self.custom_env.items():
-            clean_env[str(k)] = str(v)
+            if (isinstance(k, str) and k in {"TZ", "NO_COLOR"}
+                    and isinstance(v, str) and len(v) <= 128 and "\x00" not in v):
+                clean_env[k] = v
 
         return clean_env
 
@@ -724,7 +729,9 @@ class TraceReceipt:
     """
 
     def __init__(self, trace_id=None, caller="ai-assistant", tool_id="", tool_name="", category="", args=None, context=None):
-        self.trace_id = trace_id or f"tr_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}"
+        valid_id = str(trace_id) if trace_id is not None else ""
+        self.trace_id = (valid_id if re.fullmatch(r"[A-Za-z0-9_-]{1,96}", valid_id)
+                         else f"tr_{uuid.uuid4().hex}")
         self.timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         self.caller = caller or "ai-assistant"
         self.tool_id = tool_id
@@ -755,14 +762,9 @@ class TraceReceipt:
         self.rollback = rollback or self._default_rollback()
 
     def _default_reproducer(self):
-        cmd_args = " ".join([f'"{a}"' if " " in a else a for a in self.args])
-        cli = f"dsha {self.tool_id} {cmd_args}".strip()
-        py = f"from index import Call_Tools; res = Call_Tools('{self.tool_id}', {self.args})"
-        return {
-            "cli_command": cli,
-            "powershell_command": f"powershell -Command \"& {cli}\"",
-            "python_snippet": py,
-        }
+        # Reproducers must never persist raw arguments or secrets.
+        return {"tool_id": self.tool_id, "args_redacted": True,
+                "note": "Reproduce by issuing a new authorized invocation."}
 
     def _default_rollback(self):
         is_safe = self.exit_code in (0, 124, 125, 126, 127)
@@ -786,16 +788,20 @@ class TraceReceipt:
             "status": self.status,
             "exit_code": self.exit_code,
             "duration_ms": self.duration_ms,
-            "caller": self.caller,
+            "caller": "[redacted]",
             "tool_id": self.tool_id,
             "tool_name": self.tool_name,
             "category": self.category,
-            "args": self.args,
-            "host_fingerprint": self.host_fingerprint,
-            "stages": [s.to_dict() for s in self.stages],
-            "causal_chain": self.causal_chain,
-            "reproducer": self.reproducer,
-            "rollback": self.rollback,
+            "args": ["[redacted]"] if self.args else [],
+            "host_fingerprint": "[redacted]",
+            # Persist only safe telemetry, never arbitrary messages/evidence.
+            "stages": [{"stage": s.stage, "status": s.status,
+                        "latency_ms": s.latency_ms} for s in self.stages],
+            "causal_chain": ({"failed_stage": self.causal_chain.get("failed_stage"),
+                              "error_code": self.causal_chain.get("error_code")}
+                             if isinstance(self.causal_chain, dict) else None),
+            "reproducer": {"tool_id": self.tool_id, "args_redacted": True},
+            "rollback": {"action": "manual_review_required"},
         }
 
     def format_retrace(self):
@@ -909,24 +915,25 @@ class TraceStore:
 
     @classmethod
     def save(cls, receipt):
-        if not receipt or not receipt.trace_id:
+        if not receipt or not isinstance(receipt.trace_id, str):
+            return None
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,96}", receipt.trace_id):
             return None
         try:
-            d = cls.get_trace_dir()
-            out_file = d / f"{receipt.trace_id}.json"
+            directory = cls.get_trace_dir()
+            target = directory / (receipt.trace_id + ".json")
+            if target.parent.resolve() != directory.resolve():
+                return None
             data = receipt.to_dict()
-            with open(out_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-
-            traces = sorted(d.glob("tr_*.json"), key=lambda p: p.stat().st_mtime)
-            if len(traces) > 100:
-                for old in traces[:-100]:
-                    try:
-                        old.unlink()
-                    except Exception:
-                        pass
-            return str(out_file)
-        except Exception:
+            # O_EXCL prevents overwriting existing traces (including symlinks).
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+            if hasattr(os, "O_NOFOLLOW"):
+                flags |= os.O_NOFOLLOW
+            fd = os.open(target, flags, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                json.dump(data, stream, ensure_ascii=False, indent=2)
+            return str(target)
+        except (OSError, ValueError, TypeError):
             return None
 
     @classmethod

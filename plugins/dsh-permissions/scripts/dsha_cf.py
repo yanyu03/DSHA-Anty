@@ -144,9 +144,16 @@ def dispatch(args, cwd=None, execute=True):
         return 2,{"status":"ERR_BLOCK","error_code":"ERR_PROJECT_REVIEW_REQUIRED",
                   "backend":route["backend"],"reason":"No recognized project config. Use explicit cfcli command after reviewing project setup."}
     try:
-        process = subprocess.run([binary,*route["argv"]],cwd=cwd,check=False)
+        # Fixed watchdog prevents unattended commands blocking the agent forever.
+        # Authentication is interactive and intentionally not retried on another CLI.
+        command_timeout = 120 if route.get("interactive") else 90
+        process = subprocess.run([binary,*route["argv"]],cwd=cwd,check=False,
+                                 timeout=command_timeout)
         return process.returncode,{"status":"EXECUTED","backend":route["backend"],
                                    "returncode":process.returncode}
+    except subprocess.TimeoutExpired:
+        return 124,{"status":"ERR_BLOCK","error_code":"ERR_EXEC_TIMEOUT",
+                    "backend":route["backend"],"executed":True}
     except OSError:
         return 2,{"status":"ERR_BLOCK","error_code":"ERR_EXEC_FAILED","backend":route["backend"]}
 
