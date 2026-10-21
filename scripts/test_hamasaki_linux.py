@@ -50,8 +50,23 @@ class LinuxBootstrapContracts(unittest.TestCase):
         self.assertTrue(plan["authorization_required"])
 
     def test_tier_malformed_does_not_grant_access(self):
-        with patch.object(h.Path, "read_text", return_value='{"tier":"typo"}'):
-            self.assertEqual(h.tier_status(Path(".")), "INVALID")
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            folder=Path(d)/"plugins/dsh-permissions"
+            folder.mkdir(parents=True)
+            (folder/"tier.json").write_text('{"tier":"typo"}')
+            self.assertEqual(h.tier_status(Path(d)), "INVALID")
+
+    def test_tier_symlink_cannot_elevate(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            folder=root/"plugins/dsh-permissions"
+            folder.mkdir(parents=True)
+            target=root/"privileged.json"
+            target.write_text('{"tier":"danger-full-access"}')
+            (folder/"tier.json").symlink_to(target)
+            self.assertEqual(h.tier_status(root), "UNKNOWN")
 
 if __name__ == "__main__":
     unittest.main()

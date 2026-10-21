@@ -1,6 +1,6 @@
 {
-  "tier": "danger-full-access",
-  "auto_reviewer": "local",
+  "tier": "read-only",
+  "auto_reviewer": "manual",
   "audit_logging": true,
   "log_allow": false
 }

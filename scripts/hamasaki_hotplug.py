@@ -44,7 +44,7 @@ def approvals():
 def approval_transaction():
     p=trust_file()
     p.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
-    if not isdir(p.parent) or (p.exists() and not isfile(p)):
+    if not isdir(p.parent) or p.is_symlink() or (p.exists() and not isfile(p)):
         raise ValueError("ERR_UNSAFE_APPROVAL_LOCATION")
     lock=p.with_name(p.name+".lock")
     flags=os.O_CREAT|os.O_RDWR
@@ -59,7 +59,7 @@ def approval_transaction():
 
 def save(data):
     p=trust_file();p.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
-    if not isdir(p.parent) or (p.exists() and not isfile(p)): raise ValueError("unsafe approval path")
+    if not isdir(p.parent) or p.is_symlink() or (p.exists() and not isfile(p)): raise ValueError("unsafe approval path")
     with tempfile.NamedTemporaryFile(mode="w",dir=p.parent,delete=False) as f:
         t=Path(f.name);os.chmod(t,0o600);json.dump(data,f,sort_keys=True);f.flush();os.fsync(f.fileno())
     try: os.replace(t,p)
@@ -126,12 +126,19 @@ def scan():
     root=home()
     if not root.exists():return []
     if not isdir(root):return [{"id":"[root]","status":"BLOCKED","reason":"invalid root"}]
-    paths=[p for p in sorted(root.iterdir()) if isdir(p) or p.is_symlink()]
+    # Bound directory enumeration before sorting; fail on the 81st entry.
+    paths=[]
+    with os.scandir(root) as handle:
+        for item in handle:
+            p=Path(item.path)
+            if isdir(p) or p.is_symlink():
+                paths.append(p)
+                if len(paths)>80: break
     if len(paths)>80:
         return [{"id":"[capacity]","status":"BLOCKED","reason":"ERR_TOOL_CAPACITY",
                  "executable":False}]
     known=approvals()
-    return [inspect(p,known) for p in paths]
+    return [inspect(p,known) for p in sorted(paths)]
 
 def catalog():
     return {x["id"]:{"name":x["name"],"keywords":x["keywords"],"extensions":[],

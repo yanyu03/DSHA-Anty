@@ -81,8 +81,12 @@ def ds_core(root: Path) -> dict[str, str]:
 def tier_status(root: Path) -> str:
     config = root / "plugins/dsh-permissions/tier.json"
     try:
+        # Follow the same symlink/size fail-closed policy as BaseTool.
+        if config.is_symlink() or not config.is_file() or config.stat().st_size>65536:
+            return "UNKNOWN"
         data = json.loads(config.read_text(encoding="utf-8"))
-        tier = str(data.get("tier", "")).strip().lower()
+        raw = data.get("tier") if isinstance(data,dict) else None
+        tier = raw.strip().lower() if isinstance(raw,str) else ""
         return tier if tier in VALID_TIERS else "INVALID"
     except (OSError, ValueError, TypeError):
         return "UNKNOWN"

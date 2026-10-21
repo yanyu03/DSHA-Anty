@@ -56,8 +56,8 @@
       "files": {
         "scripts/router.py": "b15fd385c359c88e779a8db8fd30c9a81ddb271b",
         "scripts/index.py": "19c93145eb442907a22a982ccd6dd5cbe8971b04",
-        "scripts/base_tool.py": "75d14eb82a71e103ac850c44534d5eec29daa492",
-        "plugins/dsh-permissions/scripts/base_tool.py": "75d14eb82a71e103ac850c44534d5eec29daa492",
+        "scripts/base_tool.py": "1eb1e3d76f01cbffe07db74ceacf9adf01e9c135",
+        "plugins/dsh-permissions/scripts/base_tool.py": "1eb1e3d76f01cbffe07db74ceacf9adf01e9c135",
         "plugins/dsh-permissions/scripts/englock.py": "883708b98f91152d77cca3fe248ff6b2c0b86d7a"
       }
     },
@@ -65,12 +65,13 @@
       "category": "CoreControl",
       "files": {
         "scripts/hamasaki_identity.py": "2c470848b0c429b3010029121c509cca63ed0582",
-        "scripts/hamasaki_sandbox.py": "207d94416d53946b13e70abdca30f3b6804d715f",
-        "scripts/hamasaki_executor.py": "1237442dc4eeefef055ee866dcf9981ba7ec4c15",
-        "scripts/hamasaki_hotplug.py": "91261dd4504ec317a1e2c251ad72779c15d32ff2",
+        "scripts/hamasaki_sandbox.py": "8bea3d68ce818eda1967bd400d51e191ae4c53b8",
+        "scripts/hamasaki_executor.py": "1cf2fb86f1098fc2d45395de94027955fd947378",
+        "scripts/hamasaki_hotplug.py": "bc7d74a9925fe8f381a01d7389570a57c386e379",
         "scripts/hamasaki_pipeline.py": "97f8338ea8dd049bdbd52cae35e94135e1ab68c1",
         "scripts/hamasaki_plan_cli.py": "c1de9be02e000a7dc1e2a6be9aaaa5a80e96bdb7",
-        "scripts/hamasaki_builtin_tool.py": "26c5f7c2ea97d13a11aa25f25c1d556c29a0b97a"
+        "scripts/hamasaki_builtin_tool.py": "26c5f7c2ea97d13a11aa25f25c1d556c29a0b97a",
+        "scripts/hamasaki_linux.py": "7b70d0ee971211d30ee7bef3cc880d538e71ea3b"
       }
     },
     "markdown": {

@@ -75,16 +75,21 @@ def get_active_tier():
         user_home / ".gemini" / "config" / "plugins" / "dsh-permissions" / "tier.json",
         user_home / ".gemini" / "config" / "tier.json",
     ]
-    for c in candidates:
-        if c.is_file():
+    # An invalid high-priority policy cannot fall through to a permissive copy.
+    valid = {"read-only", "workspace-write", "danger-full-access", "auto"}
+    for candidate in candidates:
+        if candidate.is_symlink():
+            return "UNKNOWN"
+        if candidate.exists():
             try:
-                with open(c, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    tier = data.get("tier")
-                    if tier:
-                        return str(tier).lower()
-            except Exception:
-                pass
+                if not candidate.is_file() or candidate.stat().st_size > 65536:
+                    return "UNKNOWN"
+                data = json.loads(candidate.read_text(encoding="utf-8"))
+                tier = data.get("tier") if isinstance(data, dict) else None
+                value = tier.strip().lower() if isinstance(tier, str) else ""
+                return value if value in valid else "UNKNOWN"
+            except (OSError, ValueError, TypeError):
+                return "UNKNOWN"
     return "UNKNOWN"
 
 
@@ -107,8 +112,20 @@ class HostEnvPerceiver:
             raw_home = "."
         user_home = Path(raw_home or ".")
 
+        if os.name != "nt":
+            # Never synthesize C:/Windows and AppData paths on Linux hosts.
+            data_root = Path(os.environ.get("XDG_DATA_HOME") or user_home/".local"/"share")
+            config_root = Path(os.environ.get("XDG_CONFIG_HOME") or user_home/".config")
+            state_root = Path(os.environ.get("XDG_STATE_HOME") or user_home/".local"/"state")
+            return {
+                "sys_drive": Path("/"), "sys_root": Path("/"),
+                "user_home": user_home, "prog_files": Path("/usr"),
+                "prog_files_x86": Path("/usr"), "local_data": data_root,
+                "roam_data": config_root, "prog_data": state_root,
+            }
+
         try:
-            sys_drive = os.environ.get("SystemDrive") or (Path(sys.executable).drive if hasattr(Path(sys.executable), "drive") and Path(sys.executable).drive else "C:")
+            sys_drive = os.environ.get("SystemDrive") or Path(sys.executable).drive or ("C:" if os.name == "nt" else "/")
         except Exception:
             sys_drive = "C:"
 
@@ -905,14 +922,23 @@ class TraceStore:
             user_home = Path(os.environ.get("USERPROFILE") or os.path.expanduser("~") or ".")
             primary = user_home / ".gemini" / "config" / "logs" / "traces"
 
-        try:
-            primary.mkdir(parents=True, exist_ok=True)
-            return primary
-        except Exception:
-            user_home = Path(os.environ.get("USERPROFILE") or os.path.expanduser("~") or ".")
-            sec = user_home / ".gemini" / "config" / "logs" / "traces"
-            sec.mkdir(parents=True, exist_ok=True)
-            return sec
+        # Linux traces live in private XDG state, not inside the checkout.
+        if os.name != "nt":
+            state = Path(os.environ.get("XDG_STATE_HOME") or Path.home()/".local"/"state")
+            primary = state/"hamasaki"/"traces"
+        if primary.is_symlink():
+            raise ValueError("ERR_UNSAFE_TRACE_DIRECTORY")
+        primary.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if primary.is_symlink() or not primary.is_dir():
+            raise ValueError("ERR_UNSAFE_TRACE_DIRECTORY")
+        info = primary.stat()
+        if hasattr(os, "getuid") and info.st_uid != os.getuid():
+            raise ValueError("ERR_TRACE_DIRECTORY_OWNER")
+        if info.st_mode & 0o077:
+            primary.chmod(0o700)
+        if primary.stat().st_mode & 0o077:
+            raise ValueError("ERR_TRACE_DIRECTORY_PERMISSIONS")
+        return primary
 
     @classmethod
     def save(cls, receipt):
@@ -954,19 +980,24 @@ class TraceStore:
 
     @classmethod
     def get(cls, trace_id):
-        if not trace_id:
+        if not isinstance(trace_id,str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,96}", trace_id):
             return None
-        tid = Path(trace_id).stem
-        d = cls.get_trace_dir()
+        tid = trace_id
+        try:
+            d = cls.get_trace_dir()
+        except (OSError,ValueError):
+            return None
         target = d / f"{tid}.json"
+        if target.is_symlink():
+            return None
         if not target.is_file():
             user_home = Path(os.environ.get("USERPROFILE") or os.path.expanduser("~") or ".")
             alt = user_home / ".gemini" / "config" / "logs" / "traces" / f"{tid}.json"
-            if alt.is_file():
+            if alt.is_file() and not alt.is_symlink():
                 target = alt
             else:
                 alt_repo = Path.cwd() / "logs" / "traces" / f"{tid}.json"
-                if alt_repo.is_file():
+                if alt_repo.is_file() and not alt_repo.is_symlink():
                     target = alt_repo
                 else:
                     return None
@@ -1997,7 +2028,13 @@ class ToolRegistry:
             tool = tool_or_cls
         else:
             raise TypeError("Expected BaseTool instance or subclass")
-        self._registry[tool.id.lower()] = tool
+        # No silent replacement of a registered Tool under the same ID.
+        key = str(tool.id).lower()
+        if not re.fullmatch(r"[a-z][a-z0-9_-]{1,50}", key):
+            raise ValueError("ERR_INVALID_TOOL_ID")
+        if key in self._registry:
+            raise ValueError("ERR_DUPLICATE_TOOL_ID")
+        self._registry[key] = tool
         return tool
 
     def get(self, tool_id):
