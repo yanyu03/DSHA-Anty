@@ -1,0 +1,6 @@
+#!/bin/sh
+# Explicit Linux adapter entrypoint. Does not modify user state or require sudo.
+set -eu
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+exec python3 "$REPO_ROOT/scripts/hamasaki_linux.py" "$@"
