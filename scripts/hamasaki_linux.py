@@ -20,6 +20,8 @@ CAPABILITIES = {
     "gh": ("gh", "--version"),
     "node": ("node", "--version"),
     "npm": ("npm", "--version"),
+    "cfcli": ("cloudflare",),
+    "wrangler": ("wrangler",),
     "pwsh": ("pwsh",),
     "dolphin": ("dolphin", "--version"),
     "kreadconfig": ("kreadconfig6", "--version"),
@@ -38,6 +40,15 @@ def run_probe(args: list[str], timeout: float = 2.0) -> tuple[bool, str]:
     return True, (result.stdout or result.stderr).strip()[:160]
 
 def capability(name: str) -> dict[str, str | None]:
+    if name in ("cfcli", "wrangler"):
+        # Runtime identity, not authentication. CF CLI and Wrangler are distinct.
+        try:
+            from dsha_cf import locate
+            binary = locate(name)
+        except (ImportError, OSError):
+            binary = None
+        return {"state": "NATIVE" if binary else "UNAVAILABLE", "binary": binary,
+                "evidence": "identity_help_verified_auth_not_checked" if binary else "not_verified"}
     argv = CAPABILITIES[name]
     binary = shutil.which(argv[0])
     if not binary:

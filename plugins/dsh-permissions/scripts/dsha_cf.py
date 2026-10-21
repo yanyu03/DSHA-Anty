@@ -1,352 +1,158 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+"""DSHA Cloudflare dispatch: official cf CLI first; Wrangler credentials isolated.
+
+No automatic login, proxy insertion, or fallback to a different CLI on failure.
+The two copies of this module intentionally match for legacy plugin installs.
 """
-DSHA Cloudflare CLI Conduit (DHSA-TestWeb).
-
-Role & Mission:
-  Direct bridge to Cloudflare developer ecosystem (Wrangler, Pages, Workers, Tunnel).
-  Wraps local wrangler CLI, normalizes paths and encodings, handles proxies,
-  and provides standardized web/edge commands for DSHA agents.
-
-CLI Commands:
-  cf.cmd status
-  cf.cmd whoami
-  cf.cmd dev [args]
-  cf.cmd deploy [args]
-  cf.cmd pages [args]
-  cf.cmd tunnel [args]
-  cf.cmd selftest
-"""
-
-import argparse
+from __future__ import annotations
 import json
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 
-# Ensure UTF-8 output across Windows consoles
-if hasattr(sys.stdout, "reconfigure"):
+PROJECT_OPS = {"init", "dev", "build", "deploy"}
+WRANGLER_ONLY = {"tail", "secret", "types"}
+CFCLI_ONLY = {"zones", "dns", "radar", "zero-trust", "migrate", "workflows",
+              "vectorize", "queues", "pipelines", "schema", "docs", "workers",
+              "accounts", "kv", "d1", "r2", "ai"}
+
+def project_kind(path=None):
+    root = Path(path) if path is not None else Path.cwd()
+    if (root / "cloudflare.config.ts").is_file():
+        return "cfcli"
+    if any((root / x).is_file() for x in ("wrangler.jsonc", "wrangler.json", "wrangler.toml")):
+        return "wrangler"
+    return "unspecified"
+
+def _is_own_wrapper(path):
+    wrapper = Path(__file__).resolve().parents[1] / "bin" / "cf.cmd"
     try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+        return wrapper.exists() and Path(path).samefile(wrapper)
+    except OSError:
+        return False
 
+def _identity_probe(name, path):
+    if _is_own_wrapper(path):
+        return False
+    # Never run whoami, login, or any remote API command as a discovery probe.
+    argv = ([path, "cli", "search", "--help"] if name == "cfcli"
+            else [path, "whoami", "--help"] if name == "wrangler"
+            else [path, "--version"])
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, errors="replace",
+                           timeout=5, check=False)
+        return r.returncode == 0 and bool((r.stdout or r.stderr).strip())
+    except (subprocess.TimeoutExpired, OSError):
+        return False
 
-def find_tool(name):
-    # Check standard PATH
-    p = shutil.which(name)
-    if p:
-        return p
-
-    user_home = Path(os.environ.get("USERPROFILE") or ".")
-    app_data = Path(os.environ.get("APPDATA") or str(user_home / "AppData" / "Roaming"))
-    local_app_data = Path(os.environ.get("LOCALAPPDATA") or str(user_home / "AppData" / "Local"))
-
-    candidates = {
-        "cf": [
-            app_data / "npm" / "cloudflare.cmd",
-            app_data / "npm" / "cf.cmd",
-            local_app_data / "Programs" / "nodejs" / "cloudflare.cmd",
-        ],
-        "wrangler": [
-            app_data / "npm" / "wrangler.cmd",
-            app_data / "npm" / "wrangler",
-            local_app_data / "Programs" / "nodejs" / "wrangler.cmd",
-        ],
-        "node": [
-            Path("C:/Program Files/nodejs/node.exe"),
-            local_app_data / "Programs" / "nodejs" / "node.exe",
-        ],
-        "cloudflared": [
-            Path("C:/Program Files/cloudflared/cloudflared.exe"),
-            user_home / "bin" / "cloudflared.exe",
-            user_home / ".gemini" / "config" / "bin" / "cloudflared.exe",
-        ],
-    }
-
-    for c in candidates.get(name, []):
-        if c.is_file():
-            return str(c)
-
+def locate(name):
+    options = {
+        "cfcli": ("cloudflare", "cf", "cloudflare.cmd", "cf.cmd"),
+        "wrangler": ("wrangler", "wrangler.cmd"),
+        "cloudflared": ("cloudflared", "cloudflared.exe"),
+    }.get(name, ())
+    candidates = []
+    for alias in options:
+        path = shutil.which(alias)
+        if path:
+            candidates.append(path)
+    if os.name == "nt":
+        npm = Path(os.environ.get("APPDATA") or Path.home() / "AppData/Roaming") / "npm"
+        candidates.extend(str(npm / x) for x in options if (npm / x).is_file())
+    for path in dict.fromkeys(candidates):
+        if Path(path).is_file() and _identity_probe(name, path):
+            return path
     return None
 
+def select_command(args, cwd=None):
+    """Return a deterministic single-backend plan, never execute or authorize."""
+    args = list(args)
+    if not args or args[0] == "status":
+        return {"status": "STATUS"}
+    op, rest = args[0].lower(), args[1:]
+    if op in ("wrangler", "cfcli", "cloudflare"):
+        if not rest:
+            return {"status": "ERR_BLOCK", "error_code": "ERR_COMMAND_REQUIRED"}
+        backend = "wrangler" if op == "wrangler" else "cfcli"
+        if rest[0] in PROJECT_OPS and project_kind(cwd) not in ("unspecified",backend):
+            return {"status": "ERR_BLOCK", "error_code": "ERR_PROJECT_BACKEND_MISMATCH",
+                    "reason": "Do not run a project CLI against the other CLI's configuration."}
+        return {"status": "ROUTED", "backend": backend, "argv": rest, "explicit": True}
+    if op == "whoami":
+        return {"status": "ROUTED", "backend": "cfcli", "argv": ["auth", "whoami", *rest]}
+    if op == "login":
+        return {"status": "ROUTED", "backend": "cfcli", "argv": ["auth", "login", *rest],
+                "interactive": True}
+    if op == "search":
+        if not rest:
+            return {"status": "ERR_BLOCK", "error_code": "ERR_QUERY_REQUIRED"}
+        return {"status": "ROUTED", "backend": "cfcli",
+                "argv": ["cli", "search", " ".join(rest)]}
+    if op == "api":
+        if not rest:
+            return {"status": "ERR_BLOCK", "error_code": "ERR_COMMAND_REQUIRED"}
+        return {"status": "ROUTED", "backend": "cfcli", "argv": rest}
+    if op in ("auth", "cli", "mcp"):
+        return {"status": "ROUTED", "backend": "cfcli", "argv": args}
+    if op == "tunnel":
+        return {"status": "ROUTED", "backend": "cloudflared", "argv": rest}
+    if op in PROJECT_OPS:
+        kind = project_kind(cwd)
+        return {"status": "ROUTED", "backend": "wrangler" if kind == "wrangler" else "cfcli",
+                "argv": args, "project": kind, "needs_project_review": kind == "unspecified"}
+    if op == "pages":
+        backend = "wrangler" if rest and rest[0] in ("deploy", "dev", "functions", "secret") else "cfcli"
+        return {"status": "ROUTED", "backend": backend, "argv": args}
+    if op in WRANGLER_ONLY:
+        return {"status": "ROUTED", "backend": "wrangler", "argv": args}
+    if op in CFCLI_ONLY:
+        return {"status": "ROUTED", "backend": "cfcli", "argv": args}
+    return {"status": "ERR_BLOCK", "error_code": "ERR_UNKNOWN_CF_COMMAND",
+            "reason": "Use explicit 'cfcli <command>' or 'wrangler <command>'. No fallback."}
 
-def get_cf_environment():
-    cf_path = find_tool("cf")
-    wrangler_path = find_tool("wrangler")
-    node_path = find_tool("node")
-    cloudflared_path = find_tool("cloudflared")
+def status():
+    # API token can override both CLIs' profile selection. Never print its value.
+    return {"status": "TOOLCHAIN_ONLY", "preferred": "cfcli",
+            "cfcli": {"path": locate("cfcli"), "auth": "NOT_CHECKED"},
+            "wrangler": {"path": locate("wrangler"), "auth": "NOT_CHECKED"},
+            "cloudflared": {"path": locate("cloudflared"), "auth": "NOT_CHECKED"},
+            "api_token_env_set": bool(os.getenv("CLOUDFLARE_API_TOKEN")),
+            "account_id_env_set": bool(os.getenv("CLOUDFLARE_ACCOUNT_ID")),
+            "note": "cf auth whoami != wrangler whoami; never reuse OAuth sessions",
+            "proxy_injected": False}
 
-    env_info = {
-        "cf_path": cf_path,
-        "cf_version": None,
-        "wrangler_path": wrangler_path,
-        "wrangler_version": None,
-        "node_path": node_path,
-        "node_version": None,
-        "cloudflared_path": cloudflared_path,
-        "cloudflared_version": None,
-        "workerd_installed": False,
-        "authenticated": False,
-        "auth_detail": None,
-    }
-
-    if cf_path:
-        try:
-            r = subprocess.run(
-                [cf_path, "--version"],
-                capture_output=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=5,
-            )
-            if r.returncode == 0:
-                env_info["cf_version"] = r.stdout.strip()
-        except Exception:
-            pass
-
-    if node_path:
-        try:
-            r = subprocess.run(
-                [node_path, "--version"],
-                capture_output=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=5,
-            )
-            if r.returncode == 0:
-                env_info["node_version"] = r.stdout.strip()
-        except Exception:
-            pass
-
-    if wrangler_path:
-        try:
-            r = subprocess.run(
-                [wrangler_path, "--version"],
-                capture_output=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=10,
-            )
-            if r.returncode == 0:
-                env_info["wrangler_version"] = r.stdout.strip()
-        except Exception:
-            pass
-
-    if cloudflared_path:
-        try:
-            r = subprocess.run(
-                [cloudflared_path, "--version"],
-                capture_output=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=5,
-            )
-            if r.returncode == 0:
-                env_info["cloudflared_version"] = r.stdout.strip()
-        except Exception:
-            pass
-
-    user_home = Path(os.environ.get("USERPROFILE") or ".")
-    workerd_dir = user_home / "AppData" / "Roaming" / "npm" / "node_modules" / "@cloudflare" / "workerd-windows-64"
-    env_info["workerd_installed"] = workerd_dir.is_dir()
-
-    return env_info
-
-
-def run_wrangler_cmd(args_list):
-    wrangler = find_tool("wrangler")
-    if not wrangler:
-        print("[DSHA-CF] Error: wrangler CLI not found in PATH or AppData/npm.", file=sys.stderr)
-        print("[DSHA-CF] Run: npm install -g wrangler to install.", file=sys.stderr)
-        return 1
-
-    cmd = [wrangler] + args_list
+def dispatch(args, cwd=None, execute=True):
+    route = select_command(args,cwd)
+    if route["status"] == "STATUS":
+        return 0,status()
+    if route["status"] != "ROUTED":
+        return 2,route
+    binary = locate(route["backend"])
+    if not binary:
+        return 2,{"status":"ERR_BLOCK","error_code":"ERR_BACKEND_UNAVAILABLE",
+                  "backend":route["backend"],"reason":"No identity-verified executable; no fallback"}
+    if not execute:
+        return 0,{"status":"PLAN_ONLY",**route,"binary":binary,"executed":False}
     try:
-        proc = subprocess.run(cmd)
-        return proc.returncode
-    except Exception as e:
-        print(f"[DSHA-CF] Execution failed: {e}", file=sys.stderr)
-        return 1
+        process = subprocess.run([binary,*route["argv"]],cwd=cwd,check=False)
+        return process.returncode,{"status":"EXECUTED","backend":route["backend"],
+                                   "returncode":process.returncode}
+    except OSError:
+        return 2,{"status":"ERR_BLOCK","error_code":"ERR_EXEC_FAILED","backend":route["backend"]}
 
-
-def run_status():
-    env = get_cf_environment()
-    print("=== DSHA Cloudflare 工具链状态 (Cloudflare Conduit) ===")
-    print(f"  分支特性: DHSA-TestWeb 直通引擎")
-    print(f"  Node.js:  {env['node_version'] or '未检测到'} ({env['node_path'] or '未找到'})")
-    print(f"  CF Forge: {env['cf_version'] or '未检测到'} ({env['cf_path'] or '未找到'})")
-    print(f"  Wrangler: {env['wrangler_version'] or '未检测到'} ({env['wrangler_path'] or '未找到'})")
-    workerd_tag = "就绪 (@cloudflare/workerd-windows-64)" if env['workerd_installed'] else "未安装"
-    print(f"  Workerd:  {workerd_tag}")
-    print(f"  Tunnel:   {env['cloudflared_version'] or '支持 (通过 cf tunnels 或 cloudflared)'}")
-
-    if env["wrangler_path"]:
-        print("\n  测试 Wrangler 鉴权状态 (wrangler whoami)...")
-        custom_env = os.environ.copy()
-        if "HTTPS_PROXY" not in custom_env and "ALL_PROXY" not in custom_env:
-            # Propagate local socks5 proxy if available
-            custom_env["ALL_PROXY"] = "socks5://127.0.0.1:10808"
-            custom_env["HTTPS_PROXY"] = "http://127.0.0.1:10809"
-        try:
-            r = subprocess.run(
-                [env["wrangler_path"], "whoami"],
-                capture_output=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=12,
-                env=custom_env,
-            )
-            for line in r.stdout.splitlines():
-                if line.strip():
-                    print(f"    {line}")
-            if "You are not authenticated" in r.stdout:
-                print("    [提示] 未登录 Cloudflare 账号。可执行 'cf login' 授权，或使用 'cf deploy --temporary' 测试预览。")
-        except subprocess.TimeoutExpired:
-            print("    [提示] 鉴权网络检测超时（可在配置代理或登录后正常使用，或使用 'cf dev' 本地运行）。")
-        except Exception as e:
-            print(f"    检查失败: {e}")
-    else:
-        print("  [WARN] 未检测到 Wrangler，请先安装 Node.js 与 Wrangler。")
-
-
-def run_selftest():
-    tests = []
-    # Test 1: Node tool discovery
-    node = find_tool("node")
-    tests.append(("node_tool_detected", node is not None))
-
-    # Test 2: Wrangler tool discovery
-    wrangler = find_tool("wrangler")
-    tests.append(("wrangler_tool_detected", wrangler is not None))
-
-    # Test 3: Environment dictionary structure
-    env = get_cf_environment()
-    tests.append(("env_structure_valid", "wrangler_path" in env and "node_version" in env))
-
-    # Test 4: Argument parsing
-    parser = build_parser()
-    tests.append(("parser_setup", parser is not None))
-
-    # Test 5: Command mapping validity
-    subcmds = ["status", "whoami", "dev", "deploy", "pages", "tunnel", "selftest"]
-    valid_sub = all(s in parser._subparsers._group_actions[0].choices for s in subcmds)
-    tests.append(("subcommand_mapping", valid_sub))
-
-    passed = sum(1 for _, ok in tests if ok)
-    total = len(tests)
-    print(f"selftest: {passed}/{total}")
-    for name, ok in tests:
-        status = "PASS" if ok else "FAIL"
-        print(f"  [{status}] {name}")
-    return passed == total
-
-
-def build_parser():
-    parser = argparse.ArgumentParser(description="DSHA Cloudflare CLI Conduit")
-    subparsers = parser.add_subparsers(dest="command", help="Cloudflare subcommands")
-
-    subparsers.add_parser("status", help="Check Cloudflare toolchain & auth status")
-    subparsers.add_parser("whoami", help="Display current Cloudflare identity")
-    subparsers.add_parser("selftest", help="Run internal self-tests")
-
-    p_dev = subparsers.add_parser("dev", help="Start local worker dev server")
-    p_dev.add_argument("dev_args", nargs=argparse.REMAINDER, help="Arguments passed to wrangler dev")
-
-    p_deploy = subparsers.add_parser("deploy", help="Deploy worker or application")
-    p_deploy.add_argument("deploy_args", nargs=argparse.REMAINDER, help="Arguments passed to wrangler deploy")
-
-    p_pages = subparsers.add_parser("pages", help="Cloudflare Pages management")
-    p_pages.add_argument("pages_args", nargs=argparse.REMAINDER, help="Arguments passed to wrangler pages")
-
-    p_tunnel = subparsers.add_parser("tunnel", help="Cloudflare Tunnel operations")
-    p_tunnel.add_argument("tunnel_args", nargs=argparse.REMAINDER, help="Arguments passed to tunnel")
-
-    return parser
-
-
-def main():
-    if len(sys.argv) > 1 and sys.argv[1] in ("--help", "-h"):
-        parser = build_parser()
-        parser.print_help()
+def main(args=None):
+    argv=list(sys.argv[1:] if args is None else args)
+    if argv and argv[0] in ("--help","-h"):
+        print("cf [--route-only] status|whoami|login|search|api|wrangler|cfcli|dev|deploy|...")
         return 0
+    dry="--route-only" in argv
+    argv=[x for x in argv if x!="--route-only"]
+    code,out=dispatch(argv,execute=not dry)
+    if out.get("status")!="EXECUTED":
+        print(json.dumps(out,ensure_ascii=False,indent=2))
+    return code
 
-    if len(sys.argv) > 1 and sys.argv[1] == "selftest":
-        ok = run_selftest()
-        sys.exit(0 if ok else 1)
-
-    if len(sys.argv) > 1 and sys.argv[1] == "status":
-        run_status()
-        return 0
-
-    if len(sys.argv) > 1 and sys.argv[1] == "whoami":
-        return run_wrangler_cmd(["whoami"])
-
-    if len(sys.argv) > 1 and sys.argv[1] == "search":
-        cf_bin = find_tool("cf")
-        if not cf_bin:
-            print("[DSHA-CF] Error: Cloudflare Forge CLI ('cf' / 'cloudflare') not found.", file=sys.stderr)
-            return 1
-        cmd = [cf_bin, "cli", "search"] + sys.argv[2:]
-        return subprocess.run(cmd).returncode
-
-    if len(sys.argv) > 1 and sys.argv[1] == "mcp":
-        cf_bin = find_tool("cf")
-        if not cf_bin:
-            print("[DSHA-CF] Error: Cloudflare Forge CLI ('cf' / 'cloudflare') not found.", file=sys.stderr)
-            return 1
-        cmd = [cf_bin, "mcp"] + sys.argv[2:]
-        return subprocess.run(cmd).returncode
-
-    if len(sys.argv) > 1 and sys.argv[1] == "api":
-        cf_bin = find_tool("cf")
-        if not cf_bin:
-            print("[DSHA-CF] Error: Cloudflare Forge CLI ('cf' / 'cloudflare') not found.", file=sys.stderr)
-            return 1
-        cmd = [cf_bin] + sys.argv[2:]
-        return subprocess.run(cmd).returncode
-
-    if len(sys.argv) > 1 and sys.argv[1] == "wrangler":
-        return run_wrangler_cmd(sys.argv[2:])
-
-    # Unified CF API operations
-    unified_cmds = ("zones", "dns", "radar", "zero-trust", "migrate", "workflows", "vectorize", "queues", "pipelines")
-    if len(sys.argv) > 1 and sys.argv[1] in unified_cmds:
-        cf_bin = find_tool("cf")
-        if cf_bin:
-            cmd = [cf_bin] + sys.argv[1:]
-            return subprocess.run(cmd).returncode
-        return run_wrangler_cmd(sys.argv[1:])
-
-    if len(sys.argv) > 1 and sys.argv[1] in ("dev", "deploy", "pages", "types", "tail", "kv", "d1", "r2", "ai"):
-        # Direct pass-through to wrangler
-        return run_wrangler_cmd(sys.argv[1:])
-
-    if len(sys.argv) > 1 and sys.argv[1] == "tunnel":
-        cloudflared = find_tool("cloudflared")
-        if cloudflared:
-            cmd = [cloudflared] + sys.argv[2:]
-            return subprocess.run(cmd).returncode
-        else:
-            cf_bin = find_tool("cf")
-            if cf_bin:
-                cmd = [cf_bin, "tunnels"] + sys.argv[2:]
-                return subprocess.run(cmd).returncode
-            print("[DSHA-CF] cloudflared.exe not found in standard paths.")
-            print("[DSHA-CF] To run tunnels: winget install --id Cloudflare.cloudflared or download cloudflared.exe", file=sys.stderr)
-            return 1
-
-    # Default fallback: pass all args directly to wrangler
-    if len(sys.argv) > 1:
-        return run_wrangler_cmd(sys.argv[1:])
-
-    # If no args, run status
-    run_status()
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+if __name__=="__main__":
+    raise SystemExit(main())

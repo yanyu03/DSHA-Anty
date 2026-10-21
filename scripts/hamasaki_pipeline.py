@@ -12,21 +12,23 @@ from pathlib import Path
 from typing import Callable
 import hamasaki_linux as linux
 import hamasaki_hotplug as hotplug
+from dsha_cf import project_kind
 
 # The original Kaeru Router remains the metadata source for common tools.
 EXTENSIONS = {
     "github": {"name": "Oyasmi GitHubTool (Linux plan)", "keywords": ["github", "gh", "repository", "repo", "git", "仓库", "代码托管", "推送", "拉取"], "extensions": [".git"], "exact_filenames": [], "weight": 1.3},
     "kde": {"name": "Oyasmi KDE / Dolphin (Linux plan)", "keywords": ["kde", "plasma", "dolphin", "konsole", "桌面", "文件管理器"], "extensions": [], "exact_filenames": [], "weight": 1.3},
     "package": {"name": "Oyasmi package source management (plan-only)", "keywords": ["apt", "dnf", "pacman", "zypper", "软件源", "换源", "镜像源", "安装软件", "包管理"], "extensions": [".sources", ".list"], "exact_filenames": [], "weight": 1.3},
+    "wrangler": {"name": "Cloudflare Wrangler (separate Workers login)", "keywords": ["wrangler", "wrangler.toml", "wrangler.json", "wrangler.jsonc"], "extensions": [".toml", ".jsonc"], "exact_filenames": ["wrangler.toml", "wrangler.json", "wrangler.jsonc"], "weight": 1.5},
     "python": {"name": "Oyasmi Python policy / quota hooks (plan-only)", "keywords": ["python", "venv", "pip", "pypi", "虚拟环境", "python权限"], "extensions": [".py"], "exact_filenames": ["pyproject.toml"], "weight": 1.1},
 }
 REQUIRES = {
-    "cf": ("node",), "rea": ("node",), "scribe": ("python",),
+    "cf": ("cfcli",), "wrangler": ("wrangler",), "rea": ("node",), "scribe": ("python",),
     "pwsh": ("pwsh",), "sh": ("bash",), "tier": ("python",),
     "meter": ("python",), "github": ("gh",), "kde": ("dolphin",),
     "python": ("python",), "package": (),
 }
-PENDING_PORT = frozenset({"tier", "meter", "kde", "package", "python", "rea", "cf", "scribe"})
+PENDING_PORT = frozenset({"wrangler", "tier", "meter", "kde", "package", "python", "rea", "cf", "scribe"})
 MUTATING = re.compile(
     r"(?i)\b(push|install|remove|delete|deploy|write|update|upgrade|reset|rebase|commit|sudo|chmod)\b"
     r"|安装|卸载|删除|修改|更改|切换|换源|推送|提交|部署|升级|写入"
@@ -75,7 +77,18 @@ def catalog() -> dict:
         from router import TOOL_REGISTRY
     except (ImportError, RuntimeError, OSError):
         return {}
-    return {**TOOL_REGISTRY, **EXTENSIONS, **hotplug.catalog()}
+    base = {**TOOL_REGISTRY}
+    # Separate Cloudflare CLI from Wrangler instead of letting the cf tool claim
+    # Wrangler's project files or authentication identity.
+    if "cf" in base:
+        meta = dict(base["cf"])
+        meta["name"] = "Cloudflare cf CLI (primary; separate from Wrangler)"
+        meta["keywords"] = [x for x in meta["keywords"] if x not in
+                            ("wrangler", "tunnel", "pages")]
+        meta["exact_filenames"] = ["cloudflare.config.ts"]
+        meta["extensions"] = [x for x in meta.get("extensions", []) if x != ".toml"]
+        base["cf"] = meta
+    return {**base, **EXTENSIONS, **hotplug.catalog()}
 
 def rank(query: str, meta: dict) -> list[Candidate]:
     text = query.strip().lower()
@@ -133,6 +146,13 @@ def plan(query: str, *, root: Path | None = None, snapshot: EnvSnapshot | None =
     if not ranked:
         return make_error("ERR_NO_MATCH", "No match; ask the user instead of choosing a shell", stages=stages)
     selected = ranked[0]
+    # cf CLI is preferred for API work. Project dev/build/deploy must match
+    # the actual config on disk, not another CLI's cached OAuth identity.
+    project_op = bool(re.search(r"(?i)\b(dev|build|deploy|init)\b|构建|部署", query))
+    if project_op and selected.id in ("cf", "wrangler"):
+        mode = project_kind(Path.cwd())
+        selected = Candidate("wrangler" if mode == "wrangler" else "cf", selected.score,
+                             selected.reason + ("project_config:" + mode,))
     current_tier = tier if tier is not None else linux.tier_status(root)
     if current_tier not in linux.VALID_TIERS:
         return make_error("ERR_POLICY_UNKNOWN", "Missing or invalid permission tier", stages=stages,
