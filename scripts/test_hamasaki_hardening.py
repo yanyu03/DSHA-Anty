@@ -133,7 +133,11 @@ class HardenedContracts(unittest.TestCase):
         self.assertEqual(status,124)
         self.assertEqual(response["error_code"],"ERR_EXEC_TIMEOUT")
 
-    def test_default_catalog_still_only_seven_core(self):
-        self.assertEqual(len(base.TOOL_REGISTRY.all()),7)
+    def test_core_seven_plus_three_productivity(self):
+        self.assertEqual(len(base.TOOL_REGISTRY.all()),10)
+        for tool in ("markdown","office","wps"):
+            item=base.TOOL_REGISTRY.get(tool)
+            self.assertIsNotNone(item)
+            self.assertEqual(item.risk_level,base.RiskLevel.READ_ONLY)
 
 if __name__=="__main__":unittest.main()

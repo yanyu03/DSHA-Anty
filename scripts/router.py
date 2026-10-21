@@ -46,6 +46,18 @@ except ImportError:
 
 
 TOOL_REGISTRY = {
+    "markdown": {"name":"Markdown Tool","cmd":"dsha-markdown",
+                 "description":"Read-only Markdown lint and outline",
+                 "extensions":[".md",".markdown"],"exact_filenames":["README.md","SKILL.md"],
+                 "keywords":["markdown","md文档","md语法"],"weight":1.8},
+    "office": {"name":"Office Tool","cmd":"dsha-office",
+               "description":"Read-only OOXML inspection",
+               "extensions":[".docx",".xlsx",".pptx"],"exact_filenames":[],
+               "keywords":["office","word","excel","powerpoint","办公文档"],"weight":1.6},
+    "wps": {"name":"WPS Tool","cmd":"dsha-wps",
+            "description":"WPS Linux runtime readiness",
+            "extensions":[".wps",".et",".dps"],"exact_filenames":[],
+            "keywords":["wps","金山办公"],"weight":1.8},
     "cf": {
         "name": "Cloudflare Web & Edge Engine",
         "cmd": "cf.cmd",

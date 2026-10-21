@@ -54,10 +54,10 @@
     "dsha-core": {
       "category": "CoreControl",
       "files": {
-        "scripts/router.py": "4c516302ae621560bbf47f124676a63fee735a0b",
-        "scripts/index.py": "7b04b18916a8fd6717e37071cca65a839d54d137",
-        "scripts/base_tool.py": "b14d6e71c1733342d9f5f584acdecba957a1c855",
-        "plugins/dsh-permissions/scripts/base_tool.py": "b14d6e71c1733342d9f5f584acdecba957a1c855",
+        "scripts/router.py": "b15fd385c359c88e779a8db8fd30c9a81ddb271b",
+        "scripts/index.py": "19c93145eb442907a22a982ccd6dd5cbe8971b04",
+        "scripts/base_tool.py": "fefebbf59d3f1a2e010f49c6a930c35e8c0d3785",
+        "plugins/dsh-permissions/scripts/base_tool.py": "fefebbf59d3f1a2e010f49c6a930c35e8c0d3785",
         "plugins/dsh-permissions/scripts/englock.py": "883708b98f91152d77cca3fe248ff6b2c0b86d7a"
       }
     },
@@ -69,7 +69,8 @@
         "scripts/hamasaki_executor.py": "1237442dc4eeefef055ee866dcf9981ba7ec4c15",
         "scripts/hamasaki_hotplug.py": "91261dd4504ec317a1e2c251ad72779c15d32ff2",
         "scripts/hamasaki_pipeline.py": "97f8338ea8dd049bdbd52cae35e94135e1ab68c1",
-        "scripts/hamasaki_plan_cli.py": "c1de9be02e000a7dc1e2a6be9aaaa5a80e96bdb7"
+        "scripts/hamasaki_plan_cli.py": "c1de9be02e000a7dc1e2a6be9aaaa5a80e96bdb7",
+        "scripts/hamasaki_builtin_tool.py": "26c5f7c2ea97d13a11aa25f25c1d556c29a0b97a"
       }
     },
     "markdown": {
@@ -77,7 +78,8 @@
       "files": {
         "tools/markdown/adapter.py": "08ac27c7f43c31cc8fc825024a2872a5f64aa9bd",
         "tools/markdown/manifest.json": "d430e0d98af70728e84009e916b97c85df326ebc",
-        "tools/markdown/SKILL.md": "64b096460017b8736446ed7cacde32ed2597cbb6"
+        "tools/markdown/SKILL.md": "64b096460017b8736446ed7cacde32ed2597cbb6",
+        "bin/dsha-markdown": "6aa05671cb766a72b5ceefe5d32687da7718d23e"
       }
     },
     "office": {
@@ -85,7 +87,8 @@
       "files": {
         "tools/office/adapter.py": "3b5e758e0051898143ae886c27e7560edafb5c2f",
         "tools/office/manifest.json": "c35f949e7408a9f596352297adf97bf64589821b",
-        "tools/office/SKILL.md": "75ee2362c8a03f3a7db2d89bdb180469e86fd13b"
+        "tools/office/SKILL.md": "75ee2362c8a03f3a7db2d89bdb180469e86fd13b",
+        "bin/dsha-office": "3407353d0e1f5db1f25b6011c09060e06e64f670"
       }
     },
     "wps": {
@@ -93,7 +96,8 @@
       "files": {
         "tools/wps/adapter.py": "78fd34480c7d69b5525c1492721c18c8bf1117b0",
         "tools/wps/manifest.json": "725a00fba9cad5e275102540c5abe0cc63ab8185",
-        "tools/wps/SKILL.md": "1a3804580513326eafba11eaff84ec07faf74ee9"
+        "tools/wps/SKILL.md": "1a3804580513326eafba11eaff84ec07faf74ee9",
+        "bin/dsha-wps": "696241b182b6a55c08ad14405d8cf533c443a187"
       }
     }
   }

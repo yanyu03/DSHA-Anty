@@ -44,6 +44,7 @@ class ToolCategory(str, Enum):
     ARCHIVIST = "Archivist"
     SYSADMIN = "SysAdmin"
     POLICY_RADAR = "PolicyRadar"
+    PRODUCTIVITY = "Productivity"
 
 
 class RiskLevel(str, Enum):
@@ -2032,6 +2033,35 @@ class ToolRegistry:
 
 
 # Initialize global registry and register all standard tools
+class ProductivityTool(BaseTool):
+    """Linux document skill entry; status supported, document IO not yet gated."""
+    def __init__(self, tool_id):
+        info = {
+            "markdown": (".md", ".markdown"),
+            "office": (".docx", ".xlsx", ".pptx"),
+            "wps": (".wps", ".et", ".dps"),
+        }
+        if tool_id not in info:
+            raise ValueError("ERR_INVALID_PRODUCTIVITY_TOOL")
+        super().__init__(
+            tool_id=tool_id,
+            name="Hamasaki " + tool_id.capitalize() + " Tool",
+            category=ToolCategory.PRODUCTIVITY,
+            risk_level=RiskLevel.READ_ONLY,
+            version="0.6.1",
+            description="Pinned independent productivity adapter; status only pending sandbox validation",
+            cmd="dsha-" + tool_id,
+            prerequisites=[PrerequisiteEnv(
+                binary="python3", min_version="3.10.0",
+                remediation="Install Python 3.10+ to inspect local tool readiness."
+            )],
+            keywords=[tool_id],
+            extensions=list(info[tool_id]),
+            exact_filenames=[],
+            weight=1.0
+        )
+
+
 TOOL_REGISTRY = ToolRegistry()
 TOOL_REGISTRY.register(CFTool)
 TOOL_REGISTRY.register(REATool)
@@ -2040,6 +2070,8 @@ TOOL_REGISTRY.register(PwshTool)
 TOOL_REGISTRY.register(ShTool)
 TOOL_REGISTRY.register(TierTool)
 TOOL_REGISTRY.register(MeterTool)
+for _productivity_id in ("markdown", "office", "wps"):
+    TOOL_REGISTRY.register(ProductivityTool(_productivity_id))
 
 
 def Call_Tools(tool_name, args=None, context=None):
@@ -2104,7 +2136,7 @@ def run_selftest():
     tests = []
 
     # Test 1: Registry completeness (7 tools)
-    tests.append(("registry_7_tools", len(TOOL_REGISTRY.all()) == 7))
+    tests.append(("registry_10_tools", len(TOOL_REGISTRY.all()) == 10))
 
     # Test 2: Category query WebEdge
     we_tools = TOOL_REGISTRY.get_by_category(ToolCategory.WEB_EDGE)

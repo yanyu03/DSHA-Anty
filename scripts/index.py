@@ -110,7 +110,7 @@ def run_selftest():
     tests = []
 
     # Test 1: Registry completeness (7 tools)
-    tests.append(("registry_7_tools", len(TOOL_REGISTRY.all()) == 7))
+    tests.append(("registry_10_tools", len(TOOL_REGISTRY.all()) == 10))
 
     # Test 2: Resolve all tools
     all_resolved = True
