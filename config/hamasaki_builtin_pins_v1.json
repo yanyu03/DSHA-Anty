@@ -13,14 +13,16 @@
     "rea": {
       "category": "ReverseEngineering",
       "files": {
-        "bin/rea.cmd": "5a8870be6cd2b6b418cefff83ce7ea58473943bf"
+        "bin/rea.cmd": "5a8870be6cd2b6b418cefff83ce7ea58473943bf",
+        "skills/reverse-engineer-anything/tools/rea/dsha_rea_driver.py": "48bd55ef91a7e583ea2ea889c38eb02fc504609e"
       }
     },
     "scribe": {
       "category": "Archivist",
       "files": {
         "bin/scribe.cmd": "055ae4dee0a114e2b0c733b5b29535c4fed45259",
-        "scripts/scribe.py": "21ba92471facb9d843e8091e4f4e3ab36d9137db"
+        "scripts/scribe.py": "21ba92471facb9d843e8091e4f4e3ab36d9137db",
+        "plugins/dsh-permissions/scripts/scribe.py": "21ba92471facb9d843e8091e4f4e3ab36d9137db"
       }
     },
     "pwsh": {

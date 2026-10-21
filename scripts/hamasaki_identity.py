@@ -151,3 +151,26 @@ def chain_receipt(index,alias,action,receipt_status="PLANNED"):
          "status":receipt_status,"executed":False}
     out["receipt_uid"]=digest("receipt",out)
     return out
+
+
+def verify_receipt(index, receipt):
+    """Verify a hash-only DSHA protocol receipt; NOT a signature or execution grant."""
+    from collections.abc import Mapping
+    import hmac
+    fields={"protocol","schema","tool_uid","category_uid","registry_uid",
+            "action","status","executed","receipt_uid"}
+    if not isinstance(receipt, Mapping) or set(receipt)!=fields:
+        return {"status":"ERR_BLOCK","error_code":"ERR_RECEIPT_SCHEMA"}
+    if receipt["protocol"]!=PROTO or receipt["schema"]!=CHAIN:
+        return {"status":"ERR_BLOCK","error_code":"ERR_PROTOCOL_MISMATCH"}
+    if receipt["registry_uid"]!=index.get("registry_uid"):
+        return {"status":"ERR_BLOCK","error_code":"ERR_REGISTRY_CHANGED"}
+    computed=digest("receipt",{k:v for k,v in receipt.items() if k!="receipt_uid"})
+    if not isinstance(receipt["receipt_uid"],str) or not hmac.compare_digest(computed,receipt["receipt_uid"]):
+        return {"status":"ERR_BLOCK","error_code":"ERR_RECEIPT_TAMPERED"}
+    matches=[key for key,row in index["tools"].items() if row.get("uid")==receipt["tool_uid"]]
+    if len(matches)!=1:
+        return {"status":"ERR_BLOCK","error_code":"ERR_TOOL_HASH_UNKNOWN"}
+    if index["tools"][matches[0]]["category_uid"]!=receipt["category_uid"]:
+        return {"status":"ERR_BLOCK","error_code":"ERR_CATEGORY_HASH_MISMATCH"}
+    return {"status":"VERIFIED","alias":matches[0],"tool_uid":receipt["tool_uid"]}
