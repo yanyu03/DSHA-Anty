@@ -25,7 +25,7 @@ class LinuxBootstrapContracts(unittest.TestCase):
     def test_pwsh_version_string_alone_is_not_semantic_proof(self):
         with patch.object(h.shutil, "which", return_value="/usr/bin/pwsh"), patch.object(h, "run_probe", return_value=(True, "PowerShell 7.6.6")):
             self.assertEqual(h.capability("pwsh")["state"], "COMPATIBLE")
-        with patch.object(h.shutil, "which", return_value="/usr/bin/pwsh"), patch.object(h, "run_probe", return_value=(True, "True\\n2026")):
+        with patch.object(h.shutil, "which", return_value="/usr/bin/pwsh"), patch.object(h, "run_probe", return_value=(True, "True\n2026")):
             self.assertEqual(h.capability("pwsh")["state"], "NATIVE")
 
     def test_nonzero_exit_cannot_claim_native(self):
