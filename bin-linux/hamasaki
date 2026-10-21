@@ -1,6 +1,9 @@
 #!/bin/sh
-# Explicit Linux adapter entrypoint. Does not modify user state or require sudo.
+# Linux adapter; no sudo, external network or mutation.
 set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
-exec python3 "$REPO_ROOT/scripts/hamasaki_linux.py" "$@"
+case "${1:-status}" in
+  plan|catalog) exec python3 "$REPO_ROOT/scripts/hamasaki_plan_cli.py" "$@" ;;
+  *) exec python3 "$REPO_ROOT/scripts/hamasaki_linux.py" "$@" ;;
+esac
