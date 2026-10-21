@@ -25,7 +25,7 @@ class CfInteropTests(unittest.TestCase):
         events=[]
         class Result: returncode=0
         with patch.object(cf,"locate",side_effect=lambda name:"/mock/"+name),patch.object(
-                cf.subprocess,"run",side_effect=lambda args,**kw:events.append(args) or Result()):
+                cf,"run_bounded",side_effect=lambda args,**kw:events.append(args) or 0):
             a,_=cf.dispatch(["whoami"])
             b,_=cf.dispatch(["wrangler","whoami"])
         self.assertEqual((a,b),(0,0))
@@ -35,7 +35,7 @@ class CfInteropTests(unittest.TestCase):
         events=[]
         class Result: returncode=13
         with patch.object(cf,"locate",side_effect=lambda name:"/mock/"+name),patch.object(
-                cf.subprocess,"run",side_effect=lambda args,**kw:events.append(args) or Result()):
+                cf,"run_bounded",side_effect=lambda args,**kw:events.append(args) or 13):
             code,_=cf.dispatch(["whoami"])
         self.assertEqual(code,13)
         self.assertEqual(events,[["/mock/cfcli","auth","whoami"]])

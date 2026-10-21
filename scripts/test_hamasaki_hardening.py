@@ -121,17 +121,28 @@ class HardenedContracts(unittest.TestCase):
         calls=[]
         class Completed:returncode=0
         with patch.object(cf,"locate",return_value="/mock/cloudflare"),patch.object(
-             cf.subprocess,"run",side_effect=lambda argv,**kw:calls.append(kw) or Completed()):
+             cf,"run_bounded",side_effect=lambda argv,**kw:calls.append(kw) or 0):
             status,response=cf.dispatch(["whoami"])
         self.assertEqual(status,0)
         self.assertEqual(calls[0]["timeout"],90)
 
     def test_cf_timeout_returns_structured_err(self):
         with patch.object(cf,"locate",return_value="/mock/cloudflare"),patch.object(
-             cf.subprocess,"run",side_effect=subprocess.TimeoutExpired(["cf"],90)):
+             cf,"run_bounded",side_effect=subprocess.TimeoutExpired(["cf"],90)):
             status,response=cf.dispatch(["whoami"])
         self.assertEqual(status,124)
         self.assertEqual(response["error_code"],"ERR_EXEC_TIMEOUT")
+
+    def test_process_group_timeout(self):
+        import time
+        if os.name!="posix":
+            self.skipTest("POSIX process group test")
+        command=[sys.executable,"-c",
+                 "import subprocess;subprocess.Popen(['sleep','30']).wait()"]
+        start=time.monotonic()
+        with self.assertRaises(subprocess.TimeoutExpired):
+            cf.run_bounded(command,timeout=0.3)
+        self.assertLess(time.monotonic()-start,4)
 
     def test_core_seven_plus_three_productivity(self):
         self.assertEqual(len(base.TOOL_REGISTRY.all()),10)

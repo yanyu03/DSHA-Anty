@@ -6,8 +6,8 @@
       "category": "WebEdge",
       "files": {
         "bin/cf.cmd": "ca66a09a398a662e8b07d58684faecf52f65ce0a",
-        "scripts/dsha_cf.py": "479f4b1e178821a5bde35664a17e6f42778d5aaa",
-        "plugins/dsh-permissions/scripts/dsha_cf.py": "479f4b1e178821a5bde35664a17e6f42778d5aaa"
+        "scripts/dsha_cf.py": "1fac6f644bea55ba2e914b359a2f05394ad17556",
+        "plugins/dsh-permissions/scripts/dsha_cf.py": "1fac6f644bea55ba2e914b359a2f05394ad17556"
       }
     },
     "rea": {

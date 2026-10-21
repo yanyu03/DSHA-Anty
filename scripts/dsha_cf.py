@@ -7,6 +7,7 @@ The two copies of this module intentionally match for legacy plugin installs.
 from __future__ import annotations
 import json
 import os
+import signal
 from pathlib import Path
 import shutil
 import subprocess
@@ -128,6 +129,23 @@ def status():
             "note": "cf auth whoami != wrangler whoami; never reuse OAuth sessions",
             "proxy_injected": False}
 
+def run_bounded(argv, *, cwd=None, timeout=90):
+    """Direct child and descendants share a POSIX process group for cancellation."""
+    with subprocess.Popen(argv, cwd=cwd,
+                          start_new_session=(os.name=="posix")) as process:
+        try:
+            return process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                if os.name=="posix":
+                    os.killpg(process.pid,signal.SIGKILL)
+                else:
+                    process.kill()
+            except ProcessLookupError:
+                pass
+            process.wait(timeout=5)
+            raise
+
 def dispatch(args, cwd=None, execute=True):
     route = select_command(args,cwd)
     if route["status"] == "STATUS":
@@ -147,10 +165,9 @@ def dispatch(args, cwd=None, execute=True):
         # Fixed watchdog prevents unattended commands blocking the agent forever.
         # Authentication is interactive and intentionally not retried on another CLI.
         command_timeout = 120 if route.get("interactive") else 90
-        process = subprocess.run([binary,*route["argv"]],cwd=cwd,check=False,
-                                 timeout=command_timeout)
-        return process.returncode,{"status":"EXECUTED","backend":route["backend"],
-                                   "returncode":process.returncode}
+        returncode=run_bounded([binary,*route["argv"]],cwd=cwd,timeout=command_timeout)
+        return returncode,{"status":"EXECUTED","backend":route["backend"],
+                           "returncode":returncode}
     except subprocess.TimeoutExpired:
         return 124,{"status":"ERR_BLOCK","error_code":"ERR_EXEC_TIMEOUT",
                     "backend":route["backend"],"executed":True}
