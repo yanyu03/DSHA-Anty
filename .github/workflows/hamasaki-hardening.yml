@@ -8,12 +8,27 @@ permissions:
 jobs:
   offline-contracts:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - name: Check Python syntax
         run: python3 -m compileall -q scripts tools
-      - name: Run hardening contracts
-        run: python3 -m unittest discover -s scripts -p test_hamasaki_hardening.py -v
-      - name: Check framework safety regressions
-        run: python3 -m unittest discover -s scripts -p test_hamasaki_identity.py -v
+      - name: Install isolated test dependency
+        run: python3 -m pip install 'markdown-it-py>=3,<5'
+      - name: Run security and all Hamasaki regressions
+        run: python3 -m unittest discover -s scripts -p 'test_hamasaki_*.py' -v
+      - name: Run CF CLI regression
+        run: python3 -m unittest discover -s scripts -p 'test_cf_routing.py' -v
+      - name: Verify checked-in baseline is complete
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, str(Path('scripts').resolve()))
+          import hamasaki_identity as ids
+          result = ids.snapshot(Path.cwd(), [])
+          failures = {k:v['status'] for k,v in result['tools'].items()
+                      if v['source']=='builtin' and v['status']!='PINNED'}
+          assert not failures, failures
+          print('PINNED groups:',len([1 for v in result['tools'].values() if v['source']=='builtin']))
+          PY
