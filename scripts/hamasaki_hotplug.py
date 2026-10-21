@@ -52,6 +52,8 @@ def check_manifest(m,folder):
     if not IDENT.fullmatch(folder.name): raise ValueError("bad id")
     if not isinstance(m.get("name"),str) or not 1<=len(m["name"])<=100: raise ValueError("name")
     if not isinstance(m.get("version"),str): raise ValueError("version")
+    if "category" in m and (not isinstance(m["category"],str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,39}",m["category"])):
+        raise ValueError("category")
     if not isinstance(m.get("entry"),str) or not ENTRY.fullmatch(m["entry"]) or not isfile(folder/m["entry"]):
         raise ValueError("entry")
     kws=m.get("keywords",[])
@@ -97,7 +99,7 @@ def inspect(folder,known=None):
         digest=fingerprint(folder);approved=(approvals() if known is None else known).get(folder.name)
         status="READY" if digest==approved else "CHANGED_REVIEW_REQUIRED" if approved else "UNTRUSTED"
         return {**item,"status":status,"executable":status=="READY","sha256":digest,
-                "name":m["name"],"keywords":m["keywords"],"actions":sorted(m["actions"])}
+                "name":m["name"],"keywords":m["keywords"],"category":m.get("category","ThirdParty"),"actions":sorted(m["actions"])}
     except (OSError,ValueError,KeyError,TypeError,UnicodeError) as e:
         return {**item,"reason":str(e)[:160]}
 
@@ -127,46 +129,9 @@ def revoke(id):
     return {"status":"REVOKED","id":id}
 
 def run(id,action):
-    if not IDENT.fullmatch(id):return {"status":"ERR_BLOCK","error_code":"ERR_INVALID_TOOL"}
-    current=inspect(home()/id)
-    if current["status"]!="READY":return {"status":"ERR_BLOCK","error_code":"ERR_TOOL_NOT_APPROVED"}
-    if action not in current["actions"]:return {"status":"ERR_BLOCK","error_code":"ERR_UNKNOWN_ACTION"}
-    from hamasaki_linux import tier_status
-    if tier_status(Path(__file__).resolve().parents[1]) not in ("read-only","auto","workspace-write","danger-full-access"):
-        return {"status":"ERR_BLOCK","error_code":"ERR_POLICY_UNKNOWN"}
-    if sys.platform!="linux":return {"status":"ERR_BLOCK","error_code":"ERR_PLATFORM_UNSUPPORTED"}
-    bwrap=shutil.which("bwrap")
-    if not bwrap:return {"status":"ERR_BLOCK","error_code":"ERR_SANDBOX_MISSING"}
-    with tempfile.TemporaryDirectory(prefix="hamasaki-tool-") as tmp:
-        snapshot=Path(tmp)/id
-        try:
-            shutil.copytree(home()/id,snapshot,symlinks=False)
-            if inspect(snapshot,known={}).get("sha256")!=current["sha256"]:
-                return {"status":"ERR_BLOCK","error_code":"ERR_CHANGED_DURING_COPY"}
-            m=json.loads((snapshot/"hamasaki-tool.json").read_text("utf-8"));a=m["actions"][action]
-            argv=[bwrap,"--die-with-parent","--new-session","--unshare-user","--unshare-pid",
-                  "--unshare-net","--unshare-ipc","--unshare-uts","--ro-bind","/","/",
-                  "--tmpfs","/home","--tmpfs","/root","--tmpfs","/run","--tmpfs","/tmp"]
-            for p in ("/mnt","/media","/var","/opt","/srv"):
-                if Path(p).is_dir():argv+=["--tmpfs",p]
-            argv+=["--ro-bind",str(snapshot),"/tool","--chdir","/tool","--",
-                   sys.executable,"-I","-B","/tool/"+m["entry"],*a["argv"]]
-            env={"PATH":"/usr/bin:/bin","HOME":"/nonexistent","LANG":"C.UTF-8","PYTHONDONTWRITEBYTECODE":"1"}
-            with tempfile.TemporaryFile() as out,tempfile.TemporaryFile() as err:
-                try:
-                    import resource
-                    def limits():resource.setrlimit(resource.RLIMIT_FSIZE,(256*1024,256*1024))
-                    r=subprocess.run(argv,stdout=out,stderr=err,env=env,timeout=a.get("timeout",5),
-                                     preexec_fn=limits,check=False)
-                    out.seek(0);err.seek(0)
-                    return {"status":"PASS" if r.returncode==0 else "FAILED","executed":True,
-                            "sandbox":"bubblewrap-ro-no-net","id":id,"action":action,"returncode":r.returncode,
-                            "stdout":out.read(8192).decode("utf-8","replace"),
-                            "stderr":err.read(8192).decode("utf-8","replace"),"sha256":current["sha256"]}
-                except subprocess.TimeoutExpired:
-                    return {"status":"FAILED","error_code":"ERR_TIMEOUT","executed":True}
-        except (OSError,ValueError,KeyError,TypeError) as e:
-            return {"status":"ERR_BLOCK","error_code":"ERR_RUNTIME_PRECHECK","reason":str(e)[:160]}
+    # No legacy unrestricted host-root bwrap mount. Enforce pin + hash + sandbox.
+    from hamasaki_executor import execute
+    return execute(id,action)
 
 def main(argv=None):
     ap=argparse.ArgumentParser(description="Hamasaki manifest-first local tools")
@@ -177,7 +142,11 @@ def main(argv=None):
     a=sub.add_parser("revoke");a.add_argument("id")
     a=sub.add_parser("run");a.add_argument("id");a.add_argument("action")
     opts=ap.parse_args(argv)
-    if opts.cmd=="list":r={"status":"CATALOG_ONLY","tools":scan(),"executed":False}
+    if opts.cmd=="list":
+        import hamasaki_identity as hi
+        repo=Path(__file__).resolve().parents[1]
+        try: r={"status":"CATALOG_ONLY","identity":hi.snapshot(repo,scan()),"executed":False}
+        except (ValueError,OSError): r={"status":"ERR_BLOCK","error_code":"ERR_CORE_PINS_UNAVAILABLE","executed":False}
     elif opts.cmd=="inspect":r=inspect(home()/opts.id) if IDENT.fullmatch(opts.id) else {"status":"ERR_BLOCK","error_code":"ERR_INVALID_TOOL"}
     elif opts.cmd=="approve":r=approve(opts.id,opts.sha256) if opts.acknowledge_code_risk else {"status":"ERR_BLOCK","error_code":"ERR_EXPLICIT_ACK_REQUIRED"}
     elif opts.cmd=="revoke":r=revoke(opts.id)

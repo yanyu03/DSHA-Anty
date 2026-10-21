@@ -1,0 +1,63 @@
+{
+  "schema": "hamasaki.builtin-pins/v1",
+  "baseline": "yanyu03/DSHA-SharBoy@3740327f371606194fae039e88a28e3ab18b0b7b",
+  "tools": {
+    "cf": {
+      "category": "WebEdge",
+      "files": {
+        "bin/cf.cmd": "ca66a09a398a662e8b07d58684faecf52f65ce0a",
+        "scripts/dsha_cf.py": "29dafb7a5532b5ad2c09c291dd4791379dae4a1c",
+        "plugins/dsh-permissions/scripts/dsha_cf.py": "29dafb7a5532b5ad2c09c291dd4791379dae4a1c"
+      }
+    },
+    "rea": {
+      "category": "ReverseEngineering",
+      "files": {
+        "bin/rea.cmd": "5a8870be6cd2b6b418cefff83ce7ea58473943bf"
+      }
+    },
+    "scribe": {
+      "category": "Archivist",
+      "files": {
+        "bin/scribe.cmd": "055ae4dee0a114e2b0c733b5b29535c4fed45259",
+        "scripts/scribe.py": "21ba92471facb9d843e8091e4f4e3ab36d9137db"
+      }
+    },
+    "pwsh": {
+      "category": "SysAdmin",
+      "files": {
+        "bin/dsha-pwsh.cmd": "2467e4c07b22d8107e56f032088a8fb883379d19"
+      }
+    },
+    "sh": {
+      "category": "SysAdmin",
+      "files": {
+        "bin/dsha-sh.cmd": "6e3f965162997b0c9f52f25df40f5688a41b96d3"
+      }
+    },
+    "tier": {
+      "category": "PolicyRadar",
+      "files": {
+        "bin/agy-tier.ps1": "fa144608772f14fe6387f4051ad9af10a6af8019",
+        "plugins/dsh-permissions/scripts/gate.py": "f866a0ab524b5df03362e2fa93b7b83563177907"
+      }
+    },
+    "meter": {
+      "category": "PolicyRadar",
+      "files": {
+        "bin/agy-meter.ps1": "50b7d8604d1f3000dc4635a999a8fcb42c61a057",
+        "plugins/dsha-meter/meter.py": "afb5830d5fd9dfff550b524bcecb690320d1555f"
+      }
+    },
+    "dsha-core": {
+      "category": "CoreControl",
+      "files": {
+        "scripts/router.py": "4c516302ae621560bbf47f124676a63fee735a0b",
+        "scripts/index.py": "7b04b18916a8fd6717e37071cca65a839d54d137",
+        "scripts/base_tool.py": "c9e30639153987c90d63cf2c37f432c4743dbcf0",
+        "plugins/dsh-permissions/scripts/base_tool.py": "c9e30639153987c90d63cf2c37f432c4743dbcf0",
+        "plugins/dsh-permissions/scripts/englock.py": "883708b98f91152d77cca3fe248ff6b2c0b86d7a"
+      }
+    }
+  }
+}

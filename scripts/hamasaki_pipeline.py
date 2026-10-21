@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable
 import hamasaki_linux as linux
 import hamasaki_hotplug as hotplug
+import hamasaki_identity as identity
 from dsha_cf import project_kind
 
 # The original Kaeru Router remains the metadata source for common tools.
@@ -90,6 +91,12 @@ def catalog() -> dict:
         base["cf"] = meta
     return {**base, **EXTENSIONS, **hotplug.catalog()}
 
+def identity_snapshot(root: Path | None = None) -> dict:
+    root = root or Path(__file__).resolve().parents[1]
+    virtual = {name: {"category": "WebEdge" if name == "wrangler" else "LinuxNative",
+                       "metadata": meta} for name, meta in EXTENSIONS.items()}
+    return identity.snapshot(root, hotplug.scan(), virtual=virtual)
+
 def rank(query: str, meta: dict) -> list[Candidate]:
     text = query.strip().lower()
     if not text:
@@ -135,18 +142,36 @@ def make_error(code: str, reason: str, *, stages: list[str], details: dict | Non
 
 def plan(query: str, *, root: Path | None = None, snapshot: EnvSnapshot | None = None,
          tools: dict | None = None, tier: str | None = None,
-         project_root: Path | None = None) -> dict:
+         project_root: Path | None = None, tool_uid: str | None = None,
+         category_uid: str | None = None, identity_index: dict | None = None) -> dict:
     """Rank once; probe selected tool only; return plan/error, never execute."""
     stages = ["index_catalog"]
     root = root or Path(__file__).resolve().parents[1]
+    real_identity = tools is None or identity_index is not None
+    index = identity_index
+    if real_identity and index is None:
+        try:
+            index = identity_snapshot(root)
+        except (OSError,ValueError,KeyError,TypeError):
+            return make_error("ERR_CORE_PINS_UNAVAILABLE", "Hash manifest cannot be verified", stages=stages)
+    if index and any(item["status"]!="PINNED" for item in index["tools"].values()
+                     if item["source"]=="builtin"):
+        return make_error("ERR_CORE_PIN_MISMATCH", "Bundled core tool changed", stages=stages)
     meta = tools if tools is not None else catalog()
     if not meta:
         return make_error("ERR_CATALOG_UNAVAILABLE", "Kaeru catalog cannot be loaded", stages=stages)
+    ref = re.fullmatch(r"(?:sha256:|tool:sha256:)?([0-9a-f]{64})", query.strip().lower())
     ranked = rank(query, meta)
+    if ref is not None:
+        matches = [alias for alias, rec in (index or {}).get("tools",{}).items()
+                   if rec.get("uid")==ref.group(1)]
+        ranked = [Candidate(matches[0],100.0,("hash_reference",))] if len(matches)==1 else []
     stages.append("router_rank")
     if not ranked:
         return make_error("ERR_NO_MATCH", "No match; ask the user instead of choosing a shell", stages=stages)
     selected = ranked[0]
+    if index and selected.id not in index["tools"]:
+        return make_error("ERR_HASH_UNAVAILABLE", "Selected tool has no registered hash", stages=stages)
     # cf CLI is preferred for API work. Project dev/build/deploy must match
     # the actual config on disk, not another CLI's cached OAuth identity.
     project_op = bool(re.search(r"(?i)\b(dev|build|deploy|init)\b|构建|部署", query))
@@ -166,6 +191,16 @@ def plan(query: str, *, root: Path | None = None, snapshot: EnvSnapshot | None =
         selected = Candidate(choice, selected.score,
                              selected.reason + ("project_config:" + mode,))
         project_review_needed = mode == "unspecified"
+    if index:
+        item = index["tools"].get(selected.id)
+        if not item or not item.get("uid") or not item.get("category_uid"):
+            return make_error("ERR_HASH_UNAVAILABLE", "Tool identity not issued", stages=stages)
+        if item["status"] not in ("PINNED","READY","PLAN_ONLY"):
+            return make_error("ERR_TOOL_UNTRUSTED", "Tool hash changed; review required", stages=stages)
+        if tool_uid is not None and item["uid"]!=tool_uid:
+            return make_error("ERR_HASH_MISMATCH", "Tool identity changed", stages=stages)
+        if category_uid is not None and item["category_uid"]!=category_uid:
+            return make_error("ERR_HASH_MISMATCH", "Category membership changed", stages=stages)
     current_tier = tier if tier is not None else linux.tier_status(root)
     if current_tier not in linux.VALID_TIERS:
         return make_error("ERR_POLICY_UNKNOWN", "Missing or invalid permission tier", stages=stages,
@@ -194,7 +229,11 @@ def plan(query: str, *, root: Path | None = None, snapshot: EnvSnapshot | None =
                                                   "unverified": unknown,
                                                   "alternatives": [c.id for c in ranked[1:3]]})
     stages.append("choose_tool")
+    hashed = identity.chain_receipt(index, selected.id, "plan") if index else None
     return {"schema": SCHEMA, "status": "PLAN_ONLY", "selected_tool": selected.id,
+            "tool_uid": item["uid"] if index else None,
+            "category_uid": item["category_uid"] if index else None,
+            "hash_chain": hashed,
             "score": selected.score, "reason": list(selected.reason),
             "environment": evidence, "needs_user_approval": modifying,
             "needs_project_review": project_review_needed,

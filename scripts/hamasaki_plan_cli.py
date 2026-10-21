@@ -3,16 +3,21 @@
 import argparse
 import json
 import platform
-from hamasaki_pipeline import catalog, make_error, plan
+from hamasaki_pipeline import catalog, make_error, plan, identity_snapshot
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Hamasaki Linux planning; no command execution")
-    ap.add_argument("command", choices=("plan", "catalog"))
+    ap.add_argument("command", choices=("plan", "catalog", "identity"))
     ap.add_argument("intent", nargs="*")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
     if platform.system() != "Linux":
         out = make_error("ERR_PLATFORM_UNSUPPORTED", "Linux is required", stages=["platform_guard"])
+    elif args.command == "identity":
+        try:
+            out = identity_snapshot()
+        except (OSError,ValueError,KeyError,TypeError):
+            out = make_error("ERR_CORE_PINS_UNAVAILABLE", "Hash baseline unavailable", stages=["hash_manifest"])
     elif args.command == "catalog":
         tool_meta = catalog()
         out = ({"status": "CATALOG_ONLY", "tools": sorted(tool_meta), "executed": False}
