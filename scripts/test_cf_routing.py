@@ -44,6 +44,14 @@ class CfRoutingTests(unittest.TestCase):
         self.assertFalse(res["proxy_injected"])
     def test_unknown_command(self):
         self.assertEqual(cf.select_command(["unknown"])["status"],"ERR_BLOCK")
+    def test_no_project_config_needs_review_before_run(self):
+        with tempfile.TemporaryDirectory() as d, patch.object(cf,"locate",return_value="/tmp/mock"):
+            with patch.object(cf.subprocess,"run") as action:
+                code,result=cf.dispatch(["deploy"],cwd=d,execute=True)
+            self.assertEqual(code,2)
+            self.assertEqual(result["error_code"],"ERR_PROJECT_REVIEW_REQUIRED")
+            action.assert_not_called()
+
     def test_plan_does_not_execute(self):
         with patch.object(cf,"locate",return_value="/tmp/cli"),patch.object(cf.subprocess,"run") as p:
             code,res=cf.dispatch(["whoami"],execute=False)

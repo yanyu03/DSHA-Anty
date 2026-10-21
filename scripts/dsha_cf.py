@@ -140,6 +140,9 @@ def dispatch(args, cwd=None, execute=True):
                   "backend":route["backend"],"reason":"No identity-verified executable; no fallback"}
     if not execute:
         return 0,{"status":"PLAN_ONLY",**route,"binary":binary,"executed":False}
+    if route.get("needs_project_review"):
+        return 2,{"status":"ERR_BLOCK","error_code":"ERR_PROJECT_REVIEW_REQUIRED",
+                  "backend":route["backend"],"reason":"No recognized project config. Use explicit cfcli command after reviewing project setup."}
     try:
         process = subprocess.run([binary,*route["argv"]],cwd=cwd,check=False)
         return process.returncode,{"status":"EXECUTED","backend":route["backend"],
@@ -147,8 +150,18 @@ def dispatch(args, cwd=None, execute=True):
     except OSError:
         return 2,{"status":"ERR_BLOCK","error_code":"ERR_EXEC_FAILED","backend":route["backend"]}
 
+def run_selftest():
+    cases=[(["whoami"],"cfcli"),(["wrangler","whoami"],"wrangler"),
+           (["dns","records","list"],"cfcli"),(["tail","worker"],"wrangler")]
+    results=[select_command(x).get("backend")==expected for x,expected in cases]
+    print(json.dumps({"selftest":"PASS" if all(results) else "FAIL",
+                      "passed":sum(results),"total":len(results)}))
+    return all(results)
+
 def main(args=None):
     argv=list(sys.argv[1:] if args is None else args)
+    if argv and argv[0]=="selftest":
+        return 0 if run_selftest() else 1
     if argv and argv[0] in ("--help","-h"):
         print("cf [--route-only] status|whoami|login|search|api|wrangler|cfcli|dev|deploy|...")
         return 0

@@ -35,3 +35,5 @@ python3 scripts/dsha_cf.py status
 ```
 
 Official docs: https://developers.cloudflare.com/cf/get-started/ ; https://developers.cloudflare.com/cf/agents/ ; https://developers.cloudflare.com/workers/wrangler/commands/general/
+
+A project without either recognized configuration is flagged for review. The wrapper refuses implicit dev/build/deploy in that directory until the user invokes an explicit `cfcli` command after reviewing the configuration. `cf selftest` remains available as a read-only compatibility check.
