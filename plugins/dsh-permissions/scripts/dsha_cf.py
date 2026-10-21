@@ -12,6 +12,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from hamasaki_envconfig import resolve_runtime
 
 PROJECT_OPS = {"init", "dev", "build", "deploy"}
 WRANGLER_ONLY = {"tail", "secret", "types"}
@@ -59,12 +60,17 @@ def locate(name):
         "wrangler": ("wrangler", "wrangler.cmd"),
         "cloudflared": ("cloudflared", "cloudflared.exe"),
     }.get(name, ())
-    candidates = []
-    for alias in options:
-        path = shutil.which(alias)
-        if path:
-            candidates.append(path)
-    if os.name == "nt":
+    if not options:
+        return None
+    # Preserve user-provided explicit choice even when it is invalid: never
+    # fall back to another Cloudflare tool or previously authenticated profile.
+    resolved = resolve_runtime(name, options)
+    if resolved["state"]=="INVALID_OVERRIDE":
+        return None
+    candidates=[]
+    if resolved["path"]:
+        candidates.append(resolved["path"])
+    if resolved["source"]!="explicit" and os.name=="nt":
         npm = Path(os.environ.get("APPDATA") or Path.home() / "AppData/Roaming") / "npm"
         candidates.extend(str(npm / x) for x in options if (npm / x).is_file())
     for path in dict.fromkeys(candidates):
@@ -121,9 +127,9 @@ def select_command(args, cwd=None):
 def status():
     # API token can override both CLIs' profile selection. Never print its value.
     return {"status": "TOOLCHAIN_ONLY", "preferred": "cfcli",
-            "cfcli": {"path": locate("cfcli"), "auth": "NOT_CHECKED"},
-            "wrangler": {"path": locate("wrangler"), "auth": "NOT_CHECKED"},
-            "cloudflared": {"path": locate("cloudflared"), "auth": "NOT_CHECKED"},
+            "cfcli": {"path": "[available]" if locate("cfcli") else "[missing]", "auth": "NOT_CHECKED"},
+            "wrangler": {"path": "[available]" if locate("wrangler") else "[missing]", "auth": "NOT_CHECKED"},
+            "cloudflared": {"path": "[available]" if locate("cloudflared") else "[missing]", "auth": "NOT_CHECKED"},
             "api_token_env_set": bool(os.getenv("CLOUDFLARE_API_TOKEN")),
             "account_id_env_set": bool(os.getenv("CLOUDFLARE_ACCOUNT_ID")),
             "note": "cf auth whoami != wrangler whoami; never reuse OAuth sessions",

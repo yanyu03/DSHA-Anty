@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+from hamasaki_envconfig import resolve_runtime
 
 CAPABILITIES = {
     "bash": ("bash",),
@@ -47,10 +48,14 @@ def capability(name: str) -> dict[str, str | None]:
             binary = locate(name)
         except (ImportError, OSError):
             binary = None
-        return {"state": "NATIVE" if binary else "UNAVAILABLE", "binary": binary,
+        return {"state": "NATIVE" if binary else "UNAVAILABLE", "binary": name if binary else None,
                 "evidence": "identity_help_verified_auth_not_checked" if binary else "not_verified"}
     argv = CAPABILITIES[name]
-    binary = shutil.which(argv[0])
+    resolution = resolve_runtime(name, (argv[0],))
+    if resolution["state"]=="INVALID_OVERRIDE":
+        return {"state":"UNAVAILABLE","binary":None,
+                "evidence":"invalid_explicit_runtime_no_fallback"}
+    binary = resolution["path"]
     if not binary:
         return {"state": "UNAVAILABLE", "binary": None, "evidence": "not_on_path"}
     if name == "bash":
@@ -66,7 +71,8 @@ def capability(name: str) -> dict[str, str | None]:
         verified = ok and bool(out) and (name not in {"git", "node", "npm", "gh"} or bool(re.search(r"[0-9]+", out)))
     return {
         "state": "NATIVE" if verified else "COMPATIBLE",
-        "binary": binary,
+        # Public bootstrap telemetry must not expose private executable paths.
+        "binary": name if verified else None,
         "evidence": "semantic_probe_passed" if verified else "only_discovered_or_probe_failed",
     }
 
@@ -100,7 +106,7 @@ def observe(root: Path) -> dict:
         path = shutil.which(name)
         caps[name] = {
             "state": "COMPATIBLE" if path else "UNAVAILABLE",
-            "binary": path,
+            "binary": name if path else None,
             "evidence": "discovery_only_no_installation" if path else "not_on_path",
         }
     desktop = (os.environ.get("XDG_CURRENT_DESKTOP") or "").upper()
@@ -113,7 +119,7 @@ def observe(root: Path) -> dict:
     return {
         "schema": "hamasaki-linux-bootstrap-v0",
         "status": "READY_FOR_REVIEW" if all(v == "PRESENT" for v in core.values()) else "INCOMPLETE_BASELINE",
-        "platform": system, "root": str(root), "python": platform.python_version(),
+        "platform": system, "root": "[local]", "python": platform.python_version(),
         "core": core, "active_tier": tier_status(root),
         "capabilities": caps, "side_effects": "none",
         "limitations": ["discovery is not authorization", "no privileged actions", "Oyasmi source parity not yet verified"],

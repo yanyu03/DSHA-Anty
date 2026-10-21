@@ -6,8 +6,8 @@
       "category": "WebEdge",
       "files": {
         "bin/cf.cmd": "ca66a09a398a662e8b07d58684faecf52f65ce0a",
-        "scripts/dsha_cf.py": "1fac6f644bea55ba2e914b359a2f05394ad17556",
-        "plugins/dsh-permissions/scripts/dsha_cf.py": "1fac6f644bea55ba2e914b359a2f05394ad17556"
+        "scripts/dsha_cf.py": "90f4a2e8c75ffa7e44c524161644169334fa281d",
+        "plugins/dsh-permissions/scripts/dsha_cf.py": "90f4a2e8c75ffa7e44c524161644169334fa281d"
       }
     },
     "rea": {
@@ -71,7 +71,8 @@
         "scripts/hamasaki_pipeline.py": "97f8338ea8dd049bdbd52cae35e94135e1ab68c1",
         "scripts/hamasaki_plan_cli.py": "c1de9be02e000a7dc1e2a6be9aaaa5a80e96bdb7",
         "scripts/hamasaki_builtin_tool.py": "26c5f7c2ea97d13a11aa25f25c1d556c29a0b97a",
-        "scripts/hamasaki_linux.py": "7b70d0ee971211d30ee7bef3cc880d538e71ea3b"
+        "scripts/hamasaki_linux.py": "58c30def0364714060e59b2ce8160f05b1758271",
+        "scripts/hamasaki_envconfig.py": "302e94a14632af48703b26b323e8c4bc09638207"
       }
     },
     "markdown": {
