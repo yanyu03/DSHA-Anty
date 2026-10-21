@@ -1,0 +1,20 @@
+{
+  "schema": "dsha-tool/v1",
+  "id": "wps",
+  "name": "WPS",
+  "category": "Productivity",
+  "entry": "adapter.py",
+  "actions": [
+    "status",
+    "diagnose"
+  ],
+  "network": false,
+  "default_permissions": [
+    "read-only"
+  ],
+  "provenance": {
+    "url": "https://github.com/timxx/pywpsrpc",
+    "license": "MIT",
+    "note": "WPS Linux RPC binding reference; Bwkyd/wps-skills MIT docs reviewed; WPS app not bundled"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "schema": "dsha-tool/v1",
+  "id": "markdown",
+  "name": "Markdown",
+  "category": "Productivity",
+  "entry": "adapter.py",
+  "actions": [
+    "status",
+    "inspect",
+    "check"
+  ],
+  "network": false,
+  "default_permissions": [
+    "read-only"
+  ],
+  "provenance": {
+    "url": "https://github.com/markdown-it/markdown-it",
+    "license": "MIT",
+    "note": "Own read-only adapter; markdown-it-py Python library optional"
+  }
+}

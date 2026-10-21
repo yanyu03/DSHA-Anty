@@ -17,6 +17,9 @@ from dsha_cf import project_kind
 
 # The original Kaeru Router remains the metadata source for common tools.
 EXTENSIONS = {
+    "markdown": {"name": "Markdown Skill (read-only)", "keywords": ["markdown", "md文件", "md语法", "markdownlint", "markdown文档"], "extensions": [".md",".markdown"], "exact_filenames": ["README.md","SKILL.md"], "weight": 1.8},
+    "office": {"name": "Office Skill (OOXML read-only)", "keywords": ["office", "word", "excel", "powerpoint", "docx", "xlsx", "pptx", "表格文件", "办公文档"], "extensions": [".docx",".xlsx",".pptx"], "exact_filenames": [], "weight": 1.6},
+    "wps": {"name": "WPS Skill (runtime probe)", "keywords": ["wps", "wps office", "金山办公", "wps文字", "wps表格", "wps演示"], "extensions": [".wps",".et",".dps"], "exact_filenames": [], "weight": 1.8},
     "github": {"name": "Oyasmi GitHubTool (Linux plan)", "keywords": ["github", "gh", "repository", "repo", "git", "仓库", "代码托管", "推送", "拉取"], "extensions": [".git"], "exact_filenames": [], "weight": 1.3},
     "kde": {"name": "Oyasmi KDE / Dolphin (Linux plan)", "keywords": ["kde", "plasma", "dolphin", "konsole", "桌面", "文件管理器"], "extensions": [], "exact_filenames": [], "weight": 1.3},
     "package": {"name": "Oyasmi package source management (plan-only)", "keywords": ["apt", "dnf", "pacman", "zypper", "软件源", "换源", "镜像源", "安装软件", "包管理"], "extensions": [".sources", ".list"], "exact_filenames": [], "weight": 1.3},
@@ -24,12 +27,13 @@ EXTENSIONS = {
     "python": {"name": "Oyasmi Python policy / quota hooks (plan-only)", "keywords": ["python", "venv", "pip", "pypi", "虚拟环境", "python权限"], "extensions": [".py"], "exact_filenames": ["pyproject.toml"], "weight": 1.1},
 }
 REQUIRES = {
+    "markdown": ("python",), "office": ("python",), "wps": ("python",),
     "cf": ("cfcli",), "wrangler": ("wrangler",), "rea": ("node",), "scribe": ("python",),
     "pwsh": ("pwsh",), "sh": ("bash",), "tier": ("python",),
     "meter": ("python",), "github": ("gh",), "kde": ("dolphin",),
     "python": ("python",), "package": (),
 }
-PENDING_PORT = frozenset({"wrangler", "tier", "meter", "kde", "package", "python", "rea", "cf", "scribe"})
+PENDING_PORT = frozenset({"wps", "wrangler", "tier", "meter", "kde", "package", "python", "rea", "cf", "scribe"})
 MUTATING = re.compile(
     r"(?i)\b(push|install|remove|delete|deploy|write|update|upgrade|reset|rebase|commit|sudo|chmod)\b"
     r"|安装|卸载|删除|修改|更改|切换|换源|推送|提交|部署|升级|写入"
@@ -101,11 +105,14 @@ def rank(query: str, meta: dict) -> list[Candidate]:
     text = query.strip().lower()
     if not text:
         return []
-    paths = re.findall(r"[a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+", text)
+    paths = re.findall(r"(?u)[^\s\"'<>|:]+?\.[a-zA-Z0-9]{2,10}", text)
     scored = []
     for tool_id, entry in meta.items():
         value = 0.0
         reasons = []
+        if tool_id == "wps" and re.search(r"(?i)(?<![a-z0-9_-])wps(?![a-z0-9_-])", text):
+            value += 60
+            reasons.append("explicit_wps_intent")
         if text == tool_id or text.startswith(tool_id + " "):
             value += 60
             reasons.append("explicit_tool")
@@ -123,7 +130,7 @@ def rank(query: str, meta: dict) -> list[Candidate]:
             if not kw:
                 continue
             if kw.isascii() and re.fullmatch(r"[a-z0-9_.-]+", kw):
-                found = re.search(r"(?<![\w-])" + re.escape(kw) + r"(?![\w-])", text)
+                found = re.search(r"(?<![a-z0-9_-])" + re.escape(kw) + r"(?![a-z0-9_-])", text)
             else:
                 found = kw in text
             if found:

@@ -68,8 +68,32 @@
         "scripts/hamasaki_sandbox.py": "207d94416d53946b13e70abdca30f3b6804d715f",
         "scripts/hamasaki_executor.py": "1237442dc4eeefef055ee866dcf9981ba7ec4c15",
         "scripts/hamasaki_hotplug.py": "bc9a2bd044bf821d7d1a28f6c69bf647ad2f86ca",
-        "scripts/hamasaki_pipeline.py": "ef5892e07cd8574773b86e5de6f550f80ee0cdf8",
+        "scripts/hamasaki_pipeline.py": "407fdef89f3db4bf95083a15bb3de6bb2337d576",
         "scripts/hamasaki_plan_cli.py": "c1de9be02e000a7dc1e2a6be9aaaa5a80e96bdb7"
+      }
+    },
+    "markdown": {
+      "category": "Productivity",
+      "files": {
+        "tools/markdown/adapter.py": "08ac27c7f43c31cc8fc825024a2872a5f64aa9bd",
+        "tools/markdown/manifest.json": "d430e0d98af70728e84009e916b97c85df326ebc",
+        "tools/markdown/SKILL.md": "64b096460017b8736446ed7cacde32ed2597cbb6"
+      }
+    },
+    "office": {
+      "category": "Productivity",
+      "files": {
+        "tools/office/adapter.py": "3b5e758e0051898143ae886c27e7560edafb5c2f",
+        "tools/office/manifest.json": "c35f949e7408a9f596352297adf97bf64589821b",
+        "tools/office/SKILL.md": "75ee2362c8a03f3a7db2d89bdb180469e86fd13b"
+      }
+    },
+    "wps": {
+      "category": "Productivity",
+      "files": {
+        "tools/wps/adapter.py": "78fd34480c7d69b5525c1492721c18c8bf1117b0",
+        "tools/wps/manifest.json": "725a00fba9cad5e275102540c5abe0cc63ab8185",
+        "tools/wps/SKILL.md": "1a3804580513326eafba11eaff84ec07faf74ee9"
       }
     }
   }

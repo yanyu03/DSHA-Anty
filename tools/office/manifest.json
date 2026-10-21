@@ -1,0 +1,20 @@
+{
+  "schema": "dsha-tool/v1",
+  "id": "office",
+  "name": "Office",
+  "category": "Productivity",
+  "entry": "adapter.py",
+  "actions": [
+    "status",
+    "inspect"
+  ],
+  "network": false,
+  "default_permissions": [
+    "read-only"
+  ],
+  "provenance": {
+    "url": "https://github.com/microsoft/markitdown",
+    "license": "MIT",
+    "note": "Independent adapter uses python-docx/openpyxl/python-pptx; no proprietary code bundled"
+  }
+}
