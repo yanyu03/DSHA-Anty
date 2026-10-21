@@ -1254,13 +1254,24 @@ class BaseTool(ABC):
         tiers = [str(get_active_tier()).strip().lower()]
         if active_tier is not None:
             tiers.append(str(active_tier).strip().lower())
-        valid = {"read-only", "workspace-write", "danger-full-access", "auto"}
-        invalid = next((value for value in tiers if value not in valid), None)
-        tier = "read-only" if "read-only" in tiers else tiers[0]
-
-        # Strict permission tier rules:
-        # read-only: blocks medium and admin tools from modifying or executing privileged operations
-        if invalid is not None or (tier == "read-only" and self.risk_level in (RiskLevel.MEDIUM, RiskLevel.ADMIN)):
+        # Caller context can only REDUCE effective authority.
+        # auto is no more privileged than workspace-write, never ADMIN.
+        rank = {"read-only": 0, "workspace-write": 1,
+                "auto": 1, "danger-full-access": 2}
+        invalid = next((value for value in tiers if value not in rank), None)
+        effective = min((rank.get(value,-1) for value in tiers),default=-1)
+        tier = ("read-only" if effective == 0 else
+                "workspace-write" if effective == 1 else
+                "danger-full-access" if effective == 2 else "UNKNOWN")
+        # LOW may still write (e.g. extraction artifacts); READ_ONLY is the
+        # only unambiguous low-tier class. ADMIN requires explicit top tier.
+        permitted = (
+            effective == 2 or
+            effective == 1 and self.risk_level in
+                (RiskLevel.READ_ONLY, RiskLevel.LOW, RiskLevel.MEDIUM) or
+            effective == 0 and self.risk_level == RiskLevel.READ_ONLY
+        )
+        if invalid is not None or not permitted:
             err = ErrBlock(
                 error_code="ERR_PERMISSION_DENIED",
                 tool_id=self.id,
@@ -2186,237 +2197,60 @@ def Call_Tools(tool_name, args=None, context=None):
 
 
 def run_selftest():
-    tests = []
+    """Deterministic, offline, idempotent core contract verification.
 
-    # Test 1: Registry completeness (7 tools)
-    tests.append(("registry_10_tools", len(TOOL_REGISTRY.all()) == 10))
-
-    # Test 2: Category query WebEdge
-    we_tools = TOOL_REGISTRY.get_by_category(ToolCategory.WEB_EDGE)
-    tests.append(("category_query_webedge", len(we_tools) == 1 and we_tools[0].id == "cf"))
-
-    # Test 3: Category query SysAdmin
-    sa_tools = TOOL_REGISTRY.get_by_category("SysAdmin")
-    tests.append(("category_query_sysadmin", len(sa_tools) == 2 and {t.id for t in sa_tools} == {"pwsh", "sh"}))
-
-    # Test 4: Category query Archivist
-    ar_tools = TOOL_REGISTRY.get_by_category("Archivist")
-    tests.append(("category_query_archivist", len(ar_tools) == 1 and ar_tools[0].id == "scribe"))
-
-    # Test 5: Category query PolicyRadar
-    pr_tools = TOOL_REGISTRY.get_by_category("PolicyRadar")
-    tests.append(("category_query_policyradar", len(pr_tools) == 2 and {t.id for t in pr_tools} == {"tier", "meter"}))
-
-    # Test 6: Category query ReverseEngineering
-    re_tools = TOOL_REGISTRY.get_by_category("ReverseEngineering")
-    tests.append(("category_query_reverse", len(re_tools) == 1 and re_tools[0].id == "rea"))
-
-    # Test 7: List all categories (5 distinct categories)
-    cats = TOOL_REGISTRY.list_categories()
-    tests.append(("list_categories_5", len(cats) == 5))
-
-    # Test 8: Host Python prerequisite verified
-    scribe_tool = TOOL_REGISTRY.get("scribe")
-    ok_env, _ = scribe_tool.assert_environment()
-    tests.append(("scribe_env_satisfied", ok_env))
-
-    # Test 9: Host Pwsh prerequisite verified
-    pwsh_tool = TOOL_REGISTRY.get("pwsh")
-    ok_env_pwsh, _ = pwsh_tool.assert_environment()
-    tests.append(("pwsh_env_satisfied", ok_env_pwsh))
-
-    # Test 10: Missing prerequisite triggers ErrBlock refusal
-    class MissingPrereqTool(BaseTool):
-        def __init__(self):
-            super().__init__(
-                tool_id="missing_tool",
-                name="Tool with Missing Binary",
-                category=ToolCategory.SYSADMIN,
-                risk_level=RiskLevel.LOW,
-                version="1.0.0",
-                description="Test tool",
-                cmd="missing.cmd",
-                prerequisites=[
-                    PrerequisiteEnv(binary="nonexistent_virtual_binary_999", min_version="9.9.9")
-                ],
-            )
-
-    missing_tool = MissingPrereqTool()
-    res_missing = missing_tool.execute()
-    tests.append((
-        "missing_prereq_err_block",
-        not res_missing["success"]
-        and res_missing["exit_code"] == 126
-        and "ERR_PREREQUISITE_MISSING" in res_missing["stderr"]
-        and "err_block" in res_missing
-    ))
-
-    # Test 11: Anti-privilege escalation blocks modifying tool under read-only tier
-    res_auth = pwsh_tool.execute(context={"tier": "read-only"})
-    tests.append((
-        "anti_privilege_escalation_read_only",
-        not res_auth["success"]
-        and res_auth["exit_code"] == 126
-        and "ERR_PERMISSION_DENIED" in res_auth["stderr"]
-    ))
-
-    # Test 12: Read-only tool permitted under read-only tier
-    ok_auth_scribe, err_auth_scribe = scribe_tool.assert_authorization("read-only")
-    tests.append(("read_only_tool_permitted_under_read_only", ok_auth_scribe and err_auth_scribe is None))
-
-    # Test 13: Class extensibility - custom tool subclassing BaseTool and registering
-    class CustomTelemetryTool(BaseTool):
-        def __init__(self):
-            super().__init__(
-                tool_id="custom_telemetry",
-                name="Custom Telemetry Extension",
-                category=ToolCategory.POLICY_RADAR,
-                risk_level=RiskLevel.READ_ONLY,
-                version="2.0.0",
-                description="User custom extension tool",
-                cmd="scribe.cmd",
-            )
-
-    custom_instance = TOOL_REGISTRY.register(CustomTelemetryTool)
-    tests.append((
-        "class_extensibility_registration",
-        TOOL_REGISTRY.get("custom_telemetry") is not None
-        and TOOL_REGISTRY.get("custom_telemetry").version == "2.0.0"
-    ))
-
-    # Test 11: Containment refuses a target outside the sandbox
-    _probe = TOOL_REGISTRY.get("scribe")
-    outside_target = str(Path(os.environ.get("SystemRoot") or "/outside_sandbox").resolve() / "System32" / "cmd.exe")
-    _ok_out, _ = _probe.assert_target_contained(outside_target)
-    tests.append(("containment_refuses_outside", not _ok_out))
-
-    # Test 12: Containment allows the declared launcher
-    _declared = _probe.resolve_executable()
-    _ok_in, _ = _probe.assert_target_contained(_declared) if _declared else (False, None)
-    tests.append(("containment_allows_declared", bool(_ok_in)))
-
-    # Test 13: HostEnvPerceiver probes all 6 runtimes dynamically without hardcoded paths
-    probe_map = HostEnvPerceiver.probe_all()
-    tests.append((
-        "host_env_perceiver_dynamic_probe",
-        isinstance(probe_map, dict)
-        and len(probe_map) == 6
-        and probe_map["python"]["located"] is True
-    ))
-
-    # Test 14: ExecutionEnvelope strictly isolates parent secrets (unidirectional sanitization)
-    old_token = os.environ.get("SENSITIVE_LEAK_TOKEN")
+    Does not require installed Windows executables on Linux, dispatch tools,
+    update shared registry state, or reuse a real trace filename.
+    """
+    from unittest.mock import patch
+    checks = []
+    actual = set(TOOL_REGISTRY.all())
+    checks.append(("catalog_10_unique", actual ==
+                   {"cf","rea","scribe","pwsh","sh","tier","meter",
+                    "markdown","office","wps"}))
+    checks.append(("six_categories", len(TOOL_REGISTRY.list_categories()) == 6))
+    checks.append(("productivity_peer_registration",
+                   len(TOOL_REGISTRY.get_by_category("Productivity")) == 3))
+    temp = ToolRegistry()
+    temp.register(ProductivityTool("markdown"))
     try:
-        os.environ["SENSITIVE_LEAK_TOKEN"] = "stolen_session_secret"
-        env_envelope = ExecutionEnvelope.from_context({"tier": "auto", "custom_env": {"EXPLICIT_SAFE": "1"}})
-        sanitized_env = env_envelope.build_subprocess_env()
-        tests.append((
-            "execution_envelope_secret_isolation",
-            "SENSITIVE_LEAK_TOKEN" not in sanitized_env
-            and sanitized_env.get("EXPLICIT_SAFE") == "1"
-            and sanitized_env.get("PYTHONUTF8") == "1"
-            and "PATH" in sanitized_env
-        ))
-    finally:
-        if old_token is not None:
-            os.environ["SENSITIVE_LEAK_TOKEN"] = old_token
-        else:
-            os.environ.pop("SENSITIVE_LEAK_TOKEN", None)
-
-    # Test 15: ExecutionEnvelope unidirectional parameter bounds
-    bounded_envelope = ExecutionEnvelope.from_context({"timeout": 999999, "tier": " READ-ONLY "})
-    tests.append((
-        "execution_envelope_param_bounds",
-        bounded_envelope.timeout == 3600
-        and bounded_envelope.tier == "read-only"
-    ))
-
-    # Test 16: HostEnvPerceiver renders radar telemetry HUD and JSON
-    radar_text = HostEnvPerceiver.render_radar()
-    radar_json = HostEnvPerceiver.render_radar(as_json=True)
-    tests.append((
-        "host_env_perceiver_radar_hud",
-        "DSHA EnvFeel" in radar_text
-        and "v1.1.0-std" in radar_text
-        and isinstance(json.loads(radar_json), dict)
-    ))
-
-    # Test 17: Standard response envelope always includes envfeel payload
-    res_feel_check = Call_Tools("scribe", ["status"], {"timeout": 10})
-    tests.append((
-        "standard_response_envelope_envfeel",
-        "envfeel" in res_feel_check
-        and "status" in res_feel_check["envfeel"]
-        and "platform" in res_feel_check["envfeel"]
-    ))
-
-    # Test 18: Forward execution generates trace_receipt with 7-stage records
-    res_trace_check = Call_Tools("scribe", ["status"], {"timeout": 10})
-    tests.append((
-        "trace_receipt_forward_success",
-        "trace_receipt" in res_trace_check
-        and res_trace_check["trace_receipt"]["status"] == "PASS"
-        and len(res_trace_check["trace_receipt"]["stages"]) >= 6
-    ))
-
-    # Test 19: Retrace engine walks backward from Stage 7 to Stage 1
-    retrace_text = retrace(res_trace_check)
-    tests.append((
-        "trace_receipt_reverse_retrace",
-        "逆向调用链回溯" in retrace_text
-        and "7/7: 响应封套封装" in retrace_text
-        and "1/7: 入口封套校验" in retrace_text
-        and "依契约复现命令" in retrace_text
-    ))
-
-    # Test 20: Retrace on prerequisite missing failure isolates Stage 3 failure
-    res_missing_trace = missing_tool.execute()
-    retrace_missing = retrace(res_missing_trace)
-    tests.append((
-        "trace_receipt_retrace_prereq_failure",
-        "ERR_PREREQUISITE_MISSING" in retrace_missing
-        and "3/7: 宿主环境自感知" in retrace_missing
-        and "❌ [FAIL]" in retrace_missing
-    ))
-
-    # Test 21: Retrace on authorization failure isolates Stage 4 failure
-    res_auth_trace = pwsh_tool.execute(context={"tier": "read-only"})
-    retrace_auth = retrace(res_auth_trace)
-    tests.append((
-        "trace_receipt_retrace_auth_failure",
-        "ERR_PERMISSION_DENIED" in retrace_auth
-        and "4/7: 权限档位核验" in retrace_auth
-        and "❌ [FAIL]" in retrace_auth
-    ))
-
-    # Test 22: TraceStore persistence and retrieval by trace_id
-    tid_sample = res_trace_check["trace_id"]
-    loaded_trace = TraceStore.get(tid_sample)
-    tests.append((
-        "trace_store_persistence",
-        loaded_trace is not None
-        and loaded_trace.get("trace_id") == tid_sample
-        and loaded_trace.get("status") == "PASS"
-    ))
-
-    # Test 23: Open Protocol Schema dump
-    schema_dump = dump_open_protocol_schema()
-    tests.append((
-        "open_protocol_schema_dump",
-        isinstance(schema_dump, dict)
-        and schema_dump.get("title") == "DSHA Open Protocol Specification (v1.2.0-std)"
-        and "DSHARequest" in schema_dump.get("definitions", {})
-        and "DSHAResponse" in schema_dump.get("definitions", {})
-        and "TraceReceipt" in schema_dump.get("definitions", {})
-    ))
-
-    passed = sum(1 for _, ok in tests if ok)
-    total = len(tests)
-    print(f"selftest: {passed}/{total}")
-    for name, ok in tests:
-        status = "PASS" if ok else "FAIL"
-        print(f"  [{status}] {name}")
-    return passed == total
+        temp.register(ProductivityTool("markdown"))
+        duplicate_denied=False
+    except ValueError:
+        duplicate_denied=True
+    checks.append(("duplicate_cannot_shadow", duplicate_denied))
+    with patch(__name__ + ".get_active_tier", return_value="read-only"):
+        admin_ok, _ = TOOL_REGISTRY.get("tier").assert_authorization("danger-full-access")
+        low_ok, _ = TOOL_REGISTRY.get("rea").assert_authorization("read-only")
+        read_ok, _ = TOOL_REGISTRY.get("scribe").assert_authorization("read-only")
+    checks.append(("host_read_only_cannot_escalate", not admin_ok and not low_ok and read_ok))
+    with patch(__name__ + ".get_active_tier", return_value="workspace-write"):
+        admin_ok, _ = TOOL_REGISTRY.get("tier").assert_authorization("danger-full-access")
+    checks.append(("workspace_blocks_admin", not admin_ok))
+    env = ExecutionEnvelope.from_context({"timeout": 999999,
+                                          "tier": " READ-ONLY ",
+                                          "trace_id": "../../outside",
+                                          "custom_env": {"LD_PRELOAD": "/tmp/a.so"}})
+    checks.append(("envelope_bounds", env.timeout == 3600 and
+                   env.tier == "read-only" and env.trace_id is None))
+    # Construct but never persist; verify sensitive values cannot be serialized.
+    receipt = TraceReceipt(trace_id="safe_test", caller="private_identity",
+                           tool_id="cf", tool_name="test", category="WebEdge",
+                           args=["--token=SECRET_TEST"])
+    receipt.finalize("REFUSED", 126, 1)
+    serialized = json.dumps(receipt.to_dict(), ensure_ascii=False)
+    checks.append(("receipt_redacts", "SECRET_TEST" not in serialized and
+                   "private_identity" not in serialized))
+    checks.append(("trace_lookup_rejects_traversal",
+                   TraceStore.get("../etc/passwd") is None))
+    schema = dump_open_protocol_schema()
+    checks.append(("protocol_schema", isinstance(schema, dict) and
+                   "DSHARequest" in schema.get("definitions", {})))
+    passed = sum(1 for _, good in checks if good)
+    print(f"selftest: {passed}/{len(checks)}")
+    for name, good in checks:
+        print(f"  [{'PASS' if good else 'FAIL'}] {name}")
+    return passed == len(checks)
 
 
 def main():

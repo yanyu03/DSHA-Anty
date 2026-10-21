@@ -62,6 +62,41 @@ class HardenedIsolationV07(unittest.TestCase):
         self.assertFalse(allowed)
         self.assertEqual(err.error_code,"ERR_PERMISSION_DENIED")
 
+    def test_workspace_cannot_execute_admin_tools(self):
+        admin=core.TOOL_REGISTRY.get("tier")
+        with patch.object(core,"get_active_tier",return_value="workspace-write"):
+            allowed,err=admin.assert_authorization("danger-full-access")
+        self.assertFalse(allowed)
+        self.assertEqual(err.error_code,"ERR_PERMISSION_DENIED")
+
+    def test_auto_cannot_execute_admin_tools(self):
+        admin=core.TOOL_REGISTRY.get("tier")
+        with patch.object(core,"get_active_tier",return_value="auto"):
+            allowed,err=admin.assert_authorization()
+        self.assertFalse(allowed)
+        self.assertEqual(err.error_code,"ERR_PERMISSION_DENIED")
+
+    def test_danger_explicitly_allows_admin_risk(self):
+        admin=core.TOOL_REGISTRY.get("tier")
+        with patch.object(core,"get_active_tier",return_value="danger-full-access"):
+            allowed,err=admin.assert_authorization("danger-full-access")
+        self.assertTrue(allowed)
+        self.assertIsNone(err)
+
+    def test_read_only_rejects_low_risk_with_undeclared_writes(self):
+        low=core.TOOL_REGISTRY.get("rea")
+        with patch.object(core,"get_active_tier",return_value="read-only"):
+            allowed,err=low.assert_authorization("read-only")
+        self.assertFalse(allowed)
+        self.assertEqual(err.error_code,"ERR_PERMISSION_DENIED")
+
+    def test_caller_downgrades_host_privilege(self):
+        tool=core.TOOL_REGISTRY.get("cf")
+        with patch.object(core,"get_active_tier",return_value="danger-full-access"):
+            allowed,err=tool.assert_authorization("read-only")
+        self.assertFalse(allowed)
+        self.assertEqual(err.error_code,"ERR_PERMISSION_DENIED")
+
     def test_trace_directory_private_outside_checkout(self):
         with tempfile.TemporaryDirectory() as d:
             with patch.dict(os.environ,{"XDG_STATE_HOME":d}):
@@ -123,6 +158,13 @@ class HardenedIsolationV07(unittest.TestCase):
                 exe.run_bounded(command,timeout=0.25,env=sand.safe_environment(),
                                 stdout=out,stderr=err)
         self.assertLess(time.monotonic()-start,4.0)
+
+    def test_selftest_is_idempotent_and_offline(self):
+        with patch.object(core.TraceStore,"save",
+                          side_effect=AssertionError("selftest must not persist")):
+            self.assertTrue(core.run_selftest())
+            self.assertTrue(core.run_selftest())
+        self.assertEqual(len(core.TOOL_REGISTRY.all()),10)
 
     def test_no_preexec_fn(self):
         import inspect

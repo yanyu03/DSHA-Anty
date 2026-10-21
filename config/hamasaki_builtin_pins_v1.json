@@ -56,8 +56,8 @@
       "files": {
         "scripts/router.py": "b15fd385c359c88e779a8db8fd30c9a81ddb271b",
         "scripts/index.py": "19c93145eb442907a22a982ccd6dd5cbe8971b04",
-        "scripts/base_tool.py": "1eb1e3d76f01cbffe07db74ceacf9adf01e9c135",
-        "plugins/dsh-permissions/scripts/base_tool.py": "1eb1e3d76f01cbffe07db74ceacf9adf01e9c135",
+        "scripts/base_tool.py": "a35fc33e01e948775f1b0b7bd72cda01f8dfbb51",
+        "plugins/dsh-permissions/scripts/base_tool.py": "a35fc33e01e948775f1b0b7bd72cda01f8dfbb51",
         "plugins/dsh-permissions/scripts/englock.py": "883708b98f91152d77cca3fe248ff6b2c0b86d7a"
       }
     },
