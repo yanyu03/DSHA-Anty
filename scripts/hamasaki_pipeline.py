@@ -134,7 +134,8 @@ def make_error(code: str, reason: str, *, stages: list[str], details: dict | Non
             "trace_receipt": {"status": "BLOCKED", "stages": stages + ["err_block"]}}
 
 def plan(query: str, *, root: Path | None = None, snapshot: EnvSnapshot | None = None,
-         tools: dict | None = None, tier: str | None = None) -> dict:
+         tools: dict | None = None, tier: str | None = None,
+         project_root: Path | None = None) -> dict:
     """Rank once; probe selected tool only; return plan/error, never execute."""
     stages = ["index_catalog"]
     root = root or Path(__file__).resolve().parents[1]
@@ -149,10 +150,22 @@ def plan(query: str, *, root: Path | None = None, snapshot: EnvSnapshot | None =
     # cf CLI is preferred for API work. Project dev/build/deploy must match
     # the actual config on disk, not another CLI's cached OAuth identity.
     project_op = bool(re.search(r"(?i)\b(dev|build|deploy|init)\b|构建|部署", query))
+    project_review_needed = False
     if project_op and selected.id in ("cf", "wrangler"):
-        mode = project_kind(Path.cwd())
-        selected = Candidate("wrangler" if mode == "wrangler" else "cf", selected.score,
+        mode = project_kind(project_root if project_root is not None else Path.cwd())
+        requested = query.strip().lower().split(maxsplit=1)[0]
+        explicitly_wrangler = requested == "wrangler"
+        explicitly_cfcli = requested in ("cfcli", "cloudflare")
+        if ((explicitly_wrangler and mode == "cfcli") or
+            (explicitly_cfcli and mode == "wrangler")):
+            return make_error("ERR_PROJECT_BACKEND_MISMATCH",
+                              "Explicit backend conflicts with project config; no silent switch",
+                              stages=stages, details={"requested": requested, "project": mode})
+        choice = ("wrangler" if explicitly_wrangler else "cf" if explicitly_cfcli else
+                  "wrangler" if mode == "wrangler" else "cf")
+        selected = Candidate(choice, selected.score,
                              selected.reason + ("project_config:" + mode,))
+        project_review_needed = mode == "unspecified"
     current_tier = tier if tier is not None else linux.tier_status(root)
     if current_tier not in linux.VALID_TIERS:
         return make_error("ERR_POLICY_UNKNOWN", "Missing or invalid permission tier", stages=stages,
@@ -184,6 +197,7 @@ def plan(query: str, *, root: Path | None = None, snapshot: EnvSnapshot | None =
     return {"schema": SCHEMA, "status": "PLAN_ONLY", "selected_tool": selected.id,
             "score": selected.score, "reason": list(selected.reason),
             "environment": evidence, "needs_user_approval": modifying,
+            "needs_project_review": project_review_needed,
             "port_state": "HOTPLUG_READY" if is_hotplug else "PENDING_OYASMI_PORT" if selected.id in PENDING_PORT else "METADATA_READY",
             "executed": False, "alternatives": [c.id for c in ranked[1:3]],
             "trace_receipt": {"status": "PLANNED", "stages": stages + ["return_plan"],

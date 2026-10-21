@@ -139,7 +139,7 @@ def dispatch(args, cwd=None, execute=True):
         return 2,{"status":"ERR_BLOCK","error_code":"ERR_BACKEND_UNAVAILABLE",
                   "backend":route["backend"],"reason":"No identity-verified executable; no fallback"}
     if not execute:
-        return 0,{"status":"PLAN_ONLY",**route,"binary":binary,"executed":False}
+        return 0,{**route,"status":"PLAN_ONLY","binary":binary,"executed":False}
     if route.get("needs_project_review"):
         return 2,{"status":"ERR_BLOCK","error_code":"ERR_PROJECT_REVIEW_REQUIRED",
                   "backend":route["backend"],"reason":"No recognized project config. Use explicit cfcli command after reviewing project setup."}
