@@ -1,0 +1,19 @@
+{
+  "schema": "hamasaki.tool/v1",
+  "id": "ext-demo",
+  "name": "Demo",
+  "version": "1",
+  "entry": "main.py",
+  "keywords": [
+    "demo"
+  ],
+  "actions": {
+    "status": {
+      "risk": "read-only",
+      "argv": [
+        "status"
+      ],
+      "timeout": 5
+    }
+  }
+}

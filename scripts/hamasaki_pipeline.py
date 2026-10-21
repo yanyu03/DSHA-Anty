@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 import hamasaki_linux as linux
+import hamasaki_hotplug as hotplug
 
 # The original Kaeru Router remains the metadata source for common tools.
 EXTENSIONS = {
@@ -74,7 +75,7 @@ def catalog() -> dict:
         from router import TOOL_REGISTRY
     except (ImportError, RuntimeError, OSError):
         return {}
-    return {**TOOL_REGISTRY, **EXTENSIONS}
+    return {**TOOL_REGISTRY, **EXTENSIONS, **hotplug.catalog()}
 
 def rank(query: str, meta: dict) -> list[Candidate]:
     text = query.strip().lower()
@@ -142,7 +143,11 @@ def plan(query: str, *, root: Path | None = None, snapshot: EnvSnapshot | None =
         return make_error("ERR_PERMISSION_DENIED", "Request conflicts with read-only tier", stages=stages,
                           details={"selected_tool": selected.id})
     env = snapshot if snapshot is not None else EnvSnapshot()
-    reqs = REQUIRES.get(selected.id)
+    is_hotplug = selected.id.startswith("ext-")
+    if is_hotplug and hotplug.inspect(hotplug.home() / selected.id).get("status") != "READY":
+        return make_error("ERR_TOOL_UNTRUSTED", "Plugin is untrusted or has changed", stages=stages,
+                          details={"selected_tool":selected.id})
+    reqs = () if is_hotplug else REQUIRES.get(selected.id)
     if reqs is None:
         return make_error("ERR_UNDECLARED_TOOL", "No Linux tool contract", stages=stages)
     evidence = {r: env.get(r) for r in reqs}
@@ -159,7 +164,7 @@ def plan(query: str, *, root: Path | None = None, snapshot: EnvSnapshot | None =
     return {"schema": SCHEMA, "status": "PLAN_ONLY", "selected_tool": selected.id,
             "score": selected.score, "reason": list(selected.reason),
             "environment": evidence, "needs_user_approval": modifying,
-            "port_state": "PENDING_OYASMI_PORT" if selected.id in PENDING_PORT else "METADATA_READY",
+            "port_state": "HOTPLUG_READY" if is_hotplug else "PENDING_OYASMI_PORT" if selected.id in PENDING_PORT else "METADATA_READY",
             "executed": False, "alternatives": [c.id for c in ranked[1:3]],
             "trace_receipt": {"status": "PLANNED", "stages": stages + ["return_plan"],
                               "probes_this_session": env.probes, "cache_hits": env.hits}}

@@ -1,9 +1,9 @@
 #!/bin/sh
-# Linux adapter; no sudo, external network or mutation.
 set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
-case "${1:-status}" in
+case "$1" in
+  tools) shift; exec python3 "$REPO_ROOT/scripts/hamasaki_hotplug.py" "$@" ;;
   plan|catalog) exec python3 "$REPO_ROOT/scripts/hamasaki_plan_cli.py" "$@" ;;
   *) exec python3 "$REPO_ROOT/scripts/hamasaki_linux.py" "$@" ;;
 esac
