@@ -1768,14 +1768,13 @@ class CFTool(BaseTool):
             cmd="cf.cmd",
             script="dsha_cf.py",
             prerequisites=[
+                # The wrapper is Python-driven. Cloudflare cf CLI and Wrangler
+                # are selected/verified independently at actual dispatch time.
+                # Requiring Wrangler here would incorrectly refuse cf-only setups.
                 PrerequisiteEnv(
-                    binary="node",
-                    min_version="20.0.0",
-                    remediation="Install Node.js >= 20.0.0 via 'winget install OpenJS.NodeJS.LTS' or https://nodejs.org",
-                ),
-                PrerequisiteEnv(
-                    binary="wrangler",
-                    remediation="Install Wrangler CLI via 'npm install -g wrangler' or use npx wrangler.",
+                    binary="python",
+                    min_version="3.10.0",
+                    remediation="Install Python 3.10+ for the DSHA dispatch wrapper.",
                 ),
             ],
             keywords=[

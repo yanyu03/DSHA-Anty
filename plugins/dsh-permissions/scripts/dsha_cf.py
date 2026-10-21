@@ -27,11 +27,16 @@ def project_kind(path=None):
     return "unspecified"
 
 def _is_own_wrapper(path):
-    wrapper = Path(__file__).resolve().parents[1] / "bin" / "cf.cmd"
+    # The standalone and plugin mirror have different parent depths.
+    # Avoid recursing back into DSHA's own cf.cmd while looking for Cloudflare cf.
     try:
-        return wrapper.exists() and Path(path).samefile(wrapper)
+        for root in Path(__file__).resolve().parents:
+            wrapper = root / "bin" / "cf.cmd"
+            if wrapper.exists() and Path(path).samefile(wrapper):
+                return True
     except OSError:
-        return False
+        return True
+    return False
 
 def _identity_probe(name, path):
     if _is_own_wrapper(path):

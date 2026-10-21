@@ -54,3 +54,18 @@ class CfRoutingTests(unittest.TestCase):
             self.assertFalse(cf._identity_probe("cfcli","/tmp/fakecf"))
 
 if __name__=="__main__":unittest.main()
+
+
+class CfPrerequisiteIsolation(unittest.TestCase):
+    def test_cf_does_not_require_wrangler(self):
+        import base_tool
+        tool = base_tool.CFTool()
+        binaries = [x.binary for x in tool.prerequisites]
+        self.assertNotIn("wrangler", binaries)
+        self.assertNotIn("cfcli", binaries)
+        self.assertIn("python", binaries)
+
+    def test_own_wrapper_is_never_a_cfcli_binary(self):
+        from unittest.mock import patch
+        with patch.object(cf, "_is_own_wrapper", return_value=True):
+            self.assertFalse(cf._identity_probe("cfcli", "/tmp/cf.cmd"))
