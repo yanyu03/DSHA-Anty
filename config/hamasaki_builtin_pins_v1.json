@@ -21,8 +21,8 @@
       "category": "Archivist",
       "files": {
         "bin/scribe.cmd": "055ae4dee0a114e2b0c733b5b29535c4fed45259",
-        "scripts/scribe.py": "21ba92471facb9d843e8091e4f4e3ab36d9137db",
-        "plugins/dsh-permissions/scripts/scribe.py": "21ba92471facb9d843e8091e4f4e3ab36d9137db"
+        "scripts/scribe.py": "9a824365131eecc94bcb853a89f471cf0814645e",
+        "plugins/dsh-permissions/scripts/scribe.py": "9a824365131eecc94bcb853a89f471cf0814645e"
       }
     },
     "pwsh": {
@@ -56,8 +56,8 @@
       "files": {
         "scripts/router.py": "b15fd385c359c88e779a8db8fd30c9a81ddb271b",
         "scripts/index.py": "19c93145eb442907a22a982ccd6dd5cbe8971b04",
-        "scripts/base_tool.py": "a35fc33e01e948775f1b0b7bd72cda01f8dfbb51",
-        "plugins/dsh-permissions/scripts/base_tool.py": "a35fc33e01e948775f1b0b7bd72cda01f8dfbb51",
+        "scripts/base_tool.py": "f7644d75a78b4ae1df9e1e806a9341689d053fbb",
+        "plugins/dsh-permissions/scripts/base_tool.py": "f7644d75a78b4ae1df9e1e806a9341689d053fbb",
         "plugins/dsh-permissions/scripts/englock.py": "883708b98f91152d77cca3fe248ff6b2c0b86d7a"
       }
     },

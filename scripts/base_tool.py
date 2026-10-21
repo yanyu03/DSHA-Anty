@@ -1248,7 +1248,7 @@ class BaseTool(ABC):
             return False, err
         return True, None
 
-    def assert_authorization(self, active_tier=None):
+    def assert_authorization(self, active_tier=None, args=None):
         """Anti-privilege escalation gate: strictly blocks unauthorized operations."""
         # A caller's context may restrict, never replace the active host tier.
         tiers = [str(get_active_tier()).strip().lower()]
@@ -1263,13 +1263,18 @@ class BaseTool(ABC):
         tier = ("read-only" if effective == 0 else
                 "workspace-write" if effective == 1 else
                 "danger-full-access" if effective == 2 else "UNKNOWN")
+        # Scribe status is explicitly side-effect-free; harvest and dossier
+        # write cache/files, therefore require workspace-write permission.
+        operation_risk = self.risk_level
+        if self.id == "scribe" and not (args == ["status"]):
+            operation_risk = RiskLevel.MEDIUM
         # LOW may still write (e.g. extraction artifacts); READ_ONLY is the
         # only unambiguous low-tier class. ADMIN requires explicit top tier.
         permitted = (
             effective == 2 or
-            effective == 1 and self.risk_level in
+            effective == 1 and operation_risk in
                 (RiskLevel.READ_ONLY, RiskLevel.LOW, RiskLevel.MEDIUM) or
-            effective == 0 and self.risk_level == RiskLevel.READ_ONLY
+            effective == 0 and operation_risk == RiskLevel.READ_ONLY
         )
         if invalid is not None or not permitted:
             err = ErrBlock(
@@ -1277,8 +1282,8 @@ class BaseTool(ABC):
                 tool_id=self.id,
                 tool_name=self.name,
                 category=self.category.value,
-                refusal_statement=f"DSHA 越权拦截: 当前权限处于 '{tier}' 档位，禁止调用具有修改/写操作风险等级 ({self.risk_level.value}) 的工具。",
-                details=[{"active_tier": tiers[0], "requested_tier": active_tier, "invalid_tier": invalid, "tool_risk_level": self.risk_level.value}],
+                refusal_statement=f"DSHA 越权拦截: 当前权限处于 '{tier}' 档位，禁止调用具有修改/写操作风险等级 ({operation_risk.value}) 的工具。",
+                details=[{"active_tier": tiers[0], "requested_tier": active_tier, "invalid_tier": invalid, "tool_risk_level": operation_risk.value}],
                 remediations=["如需执行此操作，请先确认并将权限档位切换为 workspace-write、auto 或 danger-full-access。"],
             )
             return False, err
@@ -1473,7 +1478,7 @@ class BaseTool(ABC):
 
         # Stage 4: Tier Authorization Assertion (Anti-privilege escalation)
         active_tier = envelope.tier
-        ok_auth, err_auth = self.assert_authorization(active_tier)
+        ok_auth, err_auth = self.assert_authorization(active_tier, args=args)
         if not ok_auth:
             receipt.record_stage(
                 TraceStage.TIER_AUTHORIZATION,
@@ -2222,7 +2227,7 @@ def run_selftest():
     with patch(__name__ + ".get_active_tier", return_value="read-only"):
         admin_ok, _ = TOOL_REGISTRY.get("tier").assert_authorization("danger-full-access")
         low_ok, _ = TOOL_REGISTRY.get("rea").assert_authorization("read-only")
-        read_ok, _ = TOOL_REGISTRY.get("scribe").assert_authorization("read-only")
+        read_ok, _ = TOOL_REGISTRY.get("scribe").assert_authorization("read-only",args=["status"])
     checks.append(("host_read_only_cannot_escalate", not admin_ok and not low_ok and read_ok))
     with patch(__name__ + ".get_active_tier", return_value="workspace-write"):
         admin_ok, _ = TOOL_REGISTRY.get("tier").assert_authorization("danger-full-access")

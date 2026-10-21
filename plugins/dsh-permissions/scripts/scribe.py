@@ -39,15 +39,24 @@ if hasattr(sys.stdout, "reconfigure"):
 def get_default_paths():
     script_dir = Path(__file__).resolve().parent
     repo_root = script_dir.parent if script_dir.name in ("scripts", "bin") else script_dir
-    user_home = Path(os.environ.get("USERPROFILE") or os.environ.get("HOME") or ".")
-    gemini_cfg = user_home / ".gemini" / "config"
-    brain_dir = user_home / ".gemini" / "antigravity" / "brain"
-
+    user_home = Path(os.environ.get("USERPROFILE") or os.environ.get("HOME") or str(Path.home()))
+    if os.name != "nt":
+        # Linux: no hardcoded Windows/Gemini directories or in-repo cache.
+        config_home = Path(os.environ.get("XDG_CONFIG_HOME") or user_home/".config")
+        state_home = Path(os.environ.get("XDG_STATE_HOME") or user_home/".local"/"state")
+        cache_home = Path(os.environ.get("XDG_CACHE_HOME") or user_home/".cache")
+        gemini_cfg = config_home/"hamasaki"
+        brain_dir = state_home/"hamasaki"/"tasks"
+        cache = cache_home/"hamasaki"/"scribe"
+    else:
+        gemini_cfg = user_home/".gemini"/"config"
+        brain_dir = user_home/".gemini"/"antigravity"/"brain"
+        cache = repo_root/".scribe"
     return {
         "repo_root": repo_root,
         "gemini_cfg": gemini_cfg,
         "brain_dir": brain_dir,
-        "scribe_cache": repo_root / ".scribe",
+        "scribe_cache": cache,
     }
 
 
@@ -155,11 +164,14 @@ def get_git_state(repo_root):
         "recent_commits": [],
     }
     git_cmd = shutil.which("git") or "git"
+    # Git status must not refresh its index during a read-only probe.
+    git_env = {**os.environ, "GIT_OPTIONAL_LOCKS": "0"}
 
     try:
         res = subprocess.run(
             [git_cmd, "status", "--short"],
             cwd=str(repo_root),
+            env=git_env,
             capture_output=True,
             text=True,
             timeout=5,
@@ -231,7 +243,7 @@ def get_env_snapshot(paths):
     return snapshot
 
 
-def harvest(paths):
+def harvest(paths, *, persist=True):
     gate_logs = find_gate_logs(paths)
     gate_events = []
     for gl in gate_logs:
@@ -252,11 +264,12 @@ def harvest(paths):
         "recent_tasks": tasks,
     }
 
-    cache_dir = paths["scribe_cache"]
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    out_file = cache_dir / "latest_harvest.json"
-    with open(out_file, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    if persist:
+        cache_dir = paths["scribe_cache"]
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        out_file = cache_dir / "latest_harvest.json"
+        with open(out_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
 
     return data
 
@@ -465,7 +478,7 @@ def main():
         return
 
     if args.command == "status":
-        data = harvest(paths)
+        data = harvest(paths, persist=False)
         env = data.get("env", {})
         git = data.get("git", {})
         print(f"=== DSHA 书记官状态 (Scribe Status) ===")
