@@ -60,6 +60,17 @@
         "plugins/dsh-permissions/scripts/base_tool.py": "c9e30639153987c90d63cf2c37f432c4743dbcf0",
         "plugins/dsh-permissions/scripts/englock.py": "883708b98f91152d77cca3fe248ff6b2c0b86d7a"
       }
+    },
+    "hamasaki-security": {
+      "category": "CoreControl",
+      "files": {
+        "scripts/hamasaki_identity.py": "2c470848b0c429b3010029121c509cca63ed0582",
+        "scripts/hamasaki_sandbox.py": "207d94416d53946b13e70abdca30f3b6804d715f",
+        "scripts/hamasaki_executor.py": "1237442dc4eeefef055ee866dcf9981ba7ec4c15",
+        "scripts/hamasaki_hotplug.py": "bc9a2bd044bf821d7d1a28f6c69bf647ad2f86ca",
+        "scripts/hamasaki_pipeline.py": "ef5892e07cd8574773b86e5de6f550f80ee0cdf8",
+        "scripts/hamasaki_plan_cli.py": "c1de9be02e000a7dc1e2a6be9aaaa5a80e96bdb7"
+      }
     }
   }
 }
