@@ -933,6 +933,21 @@ class TraceStore:
             fd = os.open(target, flags, 0o600)
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
                 json.dump(data, stream, ensure_ascii=False, indent=2)
+            # Bound retained local telemetry. Avoid following symlinks when
+            # inspecting/deleting stale entries and do not remove this receipt.
+            try:
+                entries=[p for p in directory.glob("*.json")
+                         if p.is_file() and not p.is_symlink()]
+                if len(entries)>100:
+                    entries.sort(key=lambda path: path.lstat().st_mtime_ns)
+                    excess=len(entries)-100
+                    for old in entries:
+                        if excess<=0: break
+                        if old != target:
+                            old.unlink()
+                            excess-=1
+            except OSError:
+                pass
             return str(target)
         except (OSError, ValueError, TypeError):
             return None
@@ -1320,7 +1335,8 @@ class BaseTool(ABC):
 
         # 0. Convert context into unidirectional ExecutionEnvelope
         envelope = ExecutionEnvelope.from_context(context)
-        trace_id = envelope.trace_id or f"tr_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}"
+        # Server-assigned ID: callers cannot collide with an existing receipt.
+        trace_id = f"tr_{uuid.uuid4().hex}"
         caller = envelope.caller
 
         receipt = TraceReceipt(
@@ -2086,7 +2102,7 @@ def Call_Tools(tool_name, args=None, context=None):
 
     tool = TOOL_REGISTRY.get(tool_name)
     if not tool:
-        trace_id = context.get("trace_id") or f"tr_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}"
+        trace_id = f"tr_{uuid.uuid4().hex}"
         caller = context.get("caller", "ai-assistant")
         receipt = TraceReceipt(
             trace_id=trace_id,

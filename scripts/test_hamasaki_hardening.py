@@ -82,6 +82,27 @@ class HardenedContracts(unittest.TestCase):
             self.assertIsNone(b)
             self.assertEqual(stat.S_IMODE(Path(a).stat().st_mode),0o600)
 
+    def test_bounded_trace_retention(self):
+        with tempfile.TemporaryDirectory() as d:
+            folder=Path(d)/"traces";folder.mkdir()
+            with patch.object(base.TraceStore,"get_trace_dir",return_value=folder):
+                for i in range(104):
+                    class Event:
+                        trace_id="tr_case%03d"%i
+                        def to_dict(self): return {"status":"PASS"}
+                    self.assertIsNotNone(base.TraceStore.save(Event()))
+            self.assertLessEqual(len(list(folder.glob("*.json"))),100)
+
+    def test_actual_call_cannot_choose_trace_filename(self):
+        with tempfile.TemporaryDirectory() as d:
+            folder=Path(d)/"traces";folder.mkdir()
+            with patch.object(base.TraceStore,"get_trace_dir",return_value=folder):
+                result=base.Call_Tools("definitely_missing_tool",[],
+                                       {"trace_id":"user_selected","tier":"read-only"})
+            self.assertNotEqual(result["trace_id"],"user_selected")
+            self.assertTrue(result["trace_id"].startswith("tr_"))
+            self.assertTrue((folder/(result["trace_id"]+".json")).exists())
+
     def test_parallel_approvals_dont_lose_records(self):
         with tempfile.TemporaryDirectory() as d:
             parent=Path(d)/"tools";parent.mkdir()
