@@ -16,3 +16,7 @@ Validate: python3 -m unittest discover -s scripts -p 'test_hamasaki_identity.py'
 `sh bin-linux/hamasaki identity --json` prints the current hash identities and their states. `sh bin-linux/hamasaki plan sha256:<full-tool-uid> --json` routes by the hash, not by classification. Plans include `tool_uid`, `category_uid` and a hash-only DSHA receipt. `verify_receipt` checks receipt checksum and current registry membership; it is **not cryptographic signing** and cannot grant execution privileges. Use an out-of-band signed distribution root for producer identity.
 
 Pinned baseline now includes the actual REA driver (`skills/reverse-engineer-anything/tools/rea/dsha_rea_driver.py`), Scribe plugin mirror, and five central DSHA core control files, in addition to seven built-in tool manifests. Altering any pinned file blocks the v0.5 execution gate; no silent repinning or automatic trust on plugin upgrade.
+
+## HotPlug identity issue and upgrade
+
+`tools list` and `tools inspect ext-foo` issue current SHA-256 tool identities locally and show the category identity; no remote hashing server is contacted. Updating any plugin byte causes a **different** tool UID and `CHANGED_REVIEW_REQUIRED`; only manual reapproval of the new package digest permits execution. Tools also accept `tools run sha256:<tool_uid> status` to bind invocation to the specific plugin version and active category membership, never choosing another version silently.

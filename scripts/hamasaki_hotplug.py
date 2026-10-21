@@ -128,9 +128,27 @@ def revoke(id):
     data=approvals();data.pop(id,None);save(data)
     return {"status":"REVOKED","id":id}
 
+def issued_index():
+    import hamasaki_identity as identities
+    return identities.snapshot(Path(__file__).resolve().parents[1],scan())
+
 def run(id,action):
-    # No legacy unrestricted host-root bwrap mount. Enforce pin + hash + sandbox.
+    # Alias and sha256:hash are both supported; cryptographic identity wins.
     from hamasaki_executor import execute
+    if isinstance(id,str) and id.startswith("sha256:"):
+        value=id.removeprefix("sha256:")
+        if not re.fullmatch(r"[0-9a-f]{64}",value):
+            return {"status":"ERR_BLOCK","error_code":"ERR_INVALID_TOOL"}
+        try:
+            current=issued_index()
+        except (ValueError,OSError,KeyError):
+            return {"status":"ERR_BLOCK","error_code":"ERR_CORE_PINS_UNAVAILABLE"}
+        choices=[x for x in current["tools"].values() if x.get("uid")==value and x.get("source")=="plugin"]
+        if len(choices)!=1:
+            return {"status":"ERR_BLOCK","error_code":"ERR_TOOL_HASH_UNKNOWN"}
+        row=choices[0]
+        return execute(row["alias"],action,expected_uid=value,
+                       expected_category_uid=row.get("category_uid"))
     return execute(id,action)
 
 def main(argv=None):
@@ -147,7 +165,15 @@ def main(argv=None):
         repo=Path(__file__).resolve().parents[1]
         try: r={"status":"CATALOG_ONLY","identity":hi.snapshot(repo,scan()),"executed":False}
         except (ValueError,OSError): r={"status":"ERR_BLOCK","error_code":"ERR_CORE_PINS_UNAVAILABLE","executed":False}
-    elif opts.cmd=="inspect":r=inspect(home()/opts.id) if IDENT.fullmatch(opts.id) else {"status":"ERR_BLOCK","error_code":"ERR_INVALID_TOOL"}
+    elif opts.cmd=="inspect":
+        r=inspect(home()/opts.id) if IDENT.fullmatch(opts.id) else {"status":"ERR_BLOCK","error_code":"ERR_INVALID_TOOL"}
+        if r.get("sha256"):
+            try:
+                row=issued_index()["tools"].get(opts.id,{})
+                r={**r,"tool_uid":row.get("uid"),"category_uid":row.get("category_uid"),
+                   "identity_schema":"dsha-hashchain-v1"}
+            except (ValueError,OSError,KeyError):
+                r={"status":"ERR_BLOCK","error_code":"ERR_CORE_PINS_UNAVAILABLE"}
     elif opts.cmd=="approve":r=approve(opts.id,opts.sha256) if opts.acknowledge_code_risk else {"status":"ERR_BLOCK","error_code":"ERR_EXPLICIT_ACK_REQUIRED"}
     elif opts.cmd=="revoke":r=revoke(opts.id)
     else:r=run(opts.id,opts.action)
