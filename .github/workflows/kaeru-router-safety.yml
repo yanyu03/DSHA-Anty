@@ -1,0 +1,26 @@
+name: Kaeru Router Safety
+on:
+  pull_request:
+    paths:
+      - 'scripts/router.py'
+      - 'scripts/test_kaeru_router_safety.py'
+      - '.github/workflows/kaeru-router-safety.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/router.py'
+      - 'scripts/test_kaeru_router_safety.py'
+      - '.github/workflows/kaeru-router-safety.yml'
+jobs:
+  safe-routing:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test Kaeru router safety
+        run: python3 -m unittest discover -s scripts -p 'test_kaeru_router_safety.py' -v

@@ -186,6 +186,17 @@ def analyze_route(input_str, check_env=True):
             scores[tool_id] += pts
             match_details[tool_id].append(f"命中关键词: {', '.join(matched_kw[:4])}")
 
+    # Zero-score requests are never routed to a random first tool.
+    # Refuse before probing any host runtime.
+    if not any(score > 0 for score in scores.values()):
+        return {
+            "status": "ERR_BLOCK", "error_code": "ERR_NO_MATCH", "input": input_str,
+            "selected_tool": None, "score": 0.0, "score_share": 0.0,
+            "confidence": 0.0, "alternatives": [],
+            "reasoning": ["No registered tool matched the request"],
+            "runner": "DSHA Router v1.0 (DHSA-TestWeb)",
+        }
+
     # 4. Host Environment Perception & Route Activation
     env_status_map = {}
     env_details_map = {}
@@ -266,6 +277,9 @@ def analyze_route(input_str, check_env=True):
 
 
 def print_route_report(res):
+    if res.get("status") == "ERR_BLOCK":
+        print(f"[DSHA-ROUTER] {res['error_code']}: no matching tool; execution refused")
+        return
     print("=== 🧭 DSHA 路由层决策报告 (Routing Decision) ===")
     print(f"  输入意图: \"{res['input']}\"")
     print(f"  首选工具: [{res['selected_tool'].upper()}] {res['tool_name']}")
@@ -417,7 +431,7 @@ def main():
             print(json.dumps(res, ensure_ascii=False, indent=2))
         else:
             print_route_report(res)
-        return 0
+        return 2 if res.get("status") == "ERR_BLOCK" else 0
 
     if cmd in ("call", "exec"):
         if len(sys.argv) < 3:
@@ -441,6 +455,14 @@ def main():
         else:
             query = sys.argv[2]
             res = analyze_route(query)
+            if res.get("status") == "ERR_BLOCK" or not res.get("selected_tool"):
+                print(f"[DSHA-ROUTER] {res.get('error_code', 'ERR_NO_MATCH')}: execution refused", file=sys.stderr)
+                return 126
+            # Routing selects a tool, not an action. Require explicit argv.
+            tool_args = sys.argv[3:]
+            if not tool_args:
+                print("[DSHA-ROUTER] ERR_TOOL_ARGS_REQUIRED: explicit tool arguments required", file=sys.stderr)
+                return 126
             print(f"[DSHA-ROUTER] Routing intent to [{res['selected_tool'].upper()}] {res['tool_name']} (得分占比: {int(res['score_share']*100)}%)...")
             call_res = Call_Tools(
                 res["selected_tool"],
@@ -471,7 +493,7 @@ def main():
     full_query = " ".join(sys.argv[1:])
     res = analyze_route(full_query)
     print_route_report(res)
-    return 0
+    return 2 if res.get("status") == "ERR_BLOCK" else 0
 
 
 if __name__ == "__main__":
