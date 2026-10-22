@@ -1,5 +1,7 @@
 # DSHA-SharBoy V1.0
 
+> **Kaeru Local 参考分支**：本分支提供面向本地 Agent 的适配指南和真机验收清单，不改变 DSHA 执行内核，也不代表 Linux/Office/WPS 已完成实机适配。请先阅读 [Kaeru Local 使用说明](KAERU_LOCAL.md) 与 [本地 Agent 规则](AGENTS.md)。正式 V1.0 发布仍见下方原有链接。
+
 面向本地 AI 开发工作流的工具调度与工程记录套件。
 
 **发行版本：V1.0** · 机器版本：`1.0.0` · 主要验证环境：Windows x64

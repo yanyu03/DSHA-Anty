@@ -1,0 +1,45 @@
+{
+  "schema": "kaeru.local.reference/v1",
+  "profile": "kaeru-local",
+  "profile_version": "0.1-reference",
+  "published_on": "2026-10-22",
+  "repository": "yanyu03/DSHA-SharBoy",
+  "branch": "kaeru-local",
+  "base_branch": "main",
+  "base_commit": "e24abe7d4e7fa6a82967af8972de0e11bf6cf5d4",
+  "type": "docs-only-agent-reference",
+  "distribution": "github-branch",
+  "claims": {
+    "baseline": "Kaeru V1.0 Windows-x64-primary source",
+    "router_fix_ci": "previous selective PR #3 passed",
+    "linux_native_execution": "NOT_VERIFIED",
+    "windows_office_wps_com": "NOT_VERIFIED",
+    "os_sandbox": "NOT_VERIFIED",
+    "cloud_deployment": "NOT_VERIFIED",
+    "trust_signature": "NOT_PROVIDED"
+  },
+  "risk_flags": [
+    "checked-in Gate tier is danger-full-access; not host authorization",
+    "tool discovery is not execution permission",
+    "Hamasaki experimental modules not part of this branch"
+  ],
+  "human_approval_required_for": [
+    "writes",
+    "installations",
+    "credential_access",
+    "cloud_operations",
+    "COM_activation",
+    "service_operations",
+    "permission_changes"
+  ],
+  "references": [
+    "AGENTS.md",
+    "KAERU_LOCAL.md",
+    "docs/local/ADAPTATION.md",
+    "docs/local/LINUX.md",
+    "docs/local/WINDOWS.md",
+    "docs/local/ACCEPTANCE.md",
+    "docs/local/RELEASE_NOTES.md"
+  ],
+  "suggested_first_task": "offline read-only synthetic Markdown fixture, with real host sandbox and audited receipt"
+}
