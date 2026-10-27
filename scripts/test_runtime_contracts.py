@@ -195,8 +195,8 @@ class RuntimeContracts(unittest.TestCase):
                 self.assertEqual(retrieved.get('trace_id'), tid)
                 self.assertEqual(retrieved.get('status'), 'PASS')
 
-    def test_stage5_path_fallback_rejects_explicit_external_paths(self):
-        # PATH fallback may resolve bare tool names, never explicit paths outside roots.
+    def test_stage5_path_fallback_blocks_builtin_shadow_and_explicit_paths(self):
+        # Built-in launchers must use trusted roots; extensions retain legacy PATH fallback.
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             external = str(Path(tmp) / 'external-tool')
@@ -210,7 +210,13 @@ class RuntimeContracts(unittest.TestCase):
                         self.assertEqual(err.error_code, 'ERR_TARGET_OUTSIDE_SANDBOX')
                         which.assert_not_called()
                 tool.cmd = 'external-tool'
-                with self.subTest(module=m.__file__, declared='bare-PATH'), patch.object(m.shutil, 'which', return_value=external) as which:
+                with self.subTest(module=m.__file__, declared='builtin-PATH-shadow'), patch.object(m.shutil, 'which', return_value=external) as which:
+                    accepted, err = tool.assert_target_contained(external)
+                    self.assertFalse(accepted)
+                    self.assertEqual(err.error_code, 'ERR_TARGET_OUTSIDE_SANDBOX')
+                    which.assert_not_called()
+                tool.id = 'external-extension'
+                with self.subTest(module=m.__file__, declared='extension-bare-PATH'), patch.object(m.shutil, 'which', return_value=external) as which:
                     self.assertTrue(tool.assert_target_contained(external)[0])
                     which.assert_called_once_with('external-tool')
                 trusted = Path(m.__file__).resolve().parent.parent / 'bin' / 'trusted-tool'
