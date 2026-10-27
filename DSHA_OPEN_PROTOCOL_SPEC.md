@@ -25,7 +25,7 @@ DSHA 开放协议定义了 AI 智能体与真实操作系统运行环境之间�
 ```mermaid
 flowchart LR
     A["AI / Caller"] -->|"顺着接口到底 (Forward Ingress)"| B["DSHA Protocol Engine"]
-    B -->|"7-Stage Pipeline"| C["Host OS Sandbox Process"]
+    B -->|"7-Stage Pipeline"| C["Host OS Subprocess"]
     C -->|"Egress Envelope"| B
     B -->|"顺着接口回溯 (Reverse Retrace)"| A
 ```
@@ -59,7 +59,7 @@ flowchart TD
     S3["[Stage 3] 宿主环境自感知 (envfeel_prerequisites)<br/>盲探拓扑 · 动态寻径 · 实时探针拉起 (can_invoke)"] --> S4
     S4["[Stage 4] 权限档位核验 (tier_authorization)<br/>DSH 权限档位判定 · 防越权读写隔离"] --> S5
     S5["[Stage 5] 白名单根收容 (catalog_containment)<br/>目录寻获 · 沙箱根边界断言 (assert_target_contained)"] --> S6
-    S6["[Stage 6] 沙箱隔离子进程执行 (sandbox_execution)<br/>环境变量剥除 · 纯净 UTF-8 管道 · 超时熔断守卫"] --> S7
+    S6["[Stage 6] 受控子进程执行 (sandbox_execution)<br/>受控环境变量 · UTF-8 输出捕获 · 子进程超时"] --> S7
     S7["[Stage 7] 标准响应封套封装 (egress_packaging)<br/>输出捕获 · 凭证生成 (TraceReceipt) · 凭据持久化"]
 ```
 
@@ -72,8 +72,10 @@ flowchart TD
 | **3** | `envfeel_prerequisites` | 盲探宿主拓扑，探测依赖环境是否存在、版本是否满足并实测拉起验证 | 126 | `ERR_PREREQUISITE_MISSING` |
 | **4** | `tier_authorization` | 读取当前活跃的 DSH 权限档位，拦截只读模式下的写操作或越权操作 | 126 | `ERR_PERMISSION_DENIED` |
 | **5** | `catalog_containment` | 在目录中查找工具，校验解析目标是否完全落在受信沙箱根路径内 | 125 | `ERR_TARGET_OUTSIDE_SANDBOX` |
-| **6** | `sandbox_execution` | 在剥除敏感凭证的受限最小环境中派生操作系统进程并捕获流 | 124 / exit code | `ERR_EXECUTION_TIMEOUT` / non-zero |
+| **6** | `sandbox_execution` | 在受控环境中启动宿主子进程，按配置捕获输出并实施超时控制 | 124 / exit code | `ERR_EXECUTION_TIMEOUT` / non-zero |
 | **7** | `egress_packaging` | 封装全量返回包（`DSHAResponse`），完成凭据签名与落盘保存 | 0 | 正常封签交付 |
+
+**Stage 6 实现边界（兼容说明）**：`sandbox_execution` 是既有协议阶段标识，为保持 `TraceReceipt` 与外部调用兼容而保留该名称；它**不等于操作系统级沙箱**。当前 `BaseTool.execute()` 使用 `subprocess.run()` 在宿主系统启动进程，传入由 `ExecutionEnvelope` 生成的环境变量、工作目录与超时设置；`custom_env` 可显式增加变量，`capture=False` 时不捕获输出。Stage 5 的 `assert_target_contained()` 只校验启动目标（且允许 `PATH` 解析到的声明命令），不能限制该进程后续访问的文件、网络或子进程。当前执行路径未提供容器、命名空间、文件系统或网络隔离，也不保证超时后终止完整后代进程树。若用于不可信代码或自博弈训练，必须额外配置并验证独立的 OS 级隔离与资源限制。
 
 ---
 
