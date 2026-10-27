@@ -1284,7 +1284,14 @@ class BaseTool(ABC):
                 return True, None
             except ValueError:
                 continue
-        which_path = shutil.which(self.cmd)
+        # PATH fallback is only for a bare declared command. shutil.which() also
+        # accepts explicit paths; those must not bypass the trusted-root check.
+        is_bare_command = (
+            isinstance(self.cmd, str)
+            and self.cmd not in ("", ".", "..")
+            and not any(sep in self.cmd for sep in ("/", "\\", ":"))
+        )
+        which_path = shutil.which(self.cmd) if is_bare_command else None
         if which_path and Path(which_path).resolve() == target:
             return True, None
         err = ErrBlock(
