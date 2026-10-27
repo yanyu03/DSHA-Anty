@@ -195,6 +195,29 @@ class RuntimeContracts(unittest.TestCase):
                 self.assertEqual(retrieved.get('trace_id'), tid)
                 self.assertEqual(retrieved.get('status'), 'PASS')
 
+    def test_stage5_path_fallback_rejects_explicit_external_paths(self):
+        # PATH fallback may resolve bare tool names, never explicit paths outside roots.
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            external = str(Path(tmp) / 'external-tool')
+            for m in self.copies('base_tool.py'):
+                tool = m.PwshTool()
+                for declared in (external, './external-tool', r'C:\tools\external-tool.exe', 'C:external-tool.exe'):
+                    tool.cmd = declared
+                    with self.subTest(module=m.__file__, declared=declared), patch.object(m.shutil, 'which', return_value=external) as which:
+                        accepted, err = tool.assert_target_contained(external)
+                        self.assertFalse(accepted)
+                        self.assertEqual(err.error_code, 'ERR_TARGET_OUTSIDE_SANDBOX')
+                        which.assert_not_called()
+                tool.cmd = 'external-tool'
+                with self.subTest(module=m.__file__, declared='bare-PATH'), patch.object(m.shutil, 'which', return_value=external) as which:
+                    self.assertTrue(tool.assert_target_contained(external)[0])
+                    which.assert_called_once_with('external-tool')
+                trusted = Path(m.__file__).resolve().parent.parent / 'bin' / 'trusted-tool'
+                tool.cmd = str(trusted)
+                with self.subTest(module=m.__file__, declared='trusted-root'), patch.object(m.shutil, 'which', return_value=None):
+                    self.assertTrue(tool.assert_target_contained(str(trusted))[0])
+
     def test_open_protocol_schema_definitions(self):
         for m in self.copies('base_tool.py'):
             with self.subTest(module=m.__file__):
