@@ -212,11 +212,11 @@ dsha-index retrace <trace_id>
 
 | 错误编码 (`error_code`) | 退出码 | 发生阶段 | 触发原因 | 处理与修复指引 |
 | :--- | :---: | :--- | :--- | :--- |
-| `ERR_PREREQUISITE_MISSING` | 126 | Stage 4 | 工具声明的运行环境在宿主未寻获或实测探针无法拉起 | 按照回溯报告中的 `remediations` 提示在宿主安装该工具链 |
-| `ERR_PERMISSION_DENIED` | 126 | Stage 5 | 当前处于 `read-only` 只读档位，而请求工具具有写操作风险 | 运行 `agy-tier.ps1 <tier>` 切换为 `workspace-write` 或 `auto` |
-| `ERR_TARGET_OUTSIDE_SANDBOX` | 125 | Stage 3 | 解析出的启动目标落在仓库 `bin/` 与受信配置目录之外 | 检查 DSHA-Index 映射配置，严禁使用相对路径逃逸沙箱 |
+| `ERR_PREREQUISITE_MISSING` | 126 | Stage 3 | 工具声明的运行环境在宿主未寻获或实测探针无法拉起 | 按照回溯报告中的 `remediations` 提示在宿主安装该工具链 |
+| `ERR_PERMISSION_DENIED` | 126 | Stage 4 | 当前处于 `read-only` 只读档位，而请求工具具有写操作风险 | 运行 `agy-tier.ps1 <tier>` 切换为 `workspace-write` 或 `auto` |
+| `ERR_TARGET_OUTSIDE_SANDBOX` | 125 | Stage 5 | 解析出的启动目标落在仓库 `bin/` 与受信配置目录之外 | 检查 DSHA-Index 映射配置，严禁使用相对路径逃逸沙箱 |
 | `ERR_EXECUTION_TIMEOUT` | 124 | Stage 6 | 外部进程运行超过设定的安全阈值（默认 180s） | 检查目标进程是否发生死锁或网络假死，必要时调大 `timeout` |
-| `ERR_LAUNCHER_NOT_FOUND` | 127 | Stage 3 | 启动器脚本文件在磁盘上丢失 | 重新运行 `install.ps1` 修复 DSHA 环境 |
+| `ERR_LAUNCHER_NOT_FOUND` | 127 | Stage 5 | 启动器脚本文件在磁盘上丢失 | 重新运行 `install.ps1` 修复 DSHA 环境 |
 | `ERR_SUBPROCESS_EXIT_NONZERO` | 1..255 | Stage 6 | 操作系统进程自身报错返回非 0 状态 | 查阅 `stderr` 输出并通过 `retrace` 获取复现命令现场调试 |
 
 ---
