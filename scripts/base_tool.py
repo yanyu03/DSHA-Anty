@@ -1291,7 +1291,11 @@ class BaseTool(ABC):
             and self.cmd not in ("", ".", "..")
             and not any(sep in self.cmd for sep in ("/", "\\", ":"))
         )
-        which_path = shutil.which(self.cmd) if is_bare_command else None
+        # Built-in DSHA tools must use trusted roots: an untrusted PATH entry
+        # must not replace a missing built-in launcher. Extensions retain the
+        # legacy PATH fallback until a per-tool trusted-root policy is added.
+        is_builtin_tool = self.id in {"cf", "rea", "scribe", "pwsh", "sh", "tier", "meter"}
+        which_path = shutil.which(self.cmd) if is_bare_command and not is_builtin_tool else None
         if which_path and Path(which_path).resolve() == target:
             return True, None
         err = ErrBlock(
