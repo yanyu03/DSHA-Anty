@@ -1261,10 +1261,41 @@ class BaseTool(ABC):
             user_home / ".gemini" / "config" / cmd_name,
             repo_root / cmd_name,
         ]
+        # Extensions opting into explicit roots search those roots first.
+        # Never fall back to the ambient PATH in that mode.
+        strict_extension = (
+            self.id not in {"cf", "rea", "scribe", "pwsh", "sh", "tier", "meter"}
+            and self.trusted_executable_roots is not None
+        )
+        if strict_extension:
+            is_bare_command = (
+                isinstance(cmd_name, str)
+                and cmd_name not in ("", ".", "..")
+                and not any(sep in cmd_name for sep in ("/", "\\", ":"))
+            )
+            if not is_bare_command:
+                return None
+            for configured_root in self.trusted_executable_roots:
+                try:
+                    root = Path(configured_root)
+                    if not root.is_absolute():
+                        continue
+                    root = root.resolve()
+                    candidate = shutil.which(cmd_name, path=str(root))
+                    if candidate:
+                        resolved_candidate = Path(candidate).resolve()
+                        resolved_candidate.relative_to(root)
+                        if resolved_candidate.is_file():
+                            return str(resolved_candidate)
+                except (OSError, TypeError, ValueError):
+                    continue
+
         for p in candidate_locations:
             if p.is_file():
                 return str(p)
 
+        if strict_extension:
+            return None
         which_path = shutil.which(cmd_name)
         if which_path:
             return which_path
