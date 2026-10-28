@@ -1155,6 +1155,7 @@ class BaseTool(ABC):
         extensions=None,
         exact_filenames=None,
         weight=1.0,
+        trusted_executable_roots=None,
     ):
         self.id = tool_id
         self.name = name
@@ -1169,6 +1170,11 @@ class BaseTool(ABC):
         self.extensions = extensions or []
         self.exact_filenames = exact_filenames or []
         self.weight = weight
+        # None preserves the legacy PATH fallback for third-party extensions.
+        # An explicit sequence (including an empty one) disables that fallback.
+        self.trusted_executable_roots = (
+            None if trusted_executable_roots is None else tuple(trusted_executable_roots)
+        )
 
     def assert_environment(self):
         """Verifies that all required host runtimes are installed."""
@@ -1291,11 +1297,25 @@ class BaseTool(ABC):
             and self.cmd not in ("", ".", "..")
             and not any(sep in self.cmd for sep in ("/", "\\", ":"))
         )
-        # Built-in DSHA tools must use trusted roots: an untrusted PATH entry
-        # must not replace a missing built-in launcher. Extensions retain the
-        # legacy PATH fallback until a per-tool trusted-root policy is added.
+        # Built-in tools never gain extra roots through extension configuration.
+        # Extensions may opt into explicit, absolute trusted roots. In that mode
+        # an untrusted PATH match is rejected rather than silently accepted.
         is_builtin_tool = self.id in {"cf", "rea", "scribe", "pwsh", "sh", "tier", "meter"}
-        which_path = shutil.which(self.cmd) if is_bare_command and not is_builtin_tool else None
+        if not is_builtin_tool and self.trusted_executable_roots is not None:
+            for configured_root in self.trusted_executable_roots:
+                configured_root = Path(configured_root)
+                if not configured_root.is_absolute():
+                    continue
+                try:
+                    target.relative_to(configured_root.resolve())
+                    return True, None
+                except ValueError:
+                    continue
+        which_path = (
+            shutil.which(self.cmd)
+            if is_bare_command and not is_builtin_tool and self.trusted_executable_roots is None
+            else None
+        )
         if which_path and Path(which_path).resolve() == target:
             return True, None
         err = ErrBlock(
