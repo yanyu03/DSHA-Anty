@@ -61,5 +61,43 @@ class WindowsScribeLauncherIntegration(unittest.TestCase):
                 self.assertEqual(stored["status"], "PASS")
 
 
+    def test_untrusted_path_shadow_is_refused_before_execution(self):
+        # Exercise actual Windows PATH resolution and the real Stage 5 Gate.
+        # The shadow launcher must never run; no subprocess or Gate mocks.
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            shadow = temp / "kdi-fatfish-untrusted-scribe.cmd"
+            sentinel = temp / "unexpected-execution.txt"
+            shadow.write_text(
+                "@echo off\n"
+                f'> "{sentinel}" echo UNEXPECTED_EXECUTION\n',
+                encoding="utf-8",
+            )
+
+            tool = ScribeTool()
+            tool.cmd = shadow.name
+            shadowed_path = str(temp) + os.pathsep + os.environ.get("PATH", "")
+            with patch.dict(os.environ, {"PATH": shadowed_path}), patch.object(
+                TraceStore, "get_trace_dir", return_value=temp
+            ):
+                resolved = tool.resolve_executable()
+                self.assertIsNotNone(resolved, "Windows PATH fixture not resolved")
+                self.assertEqual(Path(resolved).resolve(), shadow.resolve())
+                result = tool.execute(["status"], {"timeout": 45, "cwd": str(root)})
+
+                self.assertFalse(result["success"])
+                self.assertEqual(result["exit_code"], 125)
+                self.assertEqual(result["err_block"]["error_code"], "ERR_TARGET_OUTSIDE_SANDBOX")
+                receipt = result["trace_receipt"]
+                self.assertEqual(receipt["protocol"], "dsha-1.2.0-std")
+                self.assertEqual(receipt["status"], "REFUSED")
+                self.assertEqual(receipt["causal_chain"]["failed_stage"], "catalog_containment")
+                self.assertEqual(receipt["causal_chain"]["error_code"], "ERR_TARGET_OUTSIDE_SANDBOX")
+                self.assertNotIn("sandbox_execution", [s["stage"] for s in receipt["stages"]])
+                self.assertFalse(sentinel.exists(), "untrusted launcher was executed")
+                self.assertTrue((temp / f'{result["trace_id"]}.json').is_file())
+
+
 if __name__ == "__main__":
     unittest.main()
