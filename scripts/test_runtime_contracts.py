@@ -224,6 +224,54 @@ class RuntimeContracts(unittest.TestCase):
                 with self.subTest(module=m.__file__, declared='trusted-root'), patch.object(m.shutil, 'which', return_value=None):
                     self.assertTrue(tool.assert_target_contained(str(trusted))[0])
 
+    def test_extension_explicit_trusted_roots_are_fail_closed(self):
+        # Opt-in extension roots must not inherit PATH trust or widen built-in roots.
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            trusted = Path(tmp) / 'trusted'
+            untrusted = Path(tmp) / 'untrusted'
+            trusted.mkdir()
+            untrusted.mkdir()
+            trusted_target = str(trusted / 'ext-tool')
+            shadow = str(untrusted / 'ext-tool')
+            for m in self.copies('base_tool.py'):
+                def extension(roots=None):
+                    return m.BaseTool(
+                        tool_id='external-extension', name='External extension',
+                        category=m.ToolCategory.SYSADMIN,
+                        risk_level=m.RiskLevel.LOW, version='0.1',
+                        description='Fixture', cmd='ext-tool',
+                        trusted_executable_roots=roots,
+                    )
+
+                with self.subTest(module=m.__file__, case='opt-in-shadow'), patch.object(m.shutil, 'which', return_value=shadow) as which:
+                    ok, err = extension([str(trusted)]).assert_target_contained(shadow)
+                    self.assertFalse(ok)
+                    self.assertEqual(err.error_code, 'ERR_TARGET_OUTSIDE_SANDBOX')
+                    which.assert_not_called()
+
+                with self.subTest(module=m.__file__, case='opt-in-trusted'), patch.object(m.shutil, 'which', return_value=shadow) as which:
+                    self.assertTrue(extension([str(trusted)]).assert_target_contained(trusted_target)[0])
+                    which.assert_not_called()
+
+                with self.subTest(module=m.__file__, case='empty-roots'), patch.object(m.shutil, 'which', return_value=shadow) as which:
+                    self.assertFalse(extension([]).assert_target_contained(shadow)[0])
+                    which.assert_not_called()
+
+                with self.subTest(module=m.__file__, case='relative-root'), patch.object(m.shutil, 'which', return_value=shadow) as which:
+                    self.assertFalse(extension(['relative-root']).assert_target_contained(shadow)[0])
+                    which.assert_not_called()
+
+                with self.subTest(module=m.__file__, case='legacy-compatibility'), patch.object(m.shutil, 'which', return_value=shadow) as which:
+                    self.assertTrue(extension().assert_target_contained(shadow)[0])
+                    which.assert_called_once_with('ext-tool')
+
+                with self.subTest(module=m.__file__, case='builtin-cannot-opt-in'), patch.object(m.shutil, 'which', return_value=shadow) as which:
+                    builtin = m.PwshTool()
+                    builtin.trusted_executable_roots = (str(untrusted),)
+                    self.assertFalse(builtin.assert_target_contained(shadow)[0])
+                    which.assert_not_called()
+
     def test_open_protocol_schema_definitions(self):
         for m in self.copies('base_tool.py'):
             with self.subTest(module=m.__file__):
