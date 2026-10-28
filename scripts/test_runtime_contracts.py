@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import sys
 import types
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -154,7 +155,17 @@ class RuntimeContracts(unittest.TestCase):
         for m in self.copies('base_tool.py'):
             with self.subTest(module=m.__file__):
                 tool = m.TOOL_REGISTRY.get('scribe')
-                res = tool.execute(['status'], {'timeout': 10})
+                # Unit-test the receipt, not the platform-specific scribe.cmd launcher.
+                with (
+                    patch.object(m, 'get_active_tier', return_value='auto'),
+                    patch.object(tool, 'assert_environment', return_value=(True, None)),
+                    patch.object(tool, 'resolve_executable', return_value=sys.executable),
+                    patch.object(tool, 'assert_target_contained', return_value=(True, None)),
+                    patch.object(m.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0, stdout='ok', stderr='')) as run,
+                    patch.object(m.TraceStore, 'save', return_value=None),
+                ):
+                    res = tool.execute(['status'], {'timeout': 10})
+                    run.assert_called_once()
                 self.assertIn('trace_receipt', res)
                 receipt = res['trace_receipt']
                 self.assertEqual(receipt['protocol'], 'dsha-1.2.0-std')
@@ -188,12 +199,24 @@ class RuntimeContracts(unittest.TestCase):
         for m in self.copies('base_tool.py'):
             with self.subTest(module=m.__file__):
                 tool = m.TOOL_REGISTRY.get('scribe')
-                res = tool.execute(['status'], {'timeout': 10})
-                tid = res['trace_id']
-                retrieved = m.TraceStore.get(tid)
-                self.assertIsNotNone(retrieved)
-                self.assertEqual(retrieved.get('trace_id'), tid)
-                self.assertEqual(retrieved.get('status'), 'PASS')
+                # Exercise real receipt serialization in a disposable directory.
+                with tempfile.TemporaryDirectory() as trace_dir:
+                    with (
+                        patch.object(m, 'get_active_tier', return_value='auto'),
+                        patch.object(tool, 'assert_environment', return_value=(True, None)),
+                        patch.object(tool, 'resolve_executable', return_value=sys.executable),
+                        patch.object(tool, 'assert_target_contained', return_value=(True, None)),
+                        patch.object(m.subprocess, 'run', return_value=types.SimpleNamespace(returncode=0, stdout='ok', stderr='')) as run,
+                        patch.object(m.TraceStore, 'get_trace_dir', return_value=Path(trace_dir)),
+                    ):
+                        res = tool.execute(['status'], {'timeout': 10})
+                        run.assert_called_once()
+                        tid = res['trace_id']
+                        self.assertTrue((Path(trace_dir) / f'{tid}.json').is_file())
+                        retrieved = m.TraceStore.get(tid)
+                        self.assertIsNotNone(retrieved)
+                        self.assertEqual(retrieved.get('trace_id'), tid)
+                        self.assertEqual(retrieved.get('status'), 'PASS')
 
     def test_stage5_path_fallback_blocks_builtin_shadow_and_explicit_paths(self):
         # Built-in launchers must use trusted roots; extensions retain legacy PATH fallback.
