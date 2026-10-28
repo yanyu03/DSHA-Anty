@@ -272,6 +272,55 @@ class RuntimeContracts(unittest.TestCase):
                     self.assertFalse(builtin.assert_target_contained(shadow)[0])
                     which.assert_not_called()
 
+    def test_extension_trusted_root_resolution_ignores_path_shadow(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            trusted, shadow = root / 'trusted', root / 'shadow'
+            trusted.mkdir()
+            shadow.mkdir()
+            trusted_file = trusted / 'kdi-fatfish-fixture'
+            shadow_file = shadow / 'kdi-fatfish-fixture'
+            trusted_file.write_text('trusted', encoding='utf-8')
+            shadow_file.write_text('shadow', encoding='utf-8')
+
+            def which_for_trusted(name, path=None):
+                return str(trusted_file) if path == str(trusted.resolve()) else str(shadow_file)
+
+            for m in self.copies('base_tool.py'):
+                def extension(roots=None, cmd='kdi-fatfish-fixture'):
+                    return m.BaseTool(
+                        tool_id='external-extension', name='External extension',
+                        category=m.ToolCategory.SYSADMIN,
+                        risk_level=m.RiskLevel.LOW, version='0.1',
+                        description='Fixture', cmd=cmd,
+                        trusted_executable_roots=roots,
+                    )
+
+                with self.subTest(module=m.__file__, case='trusted-first'), patch.object(m.shutil, 'which', side_effect=which_for_trusted) as which:
+                    self.assertEqual(extension([str(trusted)]).resolve_executable(), str(trusted_file.resolve()))
+                    which.assert_called_once_with('kdi-fatfish-fixture', path=str(trusted.resolve()))
+
+                with self.subTest(module=m.__file__, case='shadow-rejected'), patch.object(m.shutil, 'which', return_value=str(shadow_file)) as which:
+                    self.assertIsNone(extension([str(trusted)]).resolve_executable())
+                    which.assert_called_once_with('kdi-fatfish-fixture', path=str(trusted.resolve()))
+
+                with self.subTest(module=m.__file__, case='empty-roots'), patch.object(m.shutil, 'which', return_value=str(shadow_file)) as which:
+                    self.assertIsNone(extension([]).resolve_executable())
+                    which.assert_not_called()
+
+                with self.subTest(module=m.__file__, case='relative-root'), patch.object(m.shutil, 'which', return_value=str(shadow_file)) as which:
+                    self.assertIsNone(extension(['relative-root']).resolve_executable())
+                    which.assert_not_called()
+
+                with self.subTest(module=m.__file__, case='path-like-command'), patch.object(m.shutil, 'which', return_value=str(shadow_file)) as which:
+                    self.assertIsNone(extension([str(trusted)], cmd='../kdi-fatfish-fixture').resolve_executable())
+                    which.assert_not_called()
+
+                with self.subTest(module=m.__file__, case='legacy-compatibility'), patch.object(m.shutil, 'which', return_value=str(shadow_file)) as which:
+                    self.assertEqual(extension().resolve_executable(), str(shadow_file))
+                    which.assert_called_once_with('kdi-fatfish-fixture')
+
     def test_open_protocol_schema_definitions(self):
         for m in self.copies('base_tool.py'):
             with self.subTest(module=m.__file__):
