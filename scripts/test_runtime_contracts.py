@@ -189,7 +189,19 @@ class RuntimeContracts(unittest.TestCase):
 
                 # 2. Refusal retrace on tier authorization
                 pwsh = m.TOOL_REGISTRY.get('pwsh')
-                res_deny = pwsh.execute(context={'tier': 'read-only'})
+                # This is a Stage 4 unit test: do not depend on the host's pwsh probe.
+                with (
+                    patch.object(pwsh, 'assert_environment', return_value=(True, None)),
+                    patch.object(m, 'get_active_tier', return_value='auto'),
+                    patch.object(pwsh, 'resolve_executable') as resolve,
+                    patch.object(m.subprocess, 'run') as run,
+                    patch.object(m.TraceStore, 'save', return_value=None),
+                ):
+                    res_deny = pwsh.execute(context={'tier': 'read-only'})
+                    resolve.assert_not_called()
+                    run.assert_not_called()
+                self.assertEqual(res_deny['exit_code'], 126)
+                self.assertEqual(res_deny['trace_receipt']['causal_chain']['failed_stage'], 'tier_authorization')
                 retrace_deny = m.retrace(res_deny)
                 self.assertIn('ERR_PERMISSION_DENIED', retrace_deny)
                 self.assertIn('4/7: 权限档位核验', retrace_deny)
