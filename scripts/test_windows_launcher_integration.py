@@ -159,6 +159,88 @@ class WindowsScribeLauncherIntegration(unittest.TestCase):
             finally:
                 self.assertTrue(close_handle(handle), "CloseHandle failed")
 
+    def test_parent_directory_rename_under_read_handle_does_not_redirect_cmd(self):
+        """Candidate A probe: holding a batch-file handle may not pin its parent path.
+
+        Only temporary files are involved. If the parent can be renamed while the
+        child file handle denies write/delete sharing, reusing the old pathname
+        must not silently execute a different batch file. A failed assertion is
+        a candidate-design blocker, NOT a production Gate regression.
+        """
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        create_file = kernel32.CreateFileW
+        create_file.argtypes = [
+            wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+            ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE,
+        ]
+        create_file.restype = wintypes.HANDLE
+        close_handle = kernel32.CloseHandle
+        close_handle.argtypes = [wintypes.HANDLE]
+        close_handle.restype = wintypes.BOOL
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            parent = temp / "original-parent"
+            parent.mkdir()
+            launcher = parent / "identity-probe.cmd"
+            launcher.write_text(
+                "@echo off\n"
+                "echo KDI_PARENT_ORIGINAL\n"
+                "exit /b 0\n",
+                encoding="utf-8",
+            )
+            handle = create_file(str(launcher), 0x80000000, 0x1, None, 3, 0x80, None)
+            if handle == ctypes.c_void_p(-1).value:
+                self.fail(f"CreateFileW failed: {ctypes.WinError(ctypes.get_last_error())}")
+
+            try:
+                moved = temp / "renamed-parent"
+                try:
+                    parent.rename(moved)
+                except OSError:
+                    # A blocked rename is a valid observation, not proof that
+                    # junctions, aliases, or other directory attacks are safe.
+                    self.assertTrue(launcher.is_file())
+                    proc = subprocess.run(
+                        ["cmd.exe", "/d", "/c", str(launcher)],
+                        cwd=temp_dir, capture_output=True, text=True,
+                        encoding="utf-8", errors="replace", timeout=20,
+                    )
+                    print("PARENT_RENAME_PROBE: renamed=False", flush=True)
+                    self.assertEqual(proc.returncode, 0, proc.stderr[-1000:])
+                    self.assertIn("KDI_PARENT_ORIGINAL", proc.stdout)
+                else:
+                    self.assertTrue((moved / launcher.name).is_file())
+                    parent.mkdir()
+                    shadow = parent / launcher.name
+                    shadow.write_text(
+                        "@echo off\n"
+                        "echo KDI_PARENT_ALIAS_SHADOW\n"
+                        "exit /b 0\n",
+                        encoding="utf-8",
+                    )
+                    proc = subprocess.run(
+                        ["cmd.exe", "/d", "/c", str(launcher)],
+                        cwd=temp_dir, capture_output=True, text=True,
+                        encoding="utf-8", errors="replace", timeout=20,
+                    )
+                    redirected = "KDI_PARENT_ALIAS_SHADOW" in proc.stdout
+                    print(
+                        f"PARENT_RENAME_PROBE: renamed=True, redirected={redirected}",
+                        flush=True,
+                    )
+                    self.assertEqual(proc.returncode, 0, proc.stderr[-1000:])
+                    self.assertFalse(
+                        redirected,
+                        "CANDIDATE A BLOCKER: held file handle did not pin cmd.exe pathname",
+                    )
+                    self.assertIn("KDI_PARENT_ORIGINAL", proc.stdout)
+            finally:
+                self.assertTrue(close_handle(handle), "CloseHandle failed")
+
     @unittest.expectedFailure
     def test_launcher_replacement_after_stage5_is_not_yet_blocked(self):
         """Expected failure documents the Stage 5-to-6 launcher identity race.
