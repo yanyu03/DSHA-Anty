@@ -241,6 +241,97 @@ class WindowsScribeLauncherIntegration(unittest.TestCase):
             finally:
                 self.assertTrue(close_handle(handle), "CloseHandle failed")
 
+    def test_junction_alias_retarget_under_held_launcher_handle(self):
+        """Probe junction retargeting; a green test is NOT a production security fix.
+
+        The test reports both blocked retargeting and successful alias redirection.
+        It uses only temporary scripts and never modifies the production Gate.
+        """
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        create_file = kernel32.CreateFileW
+        create_file.argtypes = [
+            wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+            ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE,
+        ]
+        create_file.restype = wintypes.HANDLE
+        close_handle = kernel32.CloseHandle
+        close_handle.argtypes = [wintypes.HANDLE]
+        close_handle.restype = wintypes.BOOL
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            original = temp / "original"
+            shadow = temp / "shadow"
+            original.mkdir()
+            shadow.mkdir()
+            filename = "identity-probe.cmd"
+            (original / filename).write_text(
+                "@echo off\necho KDI_JUNCTION_ORIGINAL\nexit /b 0\n", encoding="utf-8"
+            )
+            (shadow / filename).write_text(
+                "@echo off\necho KDI_JUNCTION_SHADOW\nexit /b 0\n", encoding="utf-8"
+            )
+            alias = temp / "launcher-alias"
+
+            def mkjunction(target):
+                return subprocess.run(
+                    ["cmd.exe", "/d", "/c", "mklink", "/J", str(alias), str(target)],
+                    cwd=temp_dir, capture_output=True, text=True,
+                    encoding="utf-8", errors="replace", timeout=20,
+                )
+
+            created = mkjunction(original)
+            if created.returncode != 0:
+                self.skipTest("junction creation unavailable: " + created.stderr[-300:])
+            self.assertIn("KDI_JUNCTION_ORIGINAL", (alias / filename).read_text(encoding="utf-8"))
+
+            # Preflight proves alias deletion/recreation works without a held handle.
+            try:
+                os.rmdir(alias)
+            except OSError as exc:
+                self.skipTest(f"junction removal unavailable: {exc}")
+            restored = mkjunction(original)
+            self.assertEqual(restored.returncode, 0, restored.stderr[-500:])
+
+            handle = create_file(str(alias / filename), 0x80000000, 0x1, None, 3, 0x80, None)
+            if handle == ctypes.c_void_p(-1).value:
+                self.fail(f"CreateFileW failed: {ctypes.WinError(ctypes.get_last_error())}")
+            try:
+                try:
+                    os.rmdir(alias)
+                except OSError:
+                    # Blocked removal is a single-host observation only.
+                    proc = subprocess.run(
+                        ["cmd.exe", "/d", "/c", str(alias / filename)],
+                        cwd=temp_dir, capture_output=True, text=True,
+                        encoding="utf-8", errors="replace", timeout=20,
+                    )
+                    self.assertEqual(proc.returncode, 0, proc.stderr[-500:])
+                    self.assertIn("KDI_JUNCTION_ORIGINAL", proc.stdout)
+                    print("JUNCTION_ALIAS_PROBE: capable=True, retargeted=False, redirected=False", flush=True)
+                else:
+                    relinked = mkjunction(shadow)
+                    self.assertEqual(relinked.returncode, 0, relinked.stderr[-500:])
+                    proc = subprocess.run(
+                        ["cmd.exe", "/d", "/c", str(alias / filename)],
+                        cwd=temp_dir, capture_output=True, text=True,
+                        encoding="utf-8", errors="replace", timeout=20,
+                    )
+                    self.assertEqual(proc.returncode, 0, proc.stderr[-500:])
+                    redirected = "KDI_JUNCTION_SHADOW" in proc.stdout
+                    print(
+                        f"JUNCTION_ALIAS_PROBE: capable=True, retargeted=True, redirected={redirected}",
+                        flush=True,
+                    )
+                    self.assertTrue(redirected, "junction was replaced but shadow did not execute")
+            finally:
+                self.assertTrue(close_handle(handle), "CloseHandle failed")
+                if os.path.lexists(alias):
+                    os.rmdir(alias)
+
     @unittest.expectedFailure
     def test_launcher_replacement_after_stage5_is_not_yet_blocked(self):
         """Expected failure documents the Stage 5-to-6 launcher identity race.
