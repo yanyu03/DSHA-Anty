@@ -130,6 +130,7 @@ class WindowsScribeLauncherIntegration(unittest.TestCase):
                 "exit /b 0\n",
                 encoding="utf-8",
             )
+            original_content = launcher.read_text(encoding="utf-8")
             handle = create_file(str(launcher), 0x80000000, 0x1, None, 3, 0x80, None)
             invalid_handle = ctypes.c_void_p(-1).value
             if handle == invalid_handle:
@@ -138,13 +139,14 @@ class WindowsScribeLauncherIntegration(unittest.TestCase):
             try:
                 with self.assertRaises(OSError) as write_error:
                     launcher.write_text("@echo off\necho MUTATED\n", encoding="utf-8")
-                self.assertIn(getattr(write_error.exception, "winerror", None), (5, 32, 33))
+                self.assertEqual(launcher.read_text(encoding="utf-8"), original_content)
 
                 replacement = Path(temp_dir) / "replacement.cmd"
                 replacement.write_text("@echo off\necho REPLACED\n", encoding="utf-8")
                 with self.assertRaises(OSError) as replace_error:
                     os.replace(replacement, launcher)
-                self.assertIn(getattr(replace_error.exception, "winerror", None), (5, 32, 33))
+                self.assertEqual(launcher.read_text(encoding="utf-8"), original_content)
+                self.assertTrue(replacement.is_file(), "replacement unexpectedly moved")
 
                 # Verify a read-only cmd.exe invocation remains usable while held.
                 proc = subprocess.run(
