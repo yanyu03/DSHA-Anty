@@ -30,6 +30,21 @@ Assume a local actor can change files in a launcher directory during the Stage 5
 
 Read the validated file into a uniquely named, access-controlled staging location, verify that the bytes being launched are the bytes reviewed, and launch that snapshot instead of the mutable original path. The staging directory must have enforced ACL ownership and secure creation/cleanup. This may change batch semantics (`%~dp0`, relative paths, sibling resources, signatures and launcher discovery), so it is **not** automatically backward compatible. It requires its own compatibility study and cannot be silently enabled.
 
+## Junction/reparse-point trust-boundary decision (KDI-01 Round 21; design only)
+
+**Evidence:** The Windows temporary-directory experiment `test_junction_alias_retarget_under_held_launcher_handle` observed `capable=True, retargeted=True, redirected=True` while an original launcher read handle remained open ([Windows/Linux CI run 40938799893](https://github.com/yanyu03/DSHA-SharBoy/actions/runs/40938799893), [test commit 09c93e60](https://github.com/yanyu03/DSHA-SharBoy/commit/09c93e605f56686b271bea6b75e2aa674658f3c9)). This demonstrates a **candidate-A design bypass in the fixture**, not exploitation of a deployed trusted root. The test passing means the observation was reproduced, not that the security property passed.
+
+**Current code boundary:** In `scripts/base_tool.py`, `resolve_executable()` may return a path string; `assert_target_contained()` calls `Path(exec_path).resolve()` and checks it against resolved built-in roots (`bin/`, `~/.gemini/config/`) or configured extension roots. Stage 6 still launches the resolver's `exec_path` pathname with `subprocess.run()`. The mirrored `plugins/dsh-permissions/scripts/base_tool.py` must retain the same semantics. A junction targeting an external directory *at the instant of resolution* can fail containment, but a trusted-looking alias can be retargeted after Stage 5; `Path.resolve()` is not an identity binding.
+
+**Proposed fail-closed constraint for a future opt-in Windows hardened mode (NOT implemented):**
+
+1. Treat any junction, symlink or other reparse point in the complete path chain from the volume root through each trusted-root ancestor to the launcher as an **untrusted alias**. Reject the launch when any component is a reparse point, inaccessible, ambiguous, or cannot be inspected reliably; do not silently fall back to ambient PATH or legacy launching in hardened mode. Windows file attributes/reparse tags must be examined without following the alias when deciding whether a component is itself a reparse point.
+2. This component policy is a **necessary screening condition, not a sufficient TOCTOU fix**: a check followed by pathname reopening remains racy. Production acceptance also requires a demonstrable binding between the object validated and the bytes consumed by `cmd.exe`, or a securely created immutable private snapshot with compatible invocation semantics. If neither can be established, refuse rather than claim isolation.
+3. Keep existing default and legacy extension behavior unchanged until explicit compatibility review. Do not alter Stage 4 permission Gate, Stage 5 error code/receipt semantics, seven-stage lifecycle, or `v1.2.0-std`. Reparse-aware hardening must not silently disable supported installations using symlinks or junctions.
+4. Before any production patch, independently test direct trusted launcher acceptance; junctions inside and outside trusted roots; retargeting after validation; reparse metadata access failure; cleanup and error paths; and unchanged Linux regression. A refusal should retain `ERR_TARGET_OUTSIDE_SANDBOX`/Stage 5 semantics only where the refusal is a containment-policy decision. Preserve the existing Windows TOCTOU XFAIL until an actual security assertion passes.
+
+**Decision:** Candidate A (read-handle lock alone) is **rejected as a complete mitigation**. No production patch or security PASS claim is authorized by this document. Next independent change should be a Windows-only isolated negative test of reparse-component fail-closed classification, without changing the default execution path.
+
 ## Minimum acceptance gate before any production patch
 
 - Windows: real trusted `scribe.cmd` positive execution and seven-stage receipt still pass.
@@ -41,4 +56,4 @@ Read the validated file into a uniquely named, access-controlled staging locatio
 
 ## Decision and rollback
 
-**Decision: no production implementation this round.** Candidate A is the smallest testable hypothesis but is not yet established as safe against pathname redirection. Next independent step: one Windows-only parent-directory/path-alias negative feasibility test; do not bundle it with runtime changes. This design note can be reverted by a single non-force commit on `fatfish` after checking the latest remote HEAD. Do not merge PR #6 automatically.
+**Decision: no production implementation.** The parent-directory and junction experiments now show why file-handle locking alone cannot establish launcher identity. Follow the Round 21 fail-closed design gate above; the next independent step is an isolated Windows reparse-component classification test, not a runtime change. This design note can be reverted by a single non-force commit on `fatfish` after checking the latest remote HEAD. Do not merge PR #6 automatically.
