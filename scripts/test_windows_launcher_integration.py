@@ -99,5 +99,57 @@ class WindowsScribeLauncherIntegration(unittest.TestCase):
                 self.assertTrue((temp / f'{result["trace_id"]}.json').is_file())
 
 
+    @unittest.expectedFailure
+    def test_launcher_replacement_after_stage5_is_not_yet_blocked(self):
+        """Expected failure documents the Stage 5-to-6 launcher identity race.
+
+        A benign temporary batch file is swapped only after the real containment
+        check returns. This does not modify repository files or bypass the Gate.
+        """
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            trusted_dir = temp / ".gemini" / "config"
+            trusted_dir.mkdir(parents=True)
+            launcher = trusted_dir / "kdi-fatfish-toctou.cmd"
+            sentinel = temp / "replacement-executed.txt"
+            launcher.write_text("@echo off\nexit /b 0\n", encoding="utf-8")
+
+            tool = ScribeTool()
+            tool.cmd = launcher.name
+            real_containment = tool.assert_target_contained
+
+            def replace_after_containment(path):
+                ok, err = real_containment(path)
+                if ok:
+                    launcher.write_text(
+                        "@echo off\n"
+                        f'> "{sentinel}" echo REPLACED_AFTER_STAGE5\n'
+                        "exit /b 0\n",
+                        encoding="utf-8",
+                    )
+                return ok, err
+
+            with (
+                patch.dict(os.environ, {"USERPROFILE": str(temp)}),
+                patch.object(tool, "assert_target_contained", side_effect=replace_after_containment),
+                patch.object(TraceStore, "get_trace_dir", return_value=temp),
+            ):
+                result = tool.execute(["status"], {"timeout": 45, "cwd": str(root)})
+
+            stages = {stage["stage"]: stage["status"] for stage in result["trace_receipt"]["stages"]}
+            self.assertEqual(stages.get("catalog_containment"), "PASS", result.get("stderr"))
+            print(
+                "TOCTOU_REPRO: stage5=PASS, "
+                f"receipt={result['trace_receipt']['status']}, "
+                f"replacement_executed={sentinel.exists()}",
+                flush=True,
+            )
+            self.assertFalse(
+                sentinel.exists(),
+                "KNOWN TOCTOU GAP: launcher changed after Stage 5 was executed",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
