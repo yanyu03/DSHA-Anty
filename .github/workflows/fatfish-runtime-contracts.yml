@@ -12,6 +12,8 @@ on:
       - scripts/test_runtime_contracts.py
       - scripts/kdi_protocol_preflight.py
       - scripts/test_kdi_protocol_preflight.py
+      - scripts/kdi_preparation_gate.py
+      - scripts/test_kdi_preparation_gate.py
       - scripts/test_windows_launcher_integration.py
       - plugins/dsh-permissions/scripts/base_tool.py
       - plugins/dsh-permissions/scripts/router.py
@@ -37,6 +39,10 @@ jobs:
         run: |
           python -m py_compile scripts/kdi_protocol_preflight.py scripts/test_kdi_protocol_preflight.py
           python -m unittest -v scripts.test_kdi_protocol_preflight
+      - name: KDI-P02 preparation cancellation consistency (isolated)
+        run: |
+          python -m py_compile scripts/kdi_preparation_gate.py scripts/test_kdi_preparation_gate.py
+          python -m unittest -v scripts.test_kdi_preparation_gate
       - name: Run Stage 5 positive and negative regression
         run: |
           python -m unittest -v \
