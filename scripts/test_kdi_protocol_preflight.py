@@ -160,5 +160,77 @@ class PreflightTests(unittest.TestCase):
         result = prepare_tool_call(self.responses('{"location":"Boston"}'), "responses", contract)
         self.assertEqual(result.args, ("Boston",))
 
+
+    def test_optional_trailing_named_fields_both_protocols(self):
+        contract = CompiledContract.compile(
+            ["scribe"], max_arguments=3,
+            named_string_fields={"scribe": ("location", "query", "lang")},
+            named_required_counts={"scribe": 1})
+        for payload, expected in (
+            ('{"location":"Boston"}', ("Boston",)),
+            ('{"query":"today","location":"Boston"}', ("Boston", "today")),
+            ('{"lang":"en","location":"Boston","query":"today"}',
+             ("Boston", "today", "en")),
+        ):
+            with self.subTest(payload=payload):
+                for source, item in (("responses", self.responses(payload)),
+                                     ("chat", self.chat(payload))):
+                    self.assertEqual(
+                        prepare_tool_call(item, source, contract).args, expected)
+        self.assertEqual(
+            prepare_tool_call(self.responses(), "responses", contract).args,
+            ("status",))
+
+    def test_optional_fields_reject_holes_unknown_and_bad_types(self):
+        contract = CompiledContract.compile(
+            ["scribe"], max_arguments=3,
+            named_string_fields={"scribe": ("location", "query", "lang")},
+            named_required_counts={"scribe": 1})
+        for payload in (
+            '{"query":"today"}',
+            '{"location":"Boston","lang":"en"}',
+            '{"location":"Boston","query":123}',
+            '{"location":"Boston","query":"today","lang":null}',
+            '{"location":"Boston","query":"today","extra":"x"}',
+            '{"location":"Boston","query":"today","context":{}}',
+        ):
+            with self.subTest(payload=payload):
+                with self.assertRaises(PreflightError):
+                    prepare_tool_call(self.responses(payload), "responses", contract)
+
+    def test_optional_fields_default_required_and_explicit_zero(self):
+        required = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("location", "query")})
+        with self.assertRaises(PreflightError):
+            prepare_tool_call(self.responses('{"location":"Boston"}'),
+                              "responses", required)
+        empty_allowed = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("location", "query")},
+            named_required_counts={"scribe": 0})
+        self.assertEqual(
+            prepare_tool_call(self.responses("{}"), "responses", empty_allowed).args,
+            ())
+        with self.assertRaises(PreflightError):
+            prepare_tool_call(self.responses('{"query":"today"}'),
+                              "responses", empty_allowed)
+
+    def test_optional_required_counts_contract_validation_and_freezing(self):
+        for bad in (
+            [], {"unknown": 0}, {"scribe": -1}, {"scribe": 3},
+            {"scribe": True}, {"scribe": 1.0}, {"scribe": "1"},
+        ):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                CompiledContract.compile(
+                    ["scribe"], named_string_fields={"scribe": ("location", "query")},
+                    named_required_counts=bad)
+        source = {"scribe": 1}
+        contract = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("location", "query")},
+            named_required_counts=source)
+        source["scribe"] = 0
+        self.assertEqual(contract.named_required_counts, (("scribe", 1),))
+        with self.assertRaises(PreflightError):
+            prepare_tool_call(self.responses("{}"), "responses", contract)
+
 if __name__ == "__main__":
     unittest.main()

@@ -6,7 +6,8 @@ This is NOT a full Responses/Chat adapter, a security sandbox, or authorization.
 
 Input: one completed Responses function_call item or one Chat tool_calls item.
 Legacy {"args": [str, ...]} remains supported. Named string fields require a
-trusted per-tool ordered mapping; no generic JSON Schema support is implied.
+trusted per-tool ordered mapping. Optional fields must form a trailing suffix;
+no generic JSON Schema support is implied.
 Unknown fields, context overrides, duplicate JSON keys, and non-string args fail closed.
 """
 from dataclasses import dataclass
@@ -46,10 +47,12 @@ class CompiledContract:
     max_arguments: int = 16
     max_payload_bytes: int = 4096
     named_string_fields: Tuple[Tuple[str, Tuple[str, ...]], ...] = ()
+    named_required_counts: Tuple[Tuple[str, int], ...] = ()
 
     @classmethod
     def compile(cls, tool_ids: Iterable[str], max_arguments: int = 16,
-                max_payload_bytes: int = 4096, named_string_fields=None):
+                max_payload_bytes: int = 4096, named_string_fields=None,
+                named_required_counts=None):
         if type(max_arguments) is not int or not 1 <= max_arguments <= 256:
             raise ValueError("invalid argument limit")
         if type(max_payload_bytes) is not int or not 128 <= max_payload_bytes <= 65536:
@@ -69,7 +72,19 @@ class CompiledContract:
                    or field in _RESERVED_FIELDS for field in fields) or len(set(fields)) != len(fields):
                 raise ValueError("invalid named string fields")
             bindings.append((tool, tuple(fields)))
-        return cls(tools, max_arguments, max_payload_bytes, tuple(sorted(bindings)))
+        if named_required_counts is None:
+            named_required_counts = {}
+        if not isinstance(named_required_counts, Mapping):
+            raise ValueError("invalid named required count mapping")
+        declared_fields = dict(bindings)
+        counts = []
+        for tool, required in named_required_counts.items():
+            if (tool not in declared_fields or type(required) is not int
+                    or not 0 <= required <= len(declared_fields[tool])):
+                raise ValueError("invalid named required count")
+            counts.append((tool, required))
+        return cls(tools, max_arguments, max_payload_bytes,
+                   tuple(sorted(bindings)), tuple(sorted(counts)))
 
 
 @dataclass(frozen=True)
@@ -128,9 +143,12 @@ def prepare_tool_call(item: Mapping, source_protocol: str,
         args = decoded["args"]
     else:
         fields = dict(contract.named_string_fields).get(name)
-        if fields is None or set(decoded) != set(fields):
+        required = dict(contract.named_required_counts).get(name, len(fields) if fields is not None else 0)
+        count = len(decoded)
+        if (fields is None or not required <= count <= len(fields)
+                or set(decoded) != set(fields[:count])):
             raise PreflightError("unmapped named arguments or context override")
-        args = [decoded[field] for field in fields]
+        args = [decoded[field] for field in fields[:count]]
     if not isinstance(args, list) or len(args) > contract.max_arguments or any(
         not isinstance(arg, str) or "\x00" in arg for arg in args
     ):
