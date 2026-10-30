@@ -5,8 +5,9 @@ runtime, and deepseek-recipe's protocol-neutral intermediate representation.
 This is NOT a full Responses/Chat adapter, a security sandbox, or authorization.
 
 Input: one completed Responses function_call item or one Chat tool_calls item.
-Only the strict DSHA list-argument shape {"args": [str, ...]} is supported.
-Unknown fields, context overrides, duplicate JSON keys, and non-list args fail closed.
+Legacy {"args": [str, ...]} remains supported. Named string fields require a
+trusted per-tool ordered mapping; no generic JSON Schema support is implied.
+Unknown fields, context overrides, duplicate JSON keys, and non-string args fail closed.
 """
 from dataclasses import dataclass
 import json
@@ -15,6 +16,9 @@ from typing import FrozenSet, Iterable, Mapping, Tuple
 
 
 _TOOL_NAME = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
+_FIELD_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,63}\Z")
+_RESERVED_FIELDS = frozenset({"args", "context", "tier", "cwd", "timeout", "env",
+                              "environment", "custom_env", "permissions", "sandbox", "tool"})
 
 
 class PreflightError(ValueError):
@@ -41,10 +45,11 @@ class CompiledContract:
     tools: FrozenSet[str]
     max_arguments: int = 16
     max_payload_bytes: int = 4096
+    named_string_fields: Tuple[Tuple[str, Tuple[str, ...]], ...] = ()
 
     @classmethod
     def compile(cls, tool_ids: Iterable[str], max_arguments: int = 16,
-                max_payload_bytes: int = 4096):
+                max_payload_bytes: int = 4096, named_string_fields=None):
         if type(max_arguments) is not int or not 1 <= max_arguments <= 256:
             raise ValueError("invalid argument limit")
         if type(max_payload_bytes) is not int or not 128 <= max_payload_bytes <= 65536:
@@ -52,7 +57,19 @@ class CompiledContract:
         tools = frozenset(tool_ids)
         if not tools or any(not isinstance(t, str) or not _TOOL_NAME.fullmatch(t) for t in tools):
             raise ValueError("invalid trusted tool registry")
-        return cls(tools, max_arguments, max_payload_bytes)
+        if named_string_fields is None:
+            named_string_fields = {}
+        if not isinstance(named_string_fields, Mapping):
+            raise ValueError("invalid named string field mapping")
+        bindings = []
+        for tool, fields in named_string_fields.items():
+            if tool not in tools or not isinstance(fields, (list, tuple)) or not 1 <= len(fields) <= max_arguments:
+                raise ValueError("invalid named string field mapping")
+            if any(not isinstance(field, str) or not _FIELD_NAME.fullmatch(field)
+                   or field in _RESERVED_FIELDS for field in fields) or len(set(fields)) != len(fields):
+                raise ValueError("invalid named string fields")
+            bindings.append((tool, tuple(fields)))
+        return cls(tools, max_arguments, max_payload_bytes, tuple(sorted(bindings)))
 
 
 @dataclass(frozen=True)
@@ -105,9 +122,15 @@ def prepare_tool_call(item: Mapping, source_protocol: str,
                              parse_constant=_reject_constant)
     except (json.JSONDecodeError, UnicodeError) as exc:
         raise PreflightError("invalid JSON arguments") from exc
-    if not isinstance(decoded, dict) or set(decoded) != {"args"}:
-        raise PreflightError("expected only args field; context overrides forbidden")
-    args = decoded["args"]
+    if not isinstance(decoded, dict):
+        raise PreflightError("expected JSON argument object")
+    if set(decoded) == {"args"}:
+        args = decoded["args"]
+    else:
+        fields = dict(contract.named_string_fields).get(name)
+        if fields is None or set(decoded) != set(fields):
+            raise PreflightError("unmapped named arguments or context override")
+        args = [decoded[field] for field in fields]
     if not isinstance(args, list) or len(args) > contract.max_arguments or any(
         not isinstance(arg, str) or "\x00" in arg for arg in args
     ):

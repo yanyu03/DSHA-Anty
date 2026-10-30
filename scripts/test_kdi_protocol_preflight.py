@@ -113,5 +113,52 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(a.args, ("status",))
 
 
+    def test_named_string_fields_both_protocols(self):
+        contract = CompiledContract.compile(["scribe", "cf"], max_arguments=2,
+            named_string_fields={"scribe": ("location", "query")})
+        payload = '{"query":"today","location":"Boston"}'
+        r = prepare_tool_call(self.responses(payload), "responses", contract)
+        c = prepare_tool_call(self.chat(payload), "chat", contract)
+        self.assertEqual(r.args, ("Boston", "today"))
+        self.assertEqual(c.to_dsha_request(), r.to_dsha_request())
+        self.assertEqual(r.provider_call_id, "call-r1")
+        self.assertEqual(c.provider_call_id, "call-c1")
+
+    def test_named_fields_default_denied_and_legacy_preserved(self):
+        with self.assertRaises(PreflightError):
+            prepare_tool_call(self.responses('{"location":"Boston"}'), "responses", self.contract)
+        contract = CompiledContract.compile(["scribe"], named_string_fields={"scribe": ("location",)})
+        self.assertEqual(prepare_tool_call(self.responses(), "responses", contract).args, ("status",))
+        self.assertEqual(prepare_tool_call(self.responses('{"location":"Boston"}'), "responses", contract).args, ("Boston",))
+
+    def test_named_fields_fail_closed(self):
+        contract = CompiledContract.compile(["scribe", "cf"], max_arguments=2,
+            named_string_fields={"scribe": ("location", "query")})
+        for payload in ('{"location":"Boston"}', '{"location":"Boston","query":"today","extra":1}',
+                        '{"location":"Boston","query":2}', '{"location":"Boston","query":"x\\u0000"}',
+                        '{"location":"Boston","query":"today","context":{}}',
+                        '{"location":"Boston","location":"NY","query":"today"}'):
+            with self.subTest(payload=payload), self.assertRaises(PreflightError):
+                prepare_tool_call(self.responses(payload), "responses", contract)
+        with self.assertRaises(PreflightError):
+            prepare_tool_call(self.responses('{"location":"Boston","query":"today"}', name="cf"), "responses", contract)
+
+    def test_invalid_named_field_contract_denied(self):
+        for mapping in ({"unknown": ("location",)}, {"scribe": ("context",)},
+                        {"scribe": ("args",)}, {"scribe": ("location", "location")},
+                        {"scribe": ()}, {"scribe": ("location", "query", "extra")},
+                        {"scribe": ("bad-field",)}, {"scribe": "location"}, []):
+            with self.subTest(mapping=mapping), self.assertRaises(ValueError):
+                CompiledContract.compile(["scribe"], max_arguments=2, named_string_fields=mapping)
+
+    def test_named_field_mapping_is_frozen(self):
+        source = {"scribe": ["location"]}
+        contract = CompiledContract.compile(["scribe"], named_string_fields=source)
+        source["scribe"].append("context")
+        source["scribe"] = ["query"]
+        self.assertEqual(contract.named_string_fields, (("scribe", ("location",)),))
+        result = prepare_tool_call(self.responses('{"location":"Boston"}'), "responses", contract)
+        self.assertEqual(result.args, ("Boston",))
+
 if __name__ == "__main__":
     unittest.main()
