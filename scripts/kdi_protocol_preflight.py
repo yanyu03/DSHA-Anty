@@ -8,7 +8,8 @@ Input: one completed Responses function_call item or one Chat tool_calls item.
 Legacy {"args": [str, ...]} remains supported. Named fields require a trusted
 per-tool ordered mapping. Optional fields must form a trailing suffix. Explicit
 integer/boolean named scalar declarations are canonicalized to string argv;
-this is not generic JSON Schema validation.
+this is not generic JSON Schema validation. Optional trusted integer bounds
+constrain typed integer values before argv conversion.
 Unknown fields, context overrides, duplicate JSON keys, and non-string args fail closed.
 """
 from dataclasses import dataclass
@@ -50,11 +51,13 @@ class CompiledContract:
     named_string_fields: Tuple[Tuple[str, Tuple[str, ...]], ...] = ()
     named_required_counts: Tuple[Tuple[str, int], ...] = ()
     named_scalar_types: Tuple[Tuple[str, Tuple[Tuple[str, str], ...]], ...] = ()
+    named_integer_bounds: Tuple[Tuple[str, Tuple[Tuple[str, int, int], ...]], ...] = ()
 
     @classmethod
     def compile(cls, tool_ids: Iterable[str], max_arguments: int = 16,
                 max_payload_bytes: int = 4096, named_string_fields=None,
-                named_required_counts=None, named_scalar_types=None):
+                named_required_counts=None, named_scalar_types=None,
+                named_integer_bounds=None):
         if type(max_arguments) is not int or not 1 <= max_arguments <= 256:
             raise ValueError("invalid argument limit")
         if type(max_payload_bytes) is not int or not 128 <= max_payload_bytes <= 65536:
@@ -98,9 +101,28 @@ class CompiledContract:
                    for field, kind in typed_fields.items()):
                 raise ValueError("invalid named scalar types")
             scalar_bindings.append((tool, tuple(sorted(typed_fields.items()))))
+        if named_integer_bounds is None:
+            named_integer_bounds = {}
+        if not isinstance(named_integer_bounds, Mapping):
+            raise ValueError("invalid named integer bound mapping")
+        scalar_declarations = {tool: dict(fields) for tool, fields in scalar_bindings}
+        bound_bindings = []
+        for tool, field_bounds in named_integer_bounds.items():
+            if (tool not in declared_fields or not isinstance(field_bounds, Mapping)
+                    or not field_bounds):
+                raise ValueError("invalid named integer bound mapping")
+            bounds = []
+            for field, limits in field_bounds.items():
+                if (scalar_declarations.get(tool, {}).get(field) != "integer"
+                        or not isinstance(limits, (list, tuple)) or len(limits) != 2
+                        or type(limits[0]) is not int or type(limits[1]) is not int
+                        or limits[0] > limits[1]):
+                    raise ValueError("invalid named integer bounds")
+                bounds.append((field, limits[0], limits[1]))
+            bound_bindings.append((tool, tuple(sorted(bounds))))
         return cls(tools, max_arguments, max_payload_bytes,
                    tuple(sorted(bindings)), tuple(sorted(counts)),
-                   tuple(sorted(scalar_bindings)))
+                   tuple(sorted(scalar_bindings)), tuple(sorted(bound_bindings)))
 
 
 @dataclass(frozen=True)
@@ -165,6 +187,8 @@ def prepare_tool_call(item: Mapping, source_protocol: str,
                 or set(decoded) != set(fields[:count])):
             raise PreflightError("unmapped named arguments or context override")
         scalar_types = dict(dict(contract.named_scalar_types).get(name, ()))
+        integer_bounds = {field: (lower, upper) for field, lower, upper
+                          in dict(contract.named_integer_bounds).get(name, ())}
         args = []
         for field in fields[:count]:
             value = decoded[field]
@@ -172,6 +196,10 @@ def prepare_tool_call(item: Mapping, source_protocol: str,
             if kind == "integer":
                 if type(value) is not int:
                     raise PreflightError("named integer argument has invalid type")
+                if field in integer_bounds:
+                    lower, upper = integer_bounds[field]
+                    if not lower <= value <= upper:
+                        raise PreflightError("named integer argument out of bounds")
                 args.append(str(value))
             elif kind == "boolean":
                 if type(value) is not bool:

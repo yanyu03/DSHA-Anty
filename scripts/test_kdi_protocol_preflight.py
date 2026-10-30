@@ -311,5 +311,72 @@ class PreflightTests(unittest.TestCase):
             with self.subTest(payload=payload), self.assertRaises(PreflightError):
                 prepare_tool_call(self.responses(payload), "responses", typed)
 
+    def test_named_integer_bounds_inclusive_edges_both_protocols(self):
+        contract = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("limit",)},
+            named_scalar_types={"scribe": {"limit": "integer"}},
+            named_integer_bounds={"scribe": {"limit": (0, 10)}})
+        for value in (0, 5, 10):
+            payload = json.dumps({"limit": value})
+            for protocol, item in (("responses", self.responses(payload)),
+                                   ("chat", self.chat(payload))):
+                with self.subTest(value=value, protocol=protocol):
+                    self.assertEqual(prepare_tool_call(item, protocol, contract).args,
+                                     (str(value),))
+        self.assertEqual(prepare_tool_call(self.responses(), "responses", contract).args,
+                         ("status",))
+
+    def test_named_integer_bounds_reject_outside_and_type_confusion(self):
+        contract = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("limit",)},
+            named_scalar_types={"scribe": {"limit": "integer"}},
+            named_integer_bounds={"scribe": {"limit": (0, 10)}})
+        for payload in ('{"limit":-1}', '{"limit":11}', '{"limit":true}',
+                        '{"limit":1.5}', '{"limit":"5"}', '{"limit":null}'):
+            for protocol, item in (("responses", self.responses(payload)),
+                                   ("chat", self.chat(payload))):
+                with self.subTest(payload=payload, protocol=protocol):
+                    with self.assertRaises(PreflightError):
+                        prepare_tool_call(item, protocol, contract)
+
+    def test_named_integer_bounds_invalid_contracts_rejected(self):
+        fields = {"scribe": ("limit", "verbose")}
+        typed = {"scribe": {"limit": "integer", "verbose": "boolean"}}
+        for invalid in (
+            [], {"unknown": {"limit": (0, 10)}}, {"scribe": {}},
+            {"scribe": {"missing": (0, 10)}},
+            {"scribe": {"verbose": (0, 1)}},
+            {"scribe": {"limit": (10, 0)}},
+            {"scribe": {"limit": (0, True)}},
+            {"scribe": {"limit": (0, 1.0)}},
+            {"scribe": {"limit": [0]}},
+            {"scribe": {"limit": "0,10"}},
+            {"scribe": {"limit": (0, 10, 20)}},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                CompiledContract.compile(["scribe"], named_string_fields=fields,
+                    named_scalar_types=typed, named_integer_bounds=invalid)
+        with self.assertRaises(ValueError):
+            CompiledContract.compile(["scribe"], named_string_fields=fields,
+                named_integer_bounds={"scribe": {"limit": (0, 10)}})
+
+    def test_named_integer_bounds_frozen_and_unbounded_default_preserved(self):
+        source = {"scribe": {"limit": [0, 10]}}
+        contract = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("limit",)},
+            named_scalar_types={"scribe": {"limit": "integer"}},
+            named_integer_bounds=source)
+        source["scribe"]["limit"][0] = 100
+        source["scribe"]["extra"] = [0, 1]
+        self.assertEqual(contract.named_integer_bounds,
+                         (("scribe", (("limit", 0, 10),)),))
+        self.assertEqual(prepare_tool_call(
+            self.responses('{"limit":10}'), "responses", contract).args, ("10",))
+        unbounded = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("limit",)},
+            named_scalar_types={"scribe": {"limit": "integer"}})
+        self.assertEqual(prepare_tool_call(
+            self.responses('{"limit":999}'), "responses", unbounded).args, ("999",))
+
 if __name__ == "__main__":
     unittest.main()
