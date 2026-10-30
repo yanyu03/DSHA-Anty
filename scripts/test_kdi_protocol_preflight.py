@@ -378,5 +378,74 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(prepare_tool_call(
             self.responses('{"limit":999}'), "responses", unbounded).args, ("999",))
 
+
+    def test_named_string_enums_accept_declared_values_both_protocols(self):
+        contract = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("location", "lang")},
+            named_required_counts={"scribe": 1},
+            named_string_enums={"scribe": {"lang": ("en", "ja", "中文")}})
+        for payload, expected in (
+            ('{"location":"Boston","lang":"en"}', ("Boston", "en")),
+            ('{"lang":"中文","location":"Beijing"}', ("Beijing", "中文")),
+            ('{"location":"Tokyo"}', ("Tokyo",)),
+        ):
+            for protocol, item in (("responses", self.responses(payload)),
+                                   ("chat", self.chat(payload))):
+                with self.subTest(payload=payload, protocol=protocol):
+                    self.assertEqual(prepare_tool_call(item, protocol, contract).args, expected)
+
+    def test_named_string_enums_reject_outside_values_and_preserve_legacy(self):
+        contract = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("lang",)},
+            named_string_enums={"scribe": {"lang": ("en", "ja")}})
+        for payload in ('{"lang":"EN"}', '{"lang":"fr"}', '{"lang":1}',
+                        '{"lang":null}', '{"lang":"en","context":{}}',
+                        '{"lang":"en","lang":"ja"}'):
+            for protocol, item in (("responses", self.responses(payload)),
+                                   ("chat", self.chat(payload))):
+                with self.subTest(payload=payload, protocol=protocol):
+                    with self.assertRaises(PreflightError):
+                        prepare_tool_call(item, protocol, contract)
+        self.assertEqual(prepare_tool_call(self.responses(), "responses", contract).args,
+                         ("status",))
+
+    def test_named_string_enums_reject_invalid_trusted_declarations(self):
+        fields = {"scribe": ("lang", "limit")}
+        typed = {"scribe": {"limit": "integer"}}
+        for invalid in (
+            [], {"unknown": {"lang": ("en",)}}, {"scribe": {}},
+            {"scribe": {"missing": ("en",)}}, {"scribe": {"limit": ("1",)}},
+            {"scribe": {"lang": ()}}, {"scribe": {"lang": ("en", "en")}},
+            {"scribe": {"lang": ("en", 1)}}, {"scribe": {"lang": ("a\x00b",)}},
+            {"scribe": {"lang": ("x" * 1025,)}},
+            {"scribe": {"lang": tuple(str(i) for i in range(65))}},
+            {"scribe": {"lang": "en"}},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                CompiledContract.compile(
+                    ["scribe"], named_string_fields=fields,
+                    named_scalar_types=typed, named_string_enums=invalid)
+        with self.assertRaises(ValueError):
+            CompiledContract.compile(
+                ["scribe"], named_string_enums={"scribe": {"lang": ("en",)}})
+
+    def test_named_string_enums_frozen_and_opt_in(self):
+        source = {"scribe": {"lang": ["en", "ja"]}}
+        contract = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("lang",)},
+            named_string_enums=source)
+        source["scribe"]["lang"][0] = "fr"
+        source["scribe"]["extra"] = ["es"]
+        self.assertEqual(contract.named_string_enums,
+                         (("scribe", (("lang", ("en", "ja")),)),))
+        self.assertEqual(prepare_tool_call(
+            self.responses('{"lang":"en"}'), "responses", contract).args, ("en",))
+        with self.assertRaises(PreflightError):
+            prepare_tool_call(self.responses('{"lang":"fr"}'), "responses", contract)
+        unbounded = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("lang",)})
+        self.assertEqual(prepare_tool_call(
+            self.responses('{"lang":"fr"}'), "responses", unbounded).args, ("fr",))
+
 if __name__ == "__main__":
     unittest.main()

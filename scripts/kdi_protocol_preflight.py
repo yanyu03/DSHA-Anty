@@ -9,7 +9,8 @@ Legacy {"args": [str, ...]} remains supported. Named fields require a trusted
 per-tool ordered mapping. Optional fields must form a trailing suffix. Explicit
 integer/boolean named scalar declarations are canonicalized to string argv;
 this is not generic JSON Schema validation. Optional trusted integer bounds
-constrain typed integer values before argv conversion.
+constrain typed integer values before argv conversion. Trusted string enums
+restrict named string values without changing legacy positional arguments.
 Unknown fields, context overrides, duplicate JSON keys, and non-string args fail closed.
 """
 from dataclasses import dataclass
@@ -52,12 +53,13 @@ class CompiledContract:
     named_required_counts: Tuple[Tuple[str, int], ...] = ()
     named_scalar_types: Tuple[Tuple[str, Tuple[Tuple[str, str], ...]], ...] = ()
     named_integer_bounds: Tuple[Tuple[str, Tuple[Tuple[str, int, int], ...]], ...] = ()
+    named_string_enums: Tuple[Tuple[str, Tuple[Tuple[str, Tuple[str, ...]], ...]], ...] = ()
 
     @classmethod
     def compile(cls, tool_ids: Iterable[str], max_arguments: int = 16,
                 max_payload_bytes: int = 4096, named_string_fields=None,
                 named_required_counts=None, named_scalar_types=None,
-                named_integer_bounds=None):
+                named_integer_bounds=None, named_string_enums=None):
         if type(max_arguments) is not int or not 1 <= max_arguments <= 256:
             raise ValueError("invalid argument limit")
         if type(max_payload_bytes) is not int or not 128 <= max_payload_bytes <= 65536:
@@ -120,9 +122,31 @@ class CompiledContract:
                     raise ValueError("invalid named integer bounds")
                 bounds.append((field, limits[0], limits[1]))
             bound_bindings.append((tool, tuple(sorted(bounds))))
+        if named_string_enums is None:
+            named_string_enums = {}
+        if not isinstance(named_string_enums, Mapping):
+            raise ValueError("invalid named string enum mapping")
+        enum_bindings = []
+        for tool, field_enums in named_string_enums.items():
+            if (tool not in declared_fields or not isinstance(field_enums, Mapping)
+                    or not field_enums):
+                raise ValueError("invalid named string enum mapping")
+            choices_by_field = []
+            for field, choices in field_enums.items():
+                if (field not in declared_fields[tool]
+                        or field in scalar_declarations.get(tool, {})
+                        or not isinstance(choices, (list, tuple))
+                        or not 1 <= len(choices) <= 64
+                        or any(not isinstance(value, str) or "\x00" in value
+                               or len(value.encode("utf-8")) > 1024 for value in choices)
+                        or len(set(choices)) != len(choices)):
+                    raise ValueError("invalid named string enum declaration")
+                choices_by_field.append((field, tuple(choices)))
+            enum_bindings.append((tool, tuple(sorted(choices_by_field))))
         return cls(tools, max_arguments, max_payload_bytes,
                    tuple(sorted(bindings)), tuple(sorted(counts)),
-                   tuple(sorted(scalar_bindings)), tuple(sorted(bound_bindings)))
+                   tuple(sorted(scalar_bindings)), tuple(sorted(bound_bindings)),
+                   tuple(sorted(enum_bindings)))
 
 
 @dataclass(frozen=True)
@@ -189,6 +213,7 @@ def prepare_tool_call(item: Mapping, source_protocol: str,
         scalar_types = dict(dict(contract.named_scalar_types).get(name, ()))
         integer_bounds = {field: (lower, upper) for field, lower, upper
                           in dict(contract.named_integer_bounds).get(name, ())}
+        string_enums = dict(dict(contract.named_string_enums).get(name, ()))
         args = []
         for field in fields[:count]:
             value = decoded[field]
@@ -206,6 +231,8 @@ def prepare_tool_call(item: Mapping, source_protocol: str,
                     raise PreflightError("named boolean argument has invalid type")
                 args.append("true" if value else "false")
             else:
+                if field in string_enums and value not in string_enums[field]:
+                    raise PreflightError("named string argument outside trusted enum")
                 args.append(value)
     if not isinstance(args, list) or len(args) > contract.max_arguments or any(
         not isinstance(arg, str) or "\x00" in arg for arg in args
