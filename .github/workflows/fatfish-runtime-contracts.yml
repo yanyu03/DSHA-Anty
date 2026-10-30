@@ -14,6 +14,8 @@ on:
       - scripts/test_kdi_protocol_preflight.py
       - scripts/kdi_preparation_gate.py
       - scripts/test_kdi_preparation_gate.py
+      - scripts/kdi_resource_admission.py
+      - scripts/test_kdi_resource_admission.py
       - scripts/test_windows_launcher_integration.py
       - plugins/dsh-permissions/scripts/base_tool.py
       - plugins/dsh-permissions/scripts/router.py
@@ -43,6 +45,10 @@ jobs:
         run: |
           python -m py_compile scripts/kdi_preparation_gate.py scripts/test_kdi_preparation_gate.py
           python -m unittest -v scripts.test_kdi_preparation_gate
+      - name: KDI-P03 bounded resource admission (isolated)
+        run: |
+          python -m py_compile scripts/kdi_resource_admission.py scripts/test_kdi_resource_admission.py
+          python -m unittest -v scripts.test_kdi_resource_admission
       - name: Run Stage 5 positive and negative regression
         run: |
           python -m unittest -v \
