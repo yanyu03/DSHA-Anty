@@ -10,6 +10,8 @@ on:
       - scripts/router.py
       - scripts/dsha_env.py
       - scripts/test_runtime_contracts.py
+      - scripts/kdi_protocol_preflight.py
+      - scripts/test_kdi_protocol_preflight.py
       - scripts/test_windows_launcher_integration.py
       - plugins/dsh-permissions/scripts/base_tool.py
       - plugins/dsh-permissions/scripts/router.py
@@ -31,6 +33,10 @@ jobs:
       - name: Compile dispatch modules
         run: |
           python -m py_compile scripts/base_tool.py scripts/index.py scripts/router.py scripts/test_runtime_contracts.py plugins/dsh-permissions/scripts/base_tool.py
+      - name: KDI-P01 protocol preflight (isolated)
+        run: |
+          python -m py_compile scripts/kdi_protocol_preflight.py scripts/test_kdi_protocol_preflight.py
+          python -m unittest -v scripts.test_kdi_protocol_preflight
       - name: Run Stage 5 positive and negative regression
         run: |
           python -m unittest -v \
