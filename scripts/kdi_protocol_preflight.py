@@ -73,8 +73,16 @@ def prepare_tool_call(item: Mapping, source_protocol: str,
     if not isinstance(contract, CompiledContract) or not isinstance(item, dict):
         raise PreflightError("invalid preflight inputs")
     if source_protocol == "responses":
-        if set(item) != {"type", "name", "arguments", "call_id"} or item["type"] != "function_call":
+        required = {"type", "name", "arguments", "call_id"}
+        allowed = required | {"id", "status"}
+        if not required <= set(item) <= allowed or item["type"] != "function_call":
             raise PreflightError("unsupported Responses function call")
+        item_id = item.get("id")
+        if item_id is not None and (not isinstance(item_id, str) or not 1 <= len(item_id) <= 128
+                                    or any(ord(c) < 32 or ord(c) == 127 for c in item_id)):
+            raise PreflightError("invalid Responses item ID")
+        if item.get("status") not in (None, "completed"):
+            raise PreflightError("Responses function call not completed")
         name, raw, call_id = item["name"], item["arguments"], item["call_id"]
     elif source_protocol == "chat":
         if set(item) != {"id", "type", "function"} or item["type"] != "function":

@@ -32,6 +32,30 @@ class PreflightTests(unittest.TestCase):
         obj = prepare_tool_call(self.responses('{"args":[]}'), "responses", self.contract)
         self.assertEqual(obj.args, ())
 
+    def test_responses_sdk_optional_item_metadata(self):
+        item = self.responses(id="fc_123", status="completed")
+        result = prepare_tool_call(item, "responses", self.contract)
+        self.assertEqual(result.provider_call_id, "call-r1")  # never confuse item id with call_id
+        self.assertEqual(result.to_dsha_request(), {"tool": "scribe", "args": ["status"], "context": {}})
+        self.assertEqual(item["id"], "fc_123")
+        self.assertEqual(prepare_tool_call(self.responses(id=None, status=None), "responses", self.contract),
+                         prepare_tool_call(self.responses(), "responses", self.contract))
+
+    def test_responses_incomplete_status_rejected(self):
+        for status in ("in_progress", "incomplete", "failed", 1, {}, []):
+            with self.subTest(status=status), self.assertRaises(PreflightError):
+                prepare_tool_call(self.responses(status=status), "responses", self.contract)
+
+    def test_responses_invalid_optional_id_rejected(self):
+        for item_id in ("", 123, [], "x" * 129, "x\x00y", "x\x7fy"):
+            with self.subTest(item_id=item_id), self.assertRaises(PreflightError):
+                prepare_tool_call(self.responses(id=item_id), "responses", self.contract)
+
+    def test_responses_unrecognized_sdk_metadata_still_rejected(self):
+        for field in ("async", "caller", "namespace", "context"):
+            with self.subTest(field=field), self.assertRaises(PreflightError):
+                prepare_tool_call(self.responses(**{field: None}), "responses", self.contract)
+
     def test_unknown_tool_denied(self):
         with self.assertRaises(PreflightError):
             prepare_tool_call(self.responses(name="pwsh"), "responses", self.contract)
