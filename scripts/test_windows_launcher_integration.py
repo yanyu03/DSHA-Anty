@@ -332,6 +332,72 @@ class WindowsScribeLauncherIntegration(unittest.TestCase):
                 if os.path.lexists(alias):
                     os.rmdir(alias)
 
+    def test_reparse_component_classifier_rejects_junction_alias(self):
+        """Isolated fail-closed classification prototype, NOT a production Gate.
+
+        Inspect every lexical path component with lstat *before* resolving
+        aliases. This only tests metadata screening; it cannot bind the
+        checked pathname to the bytes later consumed by cmd.exe.
+        """
+        import stat
+
+        reparse_bit = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+
+        def no_reparse_components(path):
+            # abspath normalizes spelling but deliberately does not follow
+            # junctions; resolve() here would erase the evidence to inspect.
+            absolute = Path(os.path.abspath(os.fspath(path)))
+            for component in [*reversed(absolute.parents), absolute]:
+                try:
+                    metadata = os.lstat(component)
+                except OSError:
+                    return False  # Inaccessible/missing components fail closed.
+                attributes = getattr(metadata, "st_file_attributes", None)
+                if attributes is None or (attributes & reparse_bit):
+                    return False
+            return True
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            trusted = temp / "trusted"
+            trusted.mkdir()
+            launcher = trusted / "identity-probe.cmd"
+            launcher.write_text(
+                "@echo off\necho KDI_REPARSE_ORIGINAL\nexit /b 0\n",
+                encoding="utf-8",
+            )
+            alias = temp / "trusted-alias"
+            created = subprocess.run(
+                ["cmd.exe", "/d", "/c", "mklink", "/J", str(alias), str(trusted)],
+                cwd=temp_dir, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=20,
+            )
+            if created.returncode != 0:
+                self.skipTest("junction creation unavailable: " + created.stderr[-300:])
+
+            try:
+                alias_launcher = alias / launcher.name
+                self.assertTrue(alias_launcher.is_file(), "junction fixture not usable")
+                self.assertTrue(
+                    no_reparse_components(launcher),
+                    "ordinary trusted fixture unexpectedly contains a reparse component",
+                )
+                self.assertFalse(
+                    no_reparse_components(alias_launcher),
+                    "candidate classifier followed the junction instead of refusing it",
+                )
+                self.assertFalse(
+                    no_reparse_components(temp / "missing" / launcher.name),
+                    "missing path component must fail closed",
+                )
+                print(
+                    "REPARSE_COMPONENT_PROBE: direct=True, junction=False, missing=False",
+                    flush=True,
+                )
+            finally:
+                if os.path.lexists(alias):
+                    os.rmdir(alias)
+
     @unittest.expectedFailure
     def test_launcher_replacement_after_stage5_is_not_yet_blocked(self):
         """Expected failure documents the Stage 5-to-6 launcher identity race.
