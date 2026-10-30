@@ -5,9 +5,10 @@ runtime, and deepseek-recipe's protocol-neutral intermediate representation.
 This is NOT a full Responses/Chat adapter, a security sandbox, or authorization.
 
 Input: one completed Responses function_call item or one Chat tool_calls item.
-Legacy {"args": [str, ...]} remains supported. Named string fields require a
-trusted per-tool ordered mapping. Optional fields must form a trailing suffix;
-no generic JSON Schema support is implied.
+Legacy {"args": [str, ...]} remains supported. Named fields require a trusted
+per-tool ordered mapping. Optional fields must form a trailing suffix. Explicit
+integer/boolean named scalar declarations are canonicalized to string argv;
+this is not generic JSON Schema validation.
 Unknown fields, context overrides, duplicate JSON keys, and non-string args fail closed.
 """
 from dataclasses import dataclass
@@ -48,11 +49,12 @@ class CompiledContract:
     max_payload_bytes: int = 4096
     named_string_fields: Tuple[Tuple[str, Tuple[str, ...]], ...] = ()
     named_required_counts: Tuple[Tuple[str, int], ...] = ()
+    named_scalar_types: Tuple[Tuple[str, Tuple[Tuple[str, str], ...]], ...] = ()
 
     @classmethod
     def compile(cls, tool_ids: Iterable[str], max_arguments: int = 16,
                 max_payload_bytes: int = 4096, named_string_fields=None,
-                named_required_counts=None):
+                named_required_counts=None, named_scalar_types=None):
         if type(max_arguments) is not int or not 1 <= max_arguments <= 256:
             raise ValueError("invalid argument limit")
         if type(max_payload_bytes) is not int or not 128 <= max_payload_bytes <= 65536:
@@ -83,8 +85,22 @@ class CompiledContract:
                     or not 0 <= required <= len(declared_fields[tool])):
                 raise ValueError("invalid named required count")
             counts.append((tool, required))
+        if named_scalar_types is None:
+            named_scalar_types = {}
+        if not isinstance(named_scalar_types, Mapping):
+            raise ValueError("invalid named scalar type mapping")
+        scalar_bindings = []
+        for tool, typed_fields in named_scalar_types.items():
+            if (tool not in declared_fields or not isinstance(typed_fields, Mapping)
+                    or not typed_fields):
+                raise ValueError("invalid named scalar type mapping")
+            if any(field not in declared_fields[tool] or kind not in ("integer", "boolean")
+                   for field, kind in typed_fields.items()):
+                raise ValueError("invalid named scalar types")
+            scalar_bindings.append((tool, tuple(sorted(typed_fields.items()))))
         return cls(tools, max_arguments, max_payload_bytes,
-                   tuple(sorted(bindings)), tuple(sorted(counts)))
+                   tuple(sorted(bindings)), tuple(sorted(counts)),
+                   tuple(sorted(scalar_bindings)))
 
 
 @dataclass(frozen=True)
@@ -148,7 +164,21 @@ def prepare_tool_call(item: Mapping, source_protocol: str,
         if (fields is None or not required <= count <= len(fields)
                 or set(decoded) != set(fields[:count])):
             raise PreflightError("unmapped named arguments or context override")
-        args = [decoded[field] for field in fields[:count]]
+        scalar_types = dict(dict(contract.named_scalar_types).get(name, ()))
+        args = []
+        for field in fields[:count]:
+            value = decoded[field]
+            kind = scalar_types.get(field)
+            if kind == "integer":
+                if type(value) is not int:
+                    raise PreflightError("named integer argument has invalid type")
+                args.append(str(value))
+            elif kind == "boolean":
+                if type(value) is not bool:
+                    raise PreflightError("named boolean argument has invalid type")
+                args.append("true" if value else "false")
+            else:
+                args.append(value)
     if not isinstance(args, list) or len(args) > contract.max_arguments or any(
         not isinstance(arg, str) or "\x00" in arg for arg in args
     ):

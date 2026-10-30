@@ -232,5 +232,84 @@ class PreflightTests(unittest.TestCase):
         with self.assertRaises(PreflightError):
             prepare_tool_call(self.responses("{}"), "responses", contract)
 
+
+    def test_opt_in_named_scalar_types_both_protocols(self):
+        contract = CompiledContract.compile(
+            ["scribe"], max_arguments=3,
+            named_string_fields={"scribe": ("location", "limit", "verbose")},
+            named_required_counts={"scribe": 2},
+            named_scalar_types={"scribe": {"limit": "integer", "verbose": "boolean"}})
+        for payload, expected in (
+            ('{"verbose":true,"limit":3,"location":"Boston"}', ("Boston", "3", "true")),
+            ('{"location":"Boston","limit":-2}', ("Boston", "-2")),
+            ('{"location":"Boston","limit":0,"verbose":false}', ("Boston", "0", "false")),
+        ):
+            for protocol, item in (("responses", self.responses(payload)),
+                                   ("chat", self.chat(payload))):
+                with self.subTest(payload=payload, protocol=protocol):
+                    self.assertEqual(prepare_tool_call(item, protocol, contract).args, expected)
+        self.assertEqual(prepare_tool_call(self.responses(), "responses", contract).args, ("status",))
+
+    def test_named_scalar_types_reject_type_confusion(self):
+        contract = CompiledContract.compile(
+            ["scribe"], max_arguments=3,
+            named_string_fields={"scribe": ("location", "limit", "verbose")},
+            named_scalar_types={"scribe": {"limit": "integer", "verbose": "boolean"}})
+        for payload in (
+            '{"location":"Boston","limit":true,"verbose":false}',
+            '{"location":"Boston","limit":"3","verbose":false}',
+            '{"location":"Boston","limit":3.0,"verbose":false}',
+            '{"location":"Boston","limit":null,"verbose":false}',
+            '{"location":"Boston","limit":[],"verbose":false}',
+            '{"location":"Boston","limit":3,"verbose":1}',
+            '{"location":"Boston","limit":3,"verbose":"true"}',
+            '{"location":"Boston","limit":3,"verbose":null}',
+            '{"location":"Boston","limit":3,"verbose":{}}',
+        ):
+            with self.subTest(payload=payload), self.assertRaises(PreflightError):
+                prepare_tool_call(self.responses(payload), "responses", contract)
+
+    def test_named_scalar_types_contract_rejects_invalid_declarations(self):
+        fields = {"scribe": ("location", "limit")}
+        for bad in (
+            [], {"scribe": []}, {"unknown": {"limit": "integer"}},
+            {"scribe": {"missing": "integer"}}, {"scribe": {"limit": "number"}},
+            {"scribe": {"limit": "string"}}, {"scribe": {"limit": True}},
+            {"scribe": {"limit": None}},
+        ):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                CompiledContract.compile(["scribe"], named_string_fields=fields,
+                                         named_scalar_types=bad)
+        with self.assertRaises(ValueError):
+            CompiledContract.compile(["scribe"], named_scalar_types={"scribe": {"limit": "integer"}})
+
+    def test_named_scalar_type_mapping_frozen_from_caller_mutation(self):
+        declared = {"scribe": {"limit": "integer"}}
+        contract = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("limit",)},
+            named_scalar_types=declared)
+        declared["scribe"]["limit"] = "boolean"
+        declared["scribe"]["other"] = "integer"
+        self.assertEqual(contract.named_scalar_types,
+                         (("scribe", (("limit", "integer"),)),))
+        self.assertEqual(prepare_tool_call(
+            self.responses('{"limit":5}'), "responses", contract).args, ("5",))
+
+    def test_named_scalar_opt_in_does_not_change_string_or_privilege_rules(self):
+        default = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("limit",)})
+        with self.assertRaises(PreflightError):
+            prepare_tool_call(self.responses('{"limit":5}'), "responses", default)
+        self.assertEqual(prepare_tool_call(
+            self.responses('{"limit":"5"}'), "responses", default).args, ("5",))
+        typed = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("limit",)},
+            named_scalar_types={"scribe": {"limit": "integer"}})
+        for payload in ('{"limit":5,"context":{}}',
+                        '{"limit":5,"tier":"danger-full-access"}',
+                        '{"limit":5,"extra":0}'):
+            with self.subTest(payload=payload), self.assertRaises(PreflightError):
+                prepare_tool_call(self.responses(payload), "responses", typed)
+
 if __name__ == "__main__":
     unittest.main()
