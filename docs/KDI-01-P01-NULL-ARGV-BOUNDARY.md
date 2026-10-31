@@ -41,3 +41,17 @@ OpenAI 严格模式中，对象的所有声明属性列入 `required`，可用 `
 ## 回滚
 
 只在重新核验 `fatfish` HEAD 后反向提交本轮文档和测试；不 force push、不触碰其他分支、不自动合并 Draft PR #6。
+
+## 下游承载性判定 — 2026-10-31 / KDI-01 下一独立验收项
+
+**基线**：`fatfish@a3603f538f018da7a75b356651f3d5b5b168140b`；DSHA 私有协议仍为 `v1.2.0-std`。
+
+**结论：目前不能证明现有 DSHARequest / Call_Tools 链路可无损承载 JSON null。保持 fail-closed，不把隔离投影接入执行链。** 现有 `PreparedToolCall.to_dsha_request()` 仅生成 `{"tool": ..., "args": [string, ...], "context": {}}`，没有可信的 nullable 元数据通道；`Call_Tools(tool_name, args, context)` 接收的是字符串位置参数，不会消费 `NullableSuffixProjection`。不能将 `null_suffix_count` 塞入 `context` 或伪装为环境/权限字段以绕过协议和 Gate。
+
+**可重复的语义碰撞**：严格工具的 `{"location":"Tokyo","lang":null}` 在隔离投影中得到 `argv_prefix=("Tokyo",)`、`null_suffix_count=1`；非严格工具的 `{"location":"Tokyo"}` 合法地得到相同 `args=["Tokyo"]`，但其语义是字段缺失，而非显式 JSON null。只传 argv 会丢失两者差异；前者仍由 P01 拒绝。空字符串和字面 `"null"` 不作为哨兵。
+
+**本轮回归**：`test_nullable_suffix_metadata_not_preserved_by_legacy_dsha_envelope` 在 Responses/Chat 两种输入中同时验证严格与非严格模式拒绝显式 null、非严格尾部缺失仍兼容、argv 碰撞以及无 sidecar 的现有 DSHA 请求形状。测试是纯协议隔离测试，不执行真实工具。
+
+**后续决策**：暂不新增下游 sidecar 或修改私有协议。下一独立任务研究“可信对象→argv 的显式映射”及业务工具的可空参数语义，须先给出可逆性与 Gate 不变的证据；若无证明，继续拒绝 null。Windows TOCTOU、真实 SSE/API、生产 Router 接线仍属未解决范围。
+
+**回滚**：仅在重新校验 `fatfish` HEAD 后，反向提交本节文档及对应测试；不 force push、不改动其他分支或 PR 状态。

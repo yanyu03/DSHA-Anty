@@ -749,5 +749,38 @@ class PreflightTests(unittest.TestCase):
                 prepare_tool_call(item, protocol, contract)
 
 
+    def test_nullable_suffix_metadata_not_preserved_by_legacy_dsha_envelope(self):
+        # The projection is reversible only while its trusted sidecar is retained.
+        fields = ("location", "lang")
+        strict = CompiledContract.compile(
+            ["scribe"], max_arguments=2,
+            named_string_fields={"scribe": fields},
+            strict_named_tools=("scribe",))
+        payload = '{"location":"Tokyo","lang":null}'
+        projection = CompiledNullableTail.compile(strict, "scribe", ("lang",)).project(payload)
+        self.assertEqual(projection.argv_prefix, ("Tokyo",))
+        self.assertEqual(projection.null_suffix_count, 1)
+        self.assertEqual(projection.restore_named(), {"location": "Tokyo", "lang": None})
+        self.assertFalse(hasattr(projection, "to_dsha_request"))
+
+        # Non-strict omission produces the same argv, but means something else.
+        non_strict = CompiledContract.compile(
+            ["scribe"], max_arguments=2,
+            named_string_fields={"scribe": fields},
+            named_required_counts={"scribe": 1})
+        for protocol, make_item in (("responses", self.responses), ("chat", self.chat)):
+            with self.subTest(protocol=protocol):
+                with self.assertRaises(PreflightError):
+                    prepare_tool_call(make_item(payload), protocol, strict)
+                with self.assertRaises(PreflightError):
+                    prepare_tool_call(make_item(payload), protocol, non_strict)
+                omitted = prepare_tool_call(make_item('{"location":"Tokyo"}'),
+                                            protocol, non_strict)
+                request = omitted.to_dsha_request()
+                self.assertEqual(request, {"tool": "scribe", "args": ["Tokyo"], "context": {}})
+                self.assertEqual(tuple(request["args"]), projection.argv_prefix)
+                self.assertNotEqual({"location": "Tokyo"}, projection.restore_named())
+
+
 if __name__ == "__main__":
     unittest.main()
