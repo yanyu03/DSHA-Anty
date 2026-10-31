@@ -554,5 +554,52 @@ class PreflightTests(unittest.TestCase):
                     prepare_tool_call(item, protocol, contract)
 
 
+    def test_strict_named_closed_subset_both_protocols(self):
+        contract = CompiledContract.compile(
+            ["scribe"], max_arguments=2,
+            named_string_fields={"scribe": ("location", "limit")},
+            named_scalar_types={"scribe": {"limit": "integer"}},
+            named_integer_bounds={"scribe": {"limit": (1, 5)}},
+            strict_named_tools=("scribe",))
+        for protocol, make_item in (("responses", self.responses), ("chat", self.chat)):
+            with self.subTest(protocol=protocol):
+                good = prepare_tool_call(
+                    make_item('{"limit":3,"location":"Tokyo"}'), protocol, contract)
+                self.assertEqual(good.args, ("Tokyo", "3"))
+                self.assertEqual(good.to_dsha_request()["context"], {})
+                for payload in ('{"location":"Tokyo"}',
+                                '{"location":"Tokyo","limit":3,"extra":"x"}',
+                                '{"location":"Tokyo","limit":9}',
+                                '{"args":["Tokyo","3"]}'):
+                    with self.subTest(payload=payload), self.assertRaises(PreflightError):
+                        prepare_tool_call(make_item(payload), protocol, contract)
+
+    def test_strict_named_rejects_invalid_trusted_contract(self):
+        base = {"named_string_fields": {"scribe": ("location", "lang")}}
+        for extra in (
+            {"strict_named_tools": ("cf",)},
+            {"strict_named_tools": ("scribe", "scribe")},
+            {"strict_named_tools": "scribe"},
+            {"strict_named_tools": ("scribe",), "named_required_counts": {"scribe": 1}},
+        ):
+            with self.subTest(extra=extra), self.assertRaises(ValueError):
+                CompiledContract.compile(["scribe", "cf"], **{**base, **extra})
+
+    def test_strict_named_opt_in_and_immutable_snapshot(self):
+        strict_names = ["scribe"]
+        strict = CompiledContract.compile(
+            ["scribe", "cf"], named_string_fields={"scribe": ("location",)},
+            strict_named_tools=strict_names)
+        strict_names.clear()
+        self.assertEqual(strict.strict_named_tools, frozenset({"scribe"}))
+        with self.assertRaises(PreflightError):
+            prepare_tool_call(self.responses('{"args":["Tokyo"]}'), "responses", strict)
+        default = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("location",)})
+        self.assertEqual(
+            prepare_tool_call(self.responses('{"args":["Tokyo"]}'), "responses", default).args,
+            ("Tokyo",))
+
+
 if __name__ == "__main__":
     unittest.main()

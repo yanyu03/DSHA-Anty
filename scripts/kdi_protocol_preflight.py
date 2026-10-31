@@ -8,7 +8,8 @@ Input: one completed Responses function_call item or one Chat tool_calls item.
 Legacy {"args": [str, ...]} remains supported. Named fields require a trusted
 per-tool ordered mapping. Optional fields must form a trailing suffix. Explicit
 integer/boolean named scalar declarations are canonicalized to string argv;
-this is not generic JSON Schema validation. Optional trusted integer bounds
+this is not generic JSON Schema validation. Opt-in strict named tools require
+all declared fields and reject legacy argv for that tool. Optional trusted integer bounds
 constrain typed integer values before argv conversion. Trusted string enums
 restrict named string values without changing legacy positional arguments.
 Unknown fields, context overrides, duplicate JSON keys, and non-string args fail closed.
@@ -65,12 +66,14 @@ class CompiledContract:
     named_scalar_types: Tuple[Tuple[str, Tuple[Tuple[str, str], ...]], ...] = ()
     named_integer_bounds: Tuple[Tuple[str, Tuple[Tuple[str, int, int], ...]], ...] = ()
     named_string_enums: Tuple[Tuple[str, Tuple[Tuple[str, Tuple[str, ...]], ...]], ...] = ()
+    strict_named_tools: FrozenSet[str] = frozenset()
 
     @classmethod
     def compile(cls, tool_ids: Iterable[str], max_arguments: int = 16,
                 max_payload_bytes: int = 4096, named_string_fields=None,
                 named_required_counts=None, named_scalar_types=None,
-                named_integer_bounds=None, named_string_enums=None):
+                named_integer_bounds=None, named_string_enums=None,
+                strict_named_tools=None):
         if type(max_arguments) is not int or not 1 <= max_arguments <= 256:
             raise ValueError("invalid argument limit")
         if type(max_payload_bytes) is not int or not 128 <= max_payload_bytes <= 65536:
@@ -154,10 +157,24 @@ class CompiledContract:
                     raise ValueError("invalid named string enum declaration")
                 choices_by_field.append((field, tuple(choices)))
             enum_bindings.append((tool, tuple(sorted(choices_by_field))))
+        # Opt-in closed, flat named-schema subset: all fields required, no argv escape.
+        # This is not a generic JSON Schema parser or an authorization Gate.
+        if strict_named_tools is None:
+            strict_named_tools = ()
+        if (not isinstance(strict_named_tools, (list, tuple, set, frozenset))
+                or any(not isinstance(tool, str) or tool not in declared_fields
+                       for tool in strict_named_tools)
+                or len(set(strict_named_tools)) != len(strict_named_tools)):
+            raise ValueError("invalid strict named tool mapping")
+        strict = frozenset(strict_named_tools)
+        required_by_tool = dict(counts)
+        if any(required_by_tool.get(tool, len(declared_fields[tool])) != len(declared_fields[tool])
+               for tool in strict):
+            raise ValueError("strict named tools require all declared fields")
         return cls(tools, max_arguments, max_payload_bytes,
                    tuple(sorted(bindings)), tuple(sorted(counts)),
                    tuple(sorted(scalar_bindings)), tuple(sorted(bound_bindings)),
-                   tuple(sorted(enum_bindings)))
+                   tuple(sorted(enum_bindings)), strict)
 
 
 @dataclass(frozen=True)
@@ -213,6 +230,8 @@ def prepare_tool_call(item: Mapping, source_protocol: str,
     if not isinstance(decoded, dict):
         raise PreflightError("expected JSON argument object")
     if set(decoded) == {"args"}:
+        if name in contract.strict_named_tools:
+            raise PreflightError("legacy args forbidden for strict named tool")
         args = decoded["args"]
     else:
         fields = dict(contract.named_string_fields).get(name)
