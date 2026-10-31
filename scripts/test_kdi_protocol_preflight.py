@@ -497,5 +497,62 @@ class PreflightTests(unittest.TestCase):
             prepare_tool_call(self.responses(r'{"lang":"\ud83d\ude80"}'),
                               "responses", contract).args, ("🚀",))
 
+
+    def test_schema_boundary_required_prefix_not_arbitrary_subset(self):
+        # JSON Schema can require non-prefix fields; P01 intentionally cannot.
+        contract = CompiledContract.compile(
+            ["scribe"], max_arguments=3,
+            named_string_fields={"scribe": ("location", "query", "lang")},
+            named_required_counts={"scribe": 1})
+        accepted = '{"lang":"ja","query":"weather","location":"Tokyo"}'
+        for protocol, item in (("responses", self.responses(accepted)),
+                               ("chat", self.chat(accepted))):
+            with self.subTest(protocol=protocol):
+                self.assertEqual(prepare_tool_call(item, protocol, contract).args,
+                                 ("Tokyo", "weather", "ja"))
+        for payload in ('{"location":"Tokyo","lang":"ja"}',
+                        '{"query":"weather","lang":"ja"}'):
+            for protocol, item in (("responses", self.responses(payload)),
+                                   ("chat", self.chat(payload))):
+                with self.subTest(payload=payload, protocol=protocol):
+                    with self.assertRaises(PreflightError):
+                        prepare_tool_call(item, protocol, contract)
+
+    def test_schema_boundary_extra_properties_fail_closed_both_protocols(self):
+        # Named P01 rejects extras even though generic JSON Schema permits them by default.
+        contract = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("location",)})
+        for payload in ('{"location":"Tokyo","extra":"x"}',
+                        '{"location":"Tokyo","context":{}}',
+                        '{"location":"Tokyo","tier":"read-only"}'):
+            for protocol, item in (("responses", self.responses(payload)),
+                                   ("chat", self.chat(payload))):
+                with self.subTest(payload=payload, protocol=protocol):
+                    with self.assertRaises(PreflightError):
+                        prepare_tool_call(item, protocol, contract)
+        self.assertEqual(prepare_tool_call(
+            self.responses('{"location":"Tokyo"}'), "responses", contract).args,
+            ("Tokyo",))
+
+    def test_schema_boundary_legacy_args_not_subject_to_named_constraints(self):
+        # Compatibility boundary: named integer bounds and enums do not cover legacy argv.
+        contract = CompiledContract.compile(
+            ["scribe"], max_arguments=2,
+            named_string_fields={"scribe": ("limit", "lang")},
+            named_scalar_types={"scribe": {"limit": "integer"}},
+            named_integer_bounds={"scribe": {"limit": (0, 10)}},
+            named_string_enums={"scribe": {"lang": ("en", "ja")}})
+        for protocol, item in (("responses", self.responses('{"args":["999","fr"]}')),
+                               ("chat", self.chat('{"args":["999","fr"]}'))):
+            with self.subTest(protocol=protocol):
+                self.assertEqual(prepare_tool_call(item, protocol, contract).args,
+                                 ("999", "fr"))
+        for protocol, item in (("responses", self.responses('{"limit":999,"lang":"fr"}')),
+                               ("chat", self.chat('{"limit":999,"lang":"fr"}'))):
+            with self.subTest(protocol=protocol):
+                with self.assertRaises(PreflightError):
+                    prepare_tool_call(item, protocol, contract)
+
+
 if __name__ == "__main__":
     unittest.main()
