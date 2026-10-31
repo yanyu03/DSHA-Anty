@@ -55,3 +55,18 @@ OpenAI 严格模式中，对象的所有声明属性列入 `required`，可用 `
 **后续决策**：暂不新增下游 sidecar 或修改私有协议。下一独立任务研究“可信对象→argv 的显式映射”及业务工具的可空参数语义，须先给出可逆性与 Gate 不变的证据；若无证明，继续拒绝 null。Windows TOCTOU、真实 SSE/API、生产 Router 接线仍属未解决范围。
 
 **回滚**：仅在重新校验 `fatfish` HEAD 后，反向提交本节文档及对应测试；不 force push、不改动其他分支或 PR 状态。
+
+
+## 隔离显式标志映射验证 — 2026-10-31
+
+**基线**：fatfish@0ff6faf36916fa5911f432b5ff03346ac7277a29；协议 v1.2.0-std 不变。唯一目标是验证“可信字段→独立 \`--flag=value\` 参数”的纯数据映射能否在**中间字段为 null**时避免位置错位，不接入生产执行。
+
+新增隔离的 \`CompiledFlagProjection\` / \`ExplicitFlagProjection\`：仅由可信 strict named tool 契约编译，字段与标志一一对应且冻结，全部字段在 JSON 中必须出现；仅显式声明的 nullable 字段允许 null，映射时省略该字段的独立标志。非 null 值只能是有效 UTF-8 字符串，采用单个 \`--flag=value\` token（不使用 shell 拼接）。\`restore_named()\` 依赖同一可信字段/标志契约重建 null、空字符串及字面 "null"，并拒绝缺少非空字段或重复标志。
+
+**正向样例**：\`{"location":"Tokyo","lang":null,"note":"a=b"}\` → \`("--location=Tokyo","--note=a=b")\`，可还原为原对象；空字符串 → \`--lang=\`，字面字符串 → \`--lang=null\`，互不混淆。与上一轮仅支持连续 null 尾部的前缀投影不同，此实验允许中间 null 而不产生位置错位。
+
+**安全边界**：这是隔离的抽象 token 映射，不是通用 CLI 适配器。必须对具体工具单独证明它支持 \`--flag=value\`、省略该标志在业务上等价于 null、不会出现参数注入或权限越界，才能讨论执行接线；目前**没有**任何工具获得这种批准。新投影没有 \`to_dsha_request\`，\`prepare_tool_call\` 仍拒绝严格模式下的显式 null；不修改 Router、BaseTool、Gate、TraceReceipt、DSHARequest/Response 或七阶段生命周期。标量类型、枚举与复杂对象仍拒绝。单独的 argv 离开可信契约后不应被视为无损证明。
+
+**回归证据**：新增3项纯协议测试，覆盖 Responses/Chat 正向往返、中间 null、空串、字面 "null"、Unicode、重复键、额外字段、非法类型、NUL、代理项、超长输入和不可信编译配置。测试不执行真实工具；Windows TOCTOU、SSE/API 端到端及生产集成仍为未完成事项。
+
+**回滚**：在重新确认 fatfish HEAD 后反向提交本次三个文件的变更，不 force push、不合并 PR #6、不修改其他分支。

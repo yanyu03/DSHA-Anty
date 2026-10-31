@@ -343,3 +343,97 @@ class CompiledNullableTail:
                     raise PreflightError("nullable arguments require valid strings")
                 argv.append(value)
         return NullableSuffixProjection(self.fields, tuple(argv), len(self.fields) - len(argv))
+
+
+# KDI-P01 isolated explicit --flag=value projection. Not connected to dispatch.
+_FLAG_NAME = re.compile(r"--[a-z][a-z0-9-]{0,63}\Z")
+
+
+@dataclass(frozen=True)
+class ExplicitFlagProjection:
+    """Reversible flag-argv proof; not a DSHA request or execution plan."""
+
+    fields: Tuple[str, ...]
+    flags: Tuple[str, ...]
+    nullable_fields: FrozenSet[str]
+    argv: Tuple[str, ...]
+
+    def restore_named(self):
+        parsed = {}
+        for token in self.argv:
+            flag, sep, value = token.partition("=")
+            if not sep or flag not in self.flags or flag in parsed:
+                raise PreflightError("invalid explicit flag projection")
+            parsed[flag] = value
+        result = {}
+        for field, flag in zip(self.fields, self.flags):
+            if flag in parsed:
+                result[field] = parsed[flag]
+            elif field in self.nullable_fields:
+                result[field] = None
+            else:
+                raise PreflightError("missing required explicit flag")
+        return result
+
+
+@dataclass(frozen=True)
+class CompiledFlagProjection:
+    """Trusted strict-string fields -> isolated --flag=value tokens.
+
+    Omitted flag means JSON null only under this trusted contract. Actual tools
+    must independently prove flag parsing and omission semantics before dispatch.
+    """
+
+    fields: Tuple[str, ...]
+    flags: Tuple[str, ...]
+    nullable_fields: FrozenSet[str]
+    max_payload_bytes: int
+
+    @classmethod
+    def compile(cls, contract: CompiledContract, tool: str,
+                field_flags: Mapping, nullable_fields):
+        if not isinstance(contract, CompiledContract) or tool not in contract.strict_named_tools:
+            raise ValueError("explicit flag mapping requires a trusted strict named tool")
+        fields = dict(contract.named_string_fields).get(tool)
+        if (fields is None or not isinstance(field_flags, Mapping)
+                or set(field_flags) != set(fields)):
+            raise ValueError("invalid explicit flag mapping")
+        flags = tuple(field_flags[field] for field in fields)
+        if (any(not isinstance(flag, str) or not _FLAG_NAME.fullmatch(flag)
+                or flag[2:].replace("-", "_") in _RESERVED_FIELDS for flag in flags)
+                or len(set(flags)) != len(flags)):
+            raise ValueError("invalid explicit flag names")
+        if (not isinstance(nullable_fields, (list, tuple, set, frozenset))
+                or any(not isinstance(field, str) or field not in fields
+                       for field in nullable_fields)
+                or len(set(nullable_fields)) != len(nullable_fields)):
+            raise ValueError("invalid explicit nullable fields")
+        if (dict(contract.named_scalar_types).get(tool)
+                or dict(contract.named_string_enums).get(tool)):
+            raise ValueError("typed and enum explicit flags are not supported")
+        return cls(fields, flags, frozenset(nullable_fields), contract.max_payload_bytes)
+
+    def project(self, raw_arguments: str) -> ExplicitFlagProjection:
+        """Pure data transformation; never invokes subprocess, Router or Gate."""
+        if (not _valid_utf8_text(raw_arguments)
+                or len(raw_arguments.encode("utf-8")) > self.max_payload_bytes):
+            raise PreflightError("invalid or oversized explicit flag arguments")
+        try:
+            decoded = json.loads(raw_arguments, object_pairs_hook=_no_duplicate_keys,
+                                 parse_constant=_reject_constant)
+        except (json.JSONDecodeError, UnicodeError, RecursionError) as exc:
+            raise PreflightError("invalid explicit flag JSON") from exc
+        if not isinstance(decoded, dict) or set(decoded) != set(self.fields):
+            raise PreflightError("explicit flag fields must be complete and closed")
+        argv = []
+        for field, flag in zip(self.fields, self.flags):
+            value = decoded[field]
+            if value is None:
+                if field not in self.nullable_fields:
+                    raise PreflightError("null outside trusted explicit flags")
+                continue
+            if not _valid_utf8_text(value) or "\x00" in value:
+                raise PreflightError("explicit flag values must be valid strings")
+            argv.append(flag + "=" + value)
+        return ExplicitFlagProjection(self.fields, self.flags,
+                                      self.nullable_fields, tuple(argv))

@@ -782,5 +782,99 @@ class PreflightTests(unittest.TestCase):
                 self.assertNotEqual({"location": "Tokyo"}, projection.restore_named())
 
 
+    def test_explicit_flag_projection_middle_null_roundtrip_both_protocols(self):
+        # Proof of concept only; no trusted tool CLI has been approved for dispatch.
+        from scripts.kdi_protocol_preflight import CompiledFlagProjection
+        contract = CompiledContract.compile(
+            ["scribe"], max_arguments=3,
+            named_string_fields={"scribe": ("location", "lang", "note")},
+            strict_named_tools=("scribe",))
+        flags = {"location": "--location", "lang": "--lang", "note": "--note"}
+        compiled = CompiledFlagProjection.compile(contract, "scribe", flags, ("lang",))
+        flags.clear()  # Compiled mapping must not depend on mutable caller input.
+        cases = (
+            ('{"location":"Tokyo","lang":null,"note":"a=b"}',
+             ("--location=Tokyo", "--note=a=b")),
+            ('{"location":"Tokyo","lang":"","note":"null"}',
+             ("--location=Tokyo", "--lang=", "--note=null")),
+            ('{"location":"东京🚀","lang":"日本語","note":"--x"}',
+             ("--location=东京🚀", "--lang=日本語", "--note=--x")),
+        )
+        for payload, expected in cases:
+            for protocol, make_item in (("responses", self.responses), ("chat", self.chat)):
+                with self.subTest(protocol=protocol, payload=payload):
+                    item = make_item(payload)
+                    raw = (item["arguments"] if protocol == "responses"
+                           else item["function"]["arguments"])
+                    projection = compiled.project(raw)
+                    self.assertEqual(projection.argv, expected)
+                    self.assertEqual(projection.restore_named(), json.loads(payload))
+                    self.assertFalse(hasattr(projection, "to_dsha_request"))
+                    if '"lang":null' in payload:
+                        with self.assertRaises(PreflightError):
+                            prepare_tool_call(item, protocol, contract)
+
+    def test_explicit_flag_projection_rejects_untrusted_inputs(self):
+        from scripts.kdi_protocol_preflight import CompiledFlagProjection
+        contract = CompiledContract.compile(
+            ["scribe"], max_arguments=3,
+            named_string_fields={"scribe": ("location", "lang", "note")},
+            strict_named_tools=("scribe",))
+        compiled = CompiledFlagProjection.compile(
+            contract, "scribe",
+            {"location": "--location", "lang": "--lang", "note": "--note"},
+            ("lang",))
+        invalid = (
+            '{"location":"Tokyo","note":"x"}',
+            '{"location":"Tokyo","lang":null,"note":"x","context":{}}',
+            '{"location":null,"lang":null,"note":"x"}',
+            '{"location":"Tokyo","lang":123,"note":"x"}',
+            '{"location":"Tokyo","lang":null,"note":"x","note":"x"}',
+            '{"location":"Tokyo","lang":null,"note":"\\ud800"}',
+            '{"location":"Tokyo","lang":null,"note":"x\\u0000"}',
+            '{"location":"Tokyo","lang":null,"note":NaN}',
+        )
+        for payload in invalid:
+            with self.subTest(payload=payload), self.assertRaises(PreflightError):
+                compiled.project(payload)
+        with self.assertRaises(PreflightError):
+            compiled.project('{"location":"' + "x" * 5000 +
+                             '","lang":null,"note":"x"}')
+
+    def test_explicit_flag_projection_trusted_compile_guards(self):
+        from scripts.kdi_protocol_preflight import CompiledFlagProjection
+        fields = {"scribe": ("location", "lang", "note")}
+        strict = CompiledContract.compile(
+            ["scribe"], max_arguments=3, named_string_fields=fields,
+            strict_named_tools=("scribe",))
+        valid = {"location": "--location", "lang": "--lang", "note": "--note"}
+        invalid = (
+            ({"location": "--location", "lang": "--lang"}, ("lang",)),
+            ({"location": "--location", "lang": "--location", "note": "--note"}, ("lang",)),
+            ({"location": "--location", "lang": "--tier", "note": "--note"}, ("lang",)),
+            (valid, ("other",)),
+            (valid, ("lang", "lang")),
+        )
+        for flags, nullable in invalid:
+            with self.subTest(flags=flags, nullable=nullable), self.assertRaises(ValueError):
+                CompiledFlagProjection.compile(strict, "scribe", flags, nullable)
+        non_strict = CompiledContract.compile(
+            ["scribe"], max_arguments=3, named_string_fields=fields)
+        with self.assertRaises(ValueError):
+            CompiledFlagProjection.compile(non_strict, "scribe", valid, ("lang",))
+        typed = CompiledContract.compile(
+            ["scribe"], max_arguments=3, named_string_fields=fields,
+            strict_named_tools=("scribe",),
+            named_scalar_types={"scribe": {"note": "integer"}})
+        with self.assertRaises(ValueError):
+            CompiledFlagProjection.compile(typed, "scribe", valid, ("lang",))
+        enum = CompiledContract.compile(
+            ["scribe"], max_arguments=3, named_string_fields=fields,
+            strict_named_tools=("scribe",),
+            named_string_enums={"scribe": {"note": ("ja", "en")}})
+        with self.assertRaises(ValueError):
+            CompiledFlagProjection.compile(enum, "scribe", valid, ("lang",))
+
+
 if __name__ == "__main__":
     unittest.main()
