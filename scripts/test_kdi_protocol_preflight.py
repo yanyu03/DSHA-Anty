@@ -876,5 +876,48 @@ class PreflightTests(unittest.TestCase):
             CompiledFlagProjection.compile(enum, "scribe", valid, ("lang",))
 
 
+    def test_scribe_dossier_issue_flag_parser_semantics_without_execution(self):
+        # Static argparse compatibility only: no Scribe main(), launcher or tool dispatch.
+        # This does NOT authorize --out, the positional dossier command, or execution.
+        from contextlib import redirect_stderr
+        from io import StringIO
+        from scripts.kdi_protocol_preflight import CompiledFlagProjection
+        from scripts.scribe import build_parser
+
+        contract = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("issue",)},
+            strict_named_tools=("scribe",))
+        compiled = CompiledFlagProjection.compile(
+            contract, "scribe", {"issue": "--issue"}, ("issue",))
+        parser = build_parser()
+        cases = (
+            (None, ()),
+            ("", ("--issue=",)),
+            ("null", ("--issue=null",)),
+            ("a=b", ("--issue=a=b",)),
+            ("日本語", ("--issue=日本語",)),
+            ("--out=unsafe", ("--issue=--out=unsafe",)),
+        )
+        for value, expected_argv in cases:
+            with self.subTest(value=value):
+                projected = compiled.project(json.dumps({"issue": value}, ensure_ascii=False))
+                self.assertEqual(projected.argv, expected_argv)
+                self.assertEqual(projected.restore_named(), {"issue": value})
+                parsed = parser.parse_args(["dossier", *projected.argv])
+                self.assertEqual(parsed.command, "dossier")
+                self.assertEqual(parsed.issue, value)
+                self.assertFalse(hasattr(projected, "to_dsha_request"))
+
+        # A missing flag is None only within the dossier subparser's contract.
+        self.assertIsNone(parser.parse_args(["dossier"]).issue)
+        for argv in (["--issue=x"], ["status", "--issue=x"],
+                     ["harvest", "--issue=x"], ["dossier", "--unknown=x"]):
+            with self.subTest(argv=argv), redirect_stderr(StringIO()):
+                with self.assertRaises(SystemExit):
+                    parser.parse_args(argv)
+        with self.assertRaises(PreflightError):
+            compiled.project('{"issue":"x","out":"unsafe.md"}')
+
+
 if __name__ == "__main__":
     unittest.main()
