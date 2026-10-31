@@ -42,6 +42,17 @@ def _reject_constant(_value):
     raise PreflightError("non-standard JSON constant")
 
 
+def _valid_utf8_text(value):
+    """Reject lone surrogates before they reach argv or receipt serialization."""
+    if not isinstance(value, str):
+        return False
+    try:
+        value.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
 @dataclass(frozen=True)
 class CompiledContract:
     """Trusted, reusable, immutable preflight constraints (not model-produced)."""
@@ -137,7 +148,7 @@ class CompiledContract:
                         or field in scalar_declarations.get(tool, {})
                         or not isinstance(choices, (list, tuple))
                         or not 1 <= len(choices) <= 64
-                        or any(not isinstance(value, str) or "\x00" in value
+                        or any(not _valid_utf8_text(value) or "\x00" in value
                                or len(value.encode("utf-8")) > 1024 for value in choices)
                         or len(set(choices)) != len(choices)):
                     raise ValueError("invalid named string enum declaration")
@@ -172,7 +183,7 @@ def prepare_tool_call(item: Mapping, source_protocol: str,
         if not required <= set(item) <= allowed or item["type"] != "function_call":
             raise PreflightError("unsupported Responses function call")
         item_id = item.get("id")
-        if item_id is not None and (not isinstance(item_id, str) or not 1 <= len(item_id) <= 128
+        if item_id is not None and (not _valid_utf8_text(item_id) or not 1 <= len(item_id) <= 128
                                     or any(ord(c) < 32 or ord(c) == 127 for c in item_id)):
             raise PreflightError("invalid Responses item ID")
         if item.get("status") not in (None, "completed"):
@@ -190,9 +201,9 @@ def prepare_tool_call(item: Mapping, source_protocol: str,
 
     if not isinstance(name, str) or name not in contract.tools:
         raise PreflightError("tool not in trusted registry")
-    if not isinstance(call_id, str) or not 1 <= len(call_id) <= 128 or any(ord(c) < 32 for c in call_id):
+    if not _valid_utf8_text(call_id) or not 1 <= len(call_id) <= 128 or any(ord(c) < 32 for c in call_id):
         raise PreflightError("invalid provider call ID")
-    if not isinstance(raw, str) or len(raw.encode("utf-8")) > contract.max_payload_bytes:
+    if not _valid_utf8_text(raw) or len(raw.encode("utf-8")) > contract.max_payload_bytes:
         raise PreflightError("invalid or oversized tool arguments")
     try:
         decoded = json.loads(raw, object_pairs_hook=_no_duplicate_keys,
@@ -235,7 +246,7 @@ def prepare_tool_call(item: Mapping, source_protocol: str,
                     raise PreflightError("named string argument outside trusted enum")
                 args.append(value)
     if not isinstance(args, list) or len(args) > contract.max_arguments or any(
-        not isinstance(arg, str) or "\x00" in arg for arg in args
+        not _valid_utf8_text(arg) or "\x00" in arg for arg in args
     ):
         raise PreflightError("args must be bounded string list")
     return PreparedToolCall(source_protocol, call_id, name, tuple(args))

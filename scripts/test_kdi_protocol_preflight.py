@@ -447,5 +447,55 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(prepare_tool_call(
             self.responses('{"lang":"fr"}'), "responses", unbounded).args, ("fr",))
 
+
+    def test_invalid_unicode_legacy_args_fail_closed_both_protocols(self):
+        for payload in (r'{"args":["\ud800"]}', r'{"args":["\udc00"]}'):
+            for protocol, item in (("responses", self.responses(payload)),
+                                   ("chat", self.chat(payload))):
+                with self.subTest(payload=payload, protocol=protocol):
+                    with self.assertRaises(PreflightError):
+                        prepare_tool_call(item, protocol, self.contract)
+
+    def test_invalid_unicode_named_args_fail_closed_both_protocols(self):
+        contract = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("lang",)})
+        for payload in (r'{"lang":"\ud800"}', r'{"lang":"\udc00"}'):
+            for protocol, item in (("responses", self.responses(payload)),
+                                   ("chat", self.chat(payload))):
+                with self.subTest(payload=payload, protocol=protocol):
+                    with self.assertRaises(PreflightError):
+                        prepare_tool_call(item, protocol, contract)
+
+    def test_invalid_unicode_provider_metadata_and_raw_fail_closed(self):
+        bad = chr(0xD800)
+        cases = (
+            ("responses", self.responses(id="fc_" + bad)),
+            ("responses", self.responses(call_id="call_" + bad)),
+            ("chat", self.chat(id="call_" + bad)),
+            ("responses", self.responses('{"args":["' + bad + '"]}')),
+            ("chat", self.chat('{"args":["' + bad + '"]}')),
+        )
+        for protocol, item in cases:
+            with self.subTest(protocol=protocol, item_keys=tuple(item)):
+                with self.assertRaises(PreflightError):
+                    prepare_tool_call(item, protocol, self.contract)
+
+    def test_unicode_valid_pair_and_enum_compile_boundary(self):
+        valid = r'{"args":["\ud83d\ude80"]}'
+        for protocol, item in (("responses", self.responses(valid)),
+                               ("chat", self.chat(valid))):
+            self.assertEqual(prepare_tool_call(item, protocol, self.contract).args,
+                             ("🚀",))
+        with self.assertRaises(ValueError):
+            CompiledContract.compile(
+                ["scribe"], named_string_fields={"scribe": ("lang",)},
+                named_string_enums={"scribe": {"lang": (chr(0xD800),)}})
+        contract = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("lang",)},
+            named_string_enums={"scribe": {"lang": ("🚀",)}})
+        self.assertEqual(
+            prepare_tool_call(self.responses(r'{"lang":"\ud83d\ude80"}'),
+                              "responses", contract).args, ("🚀",))
+
 if __name__ == "__main__":
     unittest.main()
