@@ -269,3 +269,77 @@ def prepare_tool_call(item: Mapping, source_protocol: str,
     ):
         raise PreflightError("args must be bounded string list")
     return PreparedToolCall(source_protocol, call_id, name, tuple(args))
+
+
+@dataclass(frozen=True)
+class NullableSuffixProjection:
+    """Lossless named-value snapshot; deliberately has no DSHA dispatch method."""
+
+    fields: Tuple[str, ...]
+    argv_prefix: Tuple[str, ...]
+    null_suffix_count: int
+
+    def restore_named(self):
+        """Restore JSON-value identity (including null vs '' vs 'null')."""
+        prefix_len = len(self.argv_prefix)
+        return {field: (self.argv_prefix[index] if index < prefix_len else None)
+                for index, field in enumerate(self.fields)}
+
+
+@dataclass(frozen=True)
+class CompiledNullableTail:
+    """Isolated strict-string nullable-tail experiment; not wired into P01 dispatch.
+
+    Compile only from a trusted P01 strict contract. No provider-produced schema,
+    permissions, context or execution settings are accepted here.
+    """
+
+    fields: Tuple[str, ...]
+    nullable_tail: Tuple[str, ...]
+    max_payload_bytes: int
+
+    @classmethod
+    def compile(cls, contract: CompiledContract, tool: str, nullable_tail):
+        if not isinstance(contract, CompiledContract) or tool not in contract.strict_named_tools:
+            raise ValueError("nullable-tail projection requires trusted strict named tool")
+        fields = dict(contract.named_string_fields).get(tool)
+        if (fields is None or not isinstance(nullable_tail, (tuple, list))
+                or not 1 <= len(nullable_tail) <= len(fields)):
+            raise ValueError("invalid trusted nullable suffix")
+        tail = tuple(nullable_tail)
+        if tail != fields[-len(tail):]:
+            raise ValueError("nullable fields must form the declared trailing suffix")
+        # Typed scalars and enums need separate null semantics; do not guess them.
+        if (dict(contract.named_scalar_types).get(tool)
+                or dict(contract.named_string_enums).get(tool)):
+            raise ValueError("typed and enum nullable fields are not supported")
+        return cls(fields, tail, contract.max_payload_bytes)
+
+    def project(self, raw_arguments: str) -> NullableSuffixProjection:
+        """Pure reversible projection. Never calls tools or emits DSHARequest."""
+        if (not _valid_utf8_text(raw_arguments)
+                or len(raw_arguments.encode("utf-8")) > self.max_payload_bytes):
+            raise PreflightError("invalid or oversized nullable arguments")
+        try:
+            decoded = json.loads(raw_arguments, object_pairs_hook=_no_duplicate_keys,
+                                 parse_constant=_reject_constant)
+        except (json.JSONDecodeError, UnicodeError) as exc:
+            raise PreflightError("invalid nullable JSON arguments") from exc
+        if not isinstance(decoded, dict) or set(decoded) != set(self.fields):
+            raise PreflightError("nullable fields must be complete and closed")
+        required_prefix = len(self.fields) - len(self.nullable_tail)
+        argv = []
+        saw_null = False
+        for index, field in enumerate(self.fields):
+            value = decoded[field]
+            if value is None:
+                if index < required_prefix:
+                    raise PreflightError("null outside trusted nullable suffix")
+                saw_null = True
+            else:
+                if saw_null:
+                    raise PreflightError("non-null value after null creates argv hole")
+                if not _valid_utf8_text(value) or "\x00" in value:
+                    raise PreflightError("nullable arguments require valid strings")
+                argv.append(value)
+        return NullableSuffixProjection(self.fields, tuple(argv), len(self.fields) - len(argv))

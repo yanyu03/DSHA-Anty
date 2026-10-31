@@ -3,7 +3,7 @@ import json
 import unittest
 
 from scripts.kdi_protocol_preflight import (
-    CompiledContract, PreflightError, prepare_tool_call,
+    CompiledContract, CompiledNullableTail, PreflightError, prepare_tool_call,
 )
 
 
@@ -653,6 +653,100 @@ class PreflightTests(unittest.TestCase):
             with self.subTest(protocol=protocol), self.assertRaises(PreflightError):
                 prepare_tool_call(make_item('{"location":"Tokyo","lang":null}'),
                                   protocol, contract)
+
+
+
+    def test_nullable_suffix_projection_roundtrip_both_protocols(self):
+        # Pure opt-in experiment; production prepare_tool_call still rejects null.
+        contract = CompiledContract.compile(
+            ["scribe"], max_arguments=3,
+            named_string_fields={"scribe": ("location", "lang", "note")},
+            strict_named_tools=("scribe",))
+        projection_contract = CompiledNullableTail.compile(contract, "scribe", ("lang", "note"))
+        cases = (
+            ('{"location":"Tokyo","lang":"ja","note":null}', ("Tokyo", "ja"), 1),
+            ('{"location":"Tokyo","lang":null,"note":null}', ("Tokyo",), 2),
+            ('{"location":"Tokyo","lang":"","note":"null"}', ("Tokyo", "", "null"), 0),
+            ('{"location":"东京🚀","lang":"日本語","note":null}', ("东京🚀", "日本語"), 1),
+        )
+        for payload, argv, null_count in cases:
+            for protocol, item in (("responses", self.responses(payload)),
+                                   ("chat", self.chat(payload))):
+                raw = item["arguments"] if protocol == "responses" else item["function"]["arguments"]
+                with self.subTest(protocol=protocol, payload=payload):
+                    result = projection_contract.project(raw)
+                    self.assertEqual(result.argv_prefix, argv)
+                    self.assertEqual(result.null_suffix_count, null_count)
+                    self.assertEqual(result.restore_named(), json.loads(payload))
+                    self.assertFalse(hasattr(result, "to_dsha_request"))
+
+    def test_nullable_suffix_projection_rejects_holes_and_untrusted_values(self):
+        contract = CompiledContract.compile(
+            ["scribe"], max_arguments=3,
+            named_string_fields={"scribe": ("location", "lang", "note")},
+            strict_named_tools=("scribe",))
+        projection_contract = CompiledNullableTail.compile(contract, "scribe", ("lang", "note"))
+        invalid = (
+            '{"location":"Tokyo","lang":null,"note":"later"}',
+            '{"location":null,"lang":null,"note":null}',
+            '{"location":"Tokyo","lang":"ja"}',
+            '{"location":"Tokyo","lang":"ja","note":null,"context":{}}',
+            '{"location":"Tokyo","lang":"ja","note":42}',
+            '{"location":"Tokyo","lang":"ja","note":"\\ud800"}',
+            '{"location":"Tokyo","lang":"ja","note":"x\\u0000"}',
+            '{"location":"Tokyo","lang":"ja","note":null,"note":null}',
+            '{"args":["Tokyo"]}',
+            '{"location":"Tokyo","lang":"ja","note":NaN}',
+        )
+        for payload in invalid:
+            with self.subTest(payload=payload), self.assertRaises(PreflightError):
+                projection_contract.project(payload)
+        with self.assertRaises(PreflightError):
+            projection_contract.project('{"location":"' + "x" * 5000 + '","lang":null,"note":null}')
+
+    def test_nullable_suffix_compilation_requires_trusted_strict_string_suffix(self):
+        fields = {"scribe": ("location", "lang", "note")}
+        strict = CompiledContract.compile(
+            ["scribe"], max_arguments=3, named_string_fields=fields,
+            strict_named_tools=("scribe",))
+        for bad in ((), ("lang",), ("location",), ("note", "lang"), "note",
+                    ("note", "note"), ("lang", "other")):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                CompiledNullableTail.compile(strict, "scribe", bad)
+        with self.assertRaises(ValueError):
+            CompiledNullableTail.compile(strict, "unknown", ("note",))
+        non_strict = CompiledContract.compile(["scribe"], max_arguments=3, named_string_fields=fields)
+        with self.assertRaises(ValueError):
+            CompiledNullableTail.compile(non_strict, "scribe", ("note",))
+        typed = CompiledContract.compile(
+            ["scribe"], max_arguments=3, named_string_fields=fields,
+            strict_named_tools=("scribe",),
+            named_scalar_types={"scribe": {"note": "integer"}})
+        with self.assertRaises(ValueError):
+            CompiledNullableTail.compile(typed, "scribe", ("note",))
+        enumerated = CompiledContract.compile(
+            ["scribe"], max_arguments=3, named_string_fields=fields,
+            strict_named_tools=("scribe",),
+            named_string_enums={"scribe": {"note": ("ja", "en")}})
+        with self.assertRaises(ValueError):
+            CompiledNullableTail.compile(enumerated, "scribe", ("note",))
+        mutable = ["lang", "note"]
+        compiled = CompiledNullableTail.compile(strict, "scribe", mutable)
+        mutable.clear()
+        self.assertEqual(compiled.nullable_tail, ("lang", "note"))
+
+    def test_nullable_suffix_projection_does_not_change_p01_fail_closed(self):
+        contract = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("location", "lang")},
+            strict_named_tools=("scribe",))
+        helper = CompiledNullableTail.compile(contract, "scribe", ("lang",))
+        payload = '{"location":"Tokyo","lang":null}'
+        self.assertEqual(helper.project(payload).restore_named(),
+                         {"location": "Tokyo", "lang": None})
+        for protocol, item in (("responses", self.responses(payload)),
+                               ("chat", self.chat(payload))):
+            with self.subTest(protocol=protocol), self.assertRaises(PreflightError):
+                prepare_tool_call(item, protocol, contract)
 
 
 if __name__ == "__main__":
