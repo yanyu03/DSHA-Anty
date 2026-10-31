@@ -601,5 +601,59 @@ class PreflightTests(unittest.TestCase):
             ("Tokyo",))
 
 
+    def test_strict_named_null_values_fail_closed_both_protocols(self):
+        # A strict all-required object cannot silently turn JSON null into argv.
+        contract = CompiledContract.compile(
+            ["scribe"], max_arguments=3,
+            named_string_fields={"scribe": ("location", "limit", "lang")},
+            named_scalar_types={"scribe": {"limit": "integer"}},
+            strict_named_tools=("scribe",))
+        for protocol, make_item in (("responses", self.responses), ("chat", self.chat)):
+            with self.subTest(protocol=protocol):
+                valid = '{"location":"Tokyo","limit":3,"lang":"ja"}'
+                self.assertEqual(prepare_tool_call(make_item(valid), protocol, contract).args,
+                                 ("Tokyo", "3", "ja"))
+                for payload in (
+                    '{"location":null,"limit":3,"lang":"ja"}',
+                    '{"location":"Tokyo","limit":null,"lang":"ja"}',
+                    '{"location":"Tokyo","limit":3,"lang":null}',
+                ):
+                    with self.subTest(payload=payload), self.assertRaises(PreflightError):
+                        prepare_tool_call(make_item(payload), protocol, contract)
+
+    def test_strict_named_missing_null_and_empty_are_distinct(self):
+        contract = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("location", "lang")},
+            strict_named_tools=("scribe",))
+        for protocol, make_item in (("responses", self.responses), ("chat", self.chat)):
+            for payload in ('{"location":"Tokyo"}',
+                            '{"location":"Tokyo","lang":null}',
+                            '{"args":["Tokyo",""]}'):
+                with self.subTest(protocol=protocol, payload=payload):
+                    with self.assertRaises(PreflightError):
+                        prepare_tool_call(make_item(payload), protocol, contract)
+            self.assertEqual(
+                prepare_tool_call(make_item('{"location":"Tokyo","lang":""}'),
+                                  protocol, contract).args, ("Tokyo", ""))
+            self.assertEqual(
+                prepare_tool_call(make_item('{"location":"Tokyo","lang":"null"}'),
+                                  protocol, contract).args, ("Tokyo", "null"))
+
+    def test_non_strict_optional_omission_does_not_accept_null(self):
+        contract = CompiledContract.compile(
+            ["scribe"], named_string_fields={"scribe": ("location", "lang")},
+            named_required_counts={"scribe": 1})
+        for protocol, make_item in (("responses", self.responses), ("chat", self.chat)):
+            self.assertEqual(
+                prepare_tool_call(make_item('{"location":"Tokyo"}'),
+                                  protocol, contract).args, ("Tokyo",))
+            self.assertEqual(
+                prepare_tool_call(make_item('{"args":["Tokyo"]}'),
+                                  protocol, contract).args, ("Tokyo",))
+            with self.subTest(protocol=protocol), self.assertRaises(PreflightError):
+                prepare_tool_call(make_item('{"location":"Tokyo","lang":null}'),
+                                  protocol, contract)
+
+
 if __name__ == "__main__":
     unittest.main()
