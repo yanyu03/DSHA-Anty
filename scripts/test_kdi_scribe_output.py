@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from scripts.kdi_scribe_output import ManagedOutputError, open_managed_output, validate_relative_output
 
@@ -75,6 +76,35 @@ class ManagedOutputTests(unittest.TestCase):
                     open_managed_output(root, name)
             self.assertFalse((root / 'missing').exists())
 
+
+    @unittest.skipUnless(os.name == 'posix' and hasattr(os, 'O_NOFOLLOW'), 'POSIX no-follow only')
+    def test_renamed_trusted_root_is_not_path_contained(self):
+        """Reproduce root rename after open: directory fds do not pin path names.
+
+        This is a documented unresolved boundary, NOT a containment fix.
+        Only temporary test directories are affected.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'exports'
+            moved = Path(tmp) / 'relocated'
+            root.mkdir()
+            real_open = os.open
+            renamed = False
+
+            def swap_after_root_open(path, flags, *args, **kwargs):
+                nonlocal renamed
+                fd = real_open(path, flags, *args, **kwargs)
+                if path == root.name and kwargs.get('dir_fd') is not None and not renamed:
+                    root.rename(moved)
+                    renamed = True
+                return fd
+
+            with patch('scripts.kdi_scribe_output.os.open', side_effect=swap_after_root_open):
+                with open_managed_output(root, 'incident.md') as stream:
+                    stream.write('race')
+            self.assertTrue(renamed)
+            self.assertFalse(root.exists())
+            self.assertEqual((moved / 'incident.md').read_text(encoding='utf-8'), 'race')
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
