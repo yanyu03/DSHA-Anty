@@ -6,7 +6,7 @@ import sys
 import types
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, mock_open
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -54,6 +54,25 @@ class RuntimeContracts(unittest.TestCase):
                             self.assertEqual(res['err_block']['error_code'], 'ERR_PERMISSION_DENIED')
                     resolver.assert_not_called()
                     run.assert_not_called()
+
+    def test_scribe_dossier_out_outside_repo_currently_accepted(self):
+        # Security audit regression: reproduce the CURRENT CLI boundary, not a safety guarantee.
+        # No real output file is created; this test must be revised when containment is added.
+        scribe = load(ROOT / 'scripts/scribe.py', 'regression_scribe_out_boundary')
+        with tempfile.TemporaryDirectory() as tmp:
+            external = Path(tmp) / 'external' / 'dossier.md'
+            self.assertFalse(external.resolve().is_relative_to(ROOT.resolve()))
+            with (
+                patch.object(sys, 'argv', ['scribe.py', 'dossier', '--out', str(external)]),
+                patch.object(scribe, 'get_default_paths', return_value={'scribe_cache': Path(tmp) / 'cache'}),
+                patch.object(scribe, 'harvest', return_value={}),
+                patch.object(scribe, 'generate_dossier', return_value='fixture dossier'),
+                patch.object(Path, 'mkdir', return_value=None),
+                patch('builtins.open', mock_open()) as opened,
+            ):
+                scribe.main()
+            # This call demonstrates an unrestricted external output target.
+            opened.assert_called_once_with(external, 'w', encoding='utf-8')
 
     def test_failed_version_probe_is_not_ready(self):
         for m in self.copies('base_tool.py'):
