@@ -10,6 +10,8 @@ on:
       - scripts/router.py
       - scripts/dsha_env.py
       - scripts/test_runtime_contracts.py
+      - scripts/kdi_scribe_output.py
+      - scripts/test_kdi_scribe_output.py
       - scripts/kdi_protocol_preflight.py
       - scripts/test_kdi_protocol_preflight.py
       - scripts/kdi_preparation_gate.py
@@ -57,6 +59,10 @@ jobs:
             scripts.test_runtime_contracts.RuntimeContracts.test_extension_trusted_root_resolution_ignores_path_shadow
       - name: Run full runtime contract regression
         run: python -m unittest -v scripts.test_runtime_contracts
+      - name: KDI Scribe output containment (isolated)
+        run: |
+          python -m py_compile scripts/kdi_scribe_output.py scripts/test_kdi_scribe_output.py
+          python -m unittest -v scripts.test_kdi_scribe_output
 
   windows-scribe-launcher:
     runs-on: windows-latest
@@ -70,3 +76,5 @@ jobs:
         run: python -m py_compile scripts/test_windows_launcher_integration.py
       - name: Run native Scribe launcher and TraceReceipt integration
         run: python -m unittest -v scripts.test_windows_launcher_integration
+      - name: KDI Scribe output containment (Windows fail-closed)
+        run: python -m unittest -v scripts.test_kdi_scribe_output
