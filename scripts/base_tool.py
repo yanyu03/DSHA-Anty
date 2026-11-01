@@ -1887,7 +1887,9 @@ class ScribeTool(BaseTool):
             tool_id="scribe",
             name="DSHA Scribe (Chronicler & Archivist)",
             category=ToolCategory.ARCHIVIST,
-            risk_level=RiskLevel.READ_ONLY,
+            # All CLI actions except selftest write cache or caller-selected output.
+            # Conservatively require a write-capable tier until action-level Gate exists.
+            risk_level=RiskLevel.MEDIUM,
             version="1.0.0",
             description="Log harvesting, error stack trace indexing, research dossier synthesis",
             cmd="scribe.cmd",
@@ -2231,9 +2233,13 @@ def run_selftest():
         and "ERR_PERMISSION_DENIED" in res_auth["stderr"]
     ))
 
-    # Test 12: Read-only tool permitted under read-only tier
+    # Test 12: Scribe writes cache even for status; read-only must deny it.
     ok_auth_scribe, err_auth_scribe = scribe_tool.assert_authorization("read-only")
-    tests.append(("read_only_tool_permitted_under_read_only", ok_auth_scribe and err_auth_scribe is None))
+    tests.append((
+        "scribe_write_capable_tool_denied_under_read_only",
+        not ok_auth_scribe and err_auth_scribe is not None
+        and err_auth_scribe.error_code == "ERR_PERMISSION_DENIED",
+    ))
 
     # Test 13: Class extensibility - custom tool subclassing BaseTool and registering
     class CustomTelemetryTool(BaseTool):

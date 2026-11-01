@@ -25,6 +25,36 @@ class RuntimeContracts(unittest.TestCase):
             if path.exists():
                 yield load(path, 'regression_' + str(folder.name) + filename[:-3])
 
+    def test_scribe_write_capable_actions_denied_under_read_only(self):
+        # harvest, status and dossier write .scribe cache; dossier --out can write elsewhere.
+        # Exercise both mirrored Gate implementations without launching Scribe.
+        for m in self.copies('base_tool.py'):
+            tool = m.ScribeTool()
+            with self.subTest(module=m.__file__):
+                self.assertEqual(tool.risk_level, m.RiskLevel.MEDIUM)
+                with patch.object(m, 'get_active_tier', return_value='read-only'):
+                    ok, err = tool.assert_authorization('auto')
+                    self.assertFalse(ok)
+                    self.assertEqual(err.error_code, 'ERR_PERMISSION_DENIED')
+                with patch.object(m, 'get_active_tier', return_value='auto'):
+                    self.assertFalse(tool.assert_authorization('read-only')[0])
+                    self.assertTrue(tool.assert_authorization('auto')[0])
+                with (
+                    patch.object(m, 'get_active_tier', return_value='read-only'),
+                    patch.object(tool, 'assert_environment', return_value=(True, None)),
+                    patch.object(tool, 'resolve_executable', return_value=sys.executable) as resolver,
+                    patch.object(m.subprocess, 'run') as run,
+                    patch.object(m.TraceStore, 'save', return_value=None),
+                ):
+                    for argv in (['harvest'], ['status'], ['dossier', '--out', 'fixture.md']):
+                        with self.subTest(argv=argv):
+                            res = tool.execute(argv, {'tier': 'auto'})
+                            self.assertFalse(res['success'])
+                            self.assertEqual(res['exit_code'], 126)
+                            self.assertEqual(res['err_block']['error_code'], 'ERR_PERMISSION_DENIED')
+                    resolver.assert_not_called()
+                    run.assert_not_called()
+
     def test_failed_version_probe_is_not_ready(self):
         for m in self.copies('base_tool.py'):
             with self.subTest(module=m.__file__), patch.object(m.PrerequisiteEnv, 'locate_binary', return_value=sys.executable), patch.object(m.subprocess, 'run', return_value=types.SimpleNamespace(returncode=7, stdout='24.99.0', stderr='probe failed')):
