@@ -141,5 +141,47 @@ class ManagedOutputTests(unittest.TestCase):
             self.assertFalse((original / 'incident.md').exists())
             self.assertEqual((root / 'incident.md').read_text(encoding='utf-8'), 'substituted')
 
+
+    @unittest.skipUnless(
+        os.name == 'posix' and all(hasattr(os, flag) for flag in ('O_DIRECTORY', 'O_NOFOLLOW', 'O_EXCL')),
+        'POSIX directory fd only',
+    )
+    def test_preopened_root_fd_pins_inode_but_not_pathname(self):
+        """Pre-opened fd preserves inode identity, NOT original pathname.
+
+        Even a root opened by a trusted host can be renamed by an actor with
+        write access to its parent. This is a boundary test, not a mitigation.
+        All filesystem effects are confined to a disposable temporary tree.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'exports'
+            moved = Path(tmp) / 'moved_original'
+            substitute = Path(tmp) / 'substitute'
+            root.mkdir()
+            substitute.mkdir()
+            expected = (root.stat().st_dev, root.stat().st_ino)
+            root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                opened = os.fstat(root_fd)
+                self.assertEqual((opened.st_dev, opened.st_ino), expected)
+                root.rename(moved)
+                substitute.rename(root)
+                self.assertNotEqual((root.stat().st_dev, root.stat().st_ino), expected)
+                opened = os.fstat(root_fd)
+                self.assertEqual((opened.st_dev, opened.st_ino), expected)
+                leaf_fd = os.open(
+                    'incident.md', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                    0o600, dir_fd=root_fd,
+                )
+                try:
+                    os.write(leaf_fd, b'pinned-inode')
+                finally:
+                    os.close(leaf_fd)
+            finally:
+                os.close(root_fd)
+            self.assertEqual((moved / 'incident.md').read_bytes(), b'pinned-inode')
+            self.assertFalse((root / 'incident.md').exists())
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
