@@ -106,5 +106,40 @@ class ManagedOutputTests(unittest.TestCase):
             self.assertFalse(root.exists())
             self.assertEqual((moved / 'incident.md').read_text(encoding='utf-8'), 'race')
 
+
+    @unittest.skipUnless(os.name == 'posix' and hasattr(os, 'O_NOFOLLOW'), 'POSIX no-follow only')
+    def test_trusted_root_swapped_before_open_is_not_inode_pinned(self):
+        """Reproduce root-name substitution BEFORE open, without symlinks.
+
+        A writable ancestor lets an attacker substitute a real directory at
+        the trusted pathname. O_NOFOLLOW cannot authenticate directory identity.
+        Only disposable temporary directories are touched; NOT a mitigation.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'exports'
+            original = Path(tmp) / 'original'
+            replacement = Path(tmp) / 'replacement'
+            root.mkdir()
+            replacement.mkdir()
+            expected_identity = (root.stat().st_dev, root.stat().st_ino)
+            real_open = os.open
+            swapped = False
+
+            def swap_before_root_open(path, flags, *args, **kwargs):
+                nonlocal swapped
+                if path == root.name and kwargs.get('dir_fd') is not None and not swapped:
+                    root.rename(original)
+                    replacement.rename(root)
+                    swapped = True
+                return real_open(path, flags, *args, **kwargs)
+
+            with patch('scripts.kdi_scribe_output.os.open', side_effect=swap_before_root_open):
+                with open_managed_output(root, 'incident.md') as stream:
+                    stream.write('substituted')
+            self.assertTrue(swapped)
+            self.assertNotEqual((root.stat().st_dev, root.stat().st_ino), expected_identity)
+            self.assertFalse((original / 'incident.md').exists())
+            self.assertEqual((root / 'incident.md').read_text(encoding='utf-8'), 'substituted')
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
